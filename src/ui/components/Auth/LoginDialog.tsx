@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './LoginDialog.css';
+import facebookLogo from '../../../assets/Auth/facebook.png';
+import googleLogo from '../../../assets/Auth/google.png';
+import guestLogo from '../../../assets/Auth/annon.png';
 
 interface LoginDialogProps {
   onLogin: (username: string, password: string) => void;
@@ -276,32 +279,31 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
             </div>
             
             <div className="social-login">
-              <button 
-                type="button" 
-                className="social-button facebook-button"
-                onClick={onFacebookLogin}
-              >
-                <span className="social-icon">f</span>
-                <span>Facebook</span>
-              </button>
-              
-              <button 
-                type="button" 
-                className="social-button google-button"
-                onClick={onGoogleLogin}
-              >
-                <span className="social-icon">g</span>
-                <span>Google</span>
-              </button>
-              
-              <button 
-                type="button" 
-                className="social-button guest-button"
-                onClick={onGuestLogin}
-              >
-                <span className="social-icon">A</span>
-                <span>Guest</span>
-              </button>
+              <div className="social-buttons-container">
+                <button 
+                  type="button" 
+                  className="social-button"
+                  onClick={onFacebookLogin}
+                >
+                  <img src={facebookLogo} alt="Facebook" className="social-icon" />
+                </button>
+                
+                <button 
+                  type="button" 
+                  className="social-button"
+                  onClick={onGoogleLogin}
+                >
+                  <img src={googleLogo} alt="Google" className="social-icon" />
+                </button>
+                
+                <button 
+                  type="button" 
+                  className="social-button"
+                  onClick={onGuestLogin}
+                >
+                  <img src={guestLogo} alt="Guest" className="social-icon" />
+                </button>
+              </div>
             </div>
           </>
         )}

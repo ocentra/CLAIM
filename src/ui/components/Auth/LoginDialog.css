@@ -288,73 +288,52 @@
   padding: 0 20px 20px 20px;
 }
 
-.divider {
+.social-buttons-container {
   display: flex;
-  align-items: center;
-  margin: 15px 20px;
-}
-
-.divider::before,
-.divider::after {
-  content: "";
-  flex: 1;
-  border-bottom: 1px solid #0077ff;
-}
-
-.divider span {
-  padding: 0 15px;
-  color: #00aaff;
-  font-size: 14px;
+  justify-content: center;
+  gap: 40px;
+  padding: 20px 0;
 }
 
 .social-button {
+  width: 100px;
+  height: 100px;
+  border: none;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 12px;
-  border: none;
-  border-radius: 8px;
-  font-size: 16px;
-  font-weight: 500;
   cursor: pointer;
   transition: all 0.3s ease;
-  position: relative;
-  overflow: hidden;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+  padding: 0;
+  background: transparent;
 }
 
 .social-button:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  transform: scale(1.1);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .social-button:active {
-  transform: translateY(0);
-}
-
-.facebook-button {
-  background: linear-gradient(45deg, #3b5998, #4a69a8);
-  color: white;
-}
-
-.google-button {
-  background: linear-gradient(45deg, #db4437, #ea6a5d);
-  color: white;
-}
-
-.guest-button {
-  background: linear-gradient(45deg, #4285f4, #5a95f5);
-  color: white;
+  transform: scale(0.95);
 }
 
 .social-icon {
-  display: inline-block;
-  width: 24px;
-  height: 24px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 50%;
-  text-align: center;
-  line-height: 24px;
-  font-weight: bold;
-  margin-right: 10px;
-  font-size: 14px;
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+}
+
+.facebook-button {
+  /* background: linear-gradient(45deg, #3b5998, #4a69a8); */
+}
+
+.google-button {
+  /* background: linear-gradient(45deg, #db4437, #ea6a5d); */
+}
+
+.guest-button {
+  /* background: linear-gradient(45deg, #4285f4, #5a95f5); */
 }
