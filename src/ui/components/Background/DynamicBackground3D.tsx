@@ -39,6 +39,8 @@ const logDebug = (...args: unknown[]) => {
   }
 };
 
+;
+
 logDebug('Module loaded');
 
 // Add a type for the window object
@@ -46,6 +48,7 @@ declare global {
   interface Window {
     dynamicBgRotate?: () => void;
     dynamicBgReset?: () => void;
+    dynamicBgForceCleanup?: () => void; // Add force cleanup function
   }
 }
 
@@ -53,12 +56,12 @@ declare global {
 // Card-based background configuration
 const MIN_CARD_SIZE = 20;
 const MAX_CARD_SIZE = 80;
-const MAX_CARDS = 300; // Increased from 150 to 300 to make background more dense
+const MAX_CARDS = 300; 
 const LARGE_CARD_CHANCE = 0.1;
 const CARD_SCALE_FACTOR = 1.0;
 
 // Animation configuration
-const CARD_TWINKLE_RATE = 1.0; // Speed of card animation (filled/hollow transition)
+const CARD_TWINKLE_RATE = 0.17; // 3 times slower than original 0.5 (0.5 / 3 = 0.17)
 const SHOOTING_STAR_TWINKLE_RATE = 12.0; // Speed of shooting star head twinkling (higher = faster)
 
 // Rotation transition configuration
@@ -118,6 +121,14 @@ const CARD_ASSETS = {
 const CARD_SUITS = ['Spade', 'Heart', 'Diamond', 'Club'];
 const CARD_STYLES = ['Fullcard', 'WithoutCircles', 'WithCircles'];
 
+// Texture cache to store loaded textures
+interface TextureCache {
+  [key: string]: {
+    texture: THREE.Texture;
+    aspectRatio: number;
+  };
+}
+
 interface CardData {
     position: THREE.Vector3;
     velocity: THREE.Vector3;
@@ -131,10 +142,12 @@ interface CardData {
     isFilled: boolean;
     fillProgress: number; // 0 = hollow, 1 = filled
     fillDirection: number; // 1 = filling, -1 = hollowing
-    filledTexture: THREE.Texture | null;
-    hollowTexture: THREE.Texture | null;
     aspectRatio: number; // Store aspect ratio for proper scaling
     currentSize: number; // Track current rendered size for LOD
+    materialIndex: number; // Index to the shared material
+    lodLevel: number; // Level of detail (0 = highest, 3 = lowest)
+    distanceToCamera: number; // Distance to camera for LOD calculation
+    randomOffset: number; // Random offset for fill animation timing
 }
 
 interface ShootingStarData {
@@ -146,6 +159,7 @@ interface ShootingStarData {
     progress: number;
     speed: number;
     color: THREE.Color;
+    spawnFrame?: number; // Track when the star was spawned
 }
 
 // Add a type for the shared material reference
@@ -153,11 +167,16 @@ interface ShootingStarRefData extends Array<ShootingStarData> {
     sharedSpriteMaterial?: THREE.SpriteMaterial;
 }
 
+// Add a constant for the background reset interval
+const BACKGROUND_RESET_INTERVAL = 180; // seconds 
+
 // Add a type for the rotation control API
 interface RotationControlAPI {
     rotate: () => void;
     reset?: () => void;
 }
+
+export type { RotationControlAPI };
 
 logDebug('About to define DynamicBackground3D component');
 
@@ -179,6 +198,7 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
         materials: THREE.SpriteMaterial[];
         data: CardData[];
     }>({ sprites: [], materials: [], data: [] });
+    const textureCacheRef = useRef<TextureCache>({});
 
     // Initialize shootingStarsRef with the specific type
     const shootingStarsRef = useRef<ShootingStarRefData>([]);
@@ -222,21 +242,28 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
                 (Math.random() - 0.5) * 0.2,
                 0
             );
+            // Reset fill animation state
+            c.fillProgress = Math.random();
+            c.fillDirection = Math.random() > 0.5 ? 1 : -1;
         }
         
         // Clear all shooting stars and start fresh
-        shootingStarsRef.current.forEach(star => {
-            if (groupRef.current) {
-                groupRef.current.remove(star.sprite);
-                groupRef.current.remove(star.line);
-            }
-            star.lineGeometry.dispose();
-            if (star.sprite.material && star.sprite.material !== shootingStarsRef.current.sharedSpriteMaterial) {
-                (star.sprite.material as THREE.Material).dispose();
-            }
-            (star.line.material as THREE.Material).dispose();
-        });
-        shootingStarsRef.current.length = 0;
+            shootingStarsRef.current.forEach(star => {
+                if (groupRef.current) {
+                    groupRef.current.remove(star.sprite);
+                    groupRef.current.remove(star.line);
+                }
+                star.lineGeometry.dispose();
+                if (star.sprite.material) {
+                    const material = star.sprite.material as THREE.SpriteMaterial;
+                    if (material.map) {
+                        material.map.dispose();
+                    }
+                    material.dispose();
+                }
+                (star.line.material as THREE.Material).dispose();
+            });
+            shootingStarsRef.current.length = 0;
         
         // Reset group rotation to prevent accumulated rotation errors
         if (groupRef.current) {
@@ -250,6 +277,11 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
         performanceRef.current.lastFullResetTime = clock.getElapsedTime();
         performanceRef.current.frameCount = 0;
         performanceRef.current.accumulatedTime = 0;
+        // Initialize the shooting star cleanup timer
+        performanceRef.current.lastShootingStarCleanup = clock.getElapsedTime();
+        // Initialize the partial reset timer
+        performanceRef.current.lastPartialResetTime = clock.getElapsedTime();
+
     }, [clock]);
     
     // Add performance monitoring and stability controls
@@ -261,8 +293,77 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
         maxAccumulatedTime: 1.0, // Reset accumulated time if it gets too large
         lastFullResetTime: 0, // Track when we last did a full reset
         fullResetInterval: 30 * 60, // 30 minutes in seconds
+        lastShootingStarCleanup: 0, // Track when we last cleaned up shooting stars
+        lastPartialResetTime: 0, // Track when we last did a partial reset
+        isResetting: false, // Track if we're currently in a reset transition
+        resetStartTime: 0, // Track when the reset transition started
+        resetDuration: 2.0 // Duration of the reset transition in seconds
     });
 
+    // --- Function to force cleanup of WebGL contexts ---
+    const forceCleanup = useCallback(() => {
+        logDebug('Forcing WebGL context cleanup');
+        
+        // Force disposal of all textures in cache
+        Object.values(textureCacheRef.current).forEach(cached => {
+            try {
+                cached.texture.dispose();
+            } catch (e) {
+                logDebug('Error disposing texture:', e);
+            }
+        });
+        textureCacheRef.current = {};
+        
+        // Force clear all cards
+        if (cardsRef.current.sprites) {
+            cardsRef.current.sprites.forEach(sprite => {
+                try {
+                    if (groupRef.current) {
+                        groupRef.current.remove(sprite);
+                    }
+                } catch (e) {
+                    logDebug('Error removing sprite from group:', e);
+                }
+            });
+        }
+        
+        // Force clear all shooting stars
+        if (shootingStarsRef.current) {
+            shootingStarsRef.current.forEach(star => {
+                try {
+                    if (groupRef.current) {
+                        groupRef.current.remove(star.sprite);
+                        groupRef.current.remove(star.line);
+                    }
+                    star.lineGeometry.dispose();
+                    if (star.sprite.material) {
+                        const material = star.sprite.material as THREE.SpriteMaterial;
+                        if (material.map) {
+                            material.map.dispose();
+                        }
+                        material.dispose();
+                    }
+                    (star.line.material as THREE.Material).dispose();
+                } catch (e) {
+                    logDebug('Error disposing star:', e);
+                }
+            });
+            shootingStarsRef.current.length = 0;
+        }
+        
+        // Force renderer cleanup
+        if (rendererRef.current) {
+            try {
+                rendererRef.current.dispose();
+                rendererRef.current.forceContextLoss();
+            } catch (e) {
+                logDebug('Error forcing renderer context loss:', e);
+            }
+        }
+        
+        logDebug('Forced cleanup completed');
+    }, []);
+    
     // --- Function to start a random transition rotation ---
     const startRandomRotation = useCallback(() => {
         if (!groupRef.current) return;
@@ -288,9 +389,16 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
     
     // Expose the rotation function through a ref that can be accessed externally
     const rotationAPI = useMemo(() => ({
-        rotate: () => startRandomRotation(),
-        reset: () => performFullReset // Add manual reset function
-    }), [startRandomRotation, performFullReset]);
+        rotate: () => {
+            startRandomRotation();
+        },
+        reset: () => {
+            performFullReset();
+        }, // Add manual reset function
+        forceCleanup: () => {
+            forceCleanup();
+        } // Add force cleanup function
+    }), [startRandomRotation, performFullReset, forceCleanup]);
     
     // Assign to parent ref if provided
     useEffect(() => {
@@ -305,12 +413,14 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
         if (typeof window !== 'undefined') {
             window.dynamicBgRotate = rotationAPI.rotate;
             window.dynamicBgReset = rotationAPI.reset;
+            window.dynamicBgForceCleanup = rotationAPI.forceCleanup;
         }
         
         return () => {
             if (typeof window !== 'undefined') {
                 delete window.dynamicBgRotate;
                 delete window.dynamicBgReset;
+                delete window.dynamicBgForceCleanup;
             }
         };
     }, [rotationAPI]);
@@ -394,9 +504,28 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
         return texture;
     };
 
-    // --- Helper to load card texture with aspect ratio preservation and mipmapping ---
+    // --- Helper to create money emoji star texture ---
+    const createMoneyStarTexture = (emoji = '💸') => {
+        const size = 128;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d')!;
+        ctx.font = '100px "Segoe UI Emoji"';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(emoji, size / 2, size / 2);
+        return new THREE.CanvasTexture(canvas);
+    };
+
+    // --- Helper to load card texture with caching ---
     const loadCardTexture = (path: string): Promise<{texture: THREE.Texture, aspectRatio: number}> => {
-        logDebug('Attempting to load texture:', path);
+        // Check if texture is already cached
+        if (textureCacheRef.current[path]) {
+            return Promise.resolve(textureCacheRef.current[path]);
+        }
+        
+        logDebug('Loading texture:', path);
         return new Promise((resolve) => {
             const loader = new THREE.TextureLoader();
             loader.load(
@@ -416,7 +545,11 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
                     
                     // Calculate aspect ratio from texture dimensions
                     const aspectRatio = texture.image.width / texture.image.height;
-                    logDebug('Texture aspect ratio:', aspectRatio, 'for', path);
+                    
+                    // Cache the texture
+                    textureCacheRef.current[path] = { texture, aspectRatio };
+                    
+                    logDebug('Cached texture:', path, 'with aspect ratio:', aspectRatio);
                     resolve({texture, aspectRatio});
                 },
                 undefined,
@@ -466,6 +599,9 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
                     fallbackTexture.wrapS = THREE.ClampToEdgeWrapping;
                     fallbackTexture.wrapT = THREE.ClampToEdgeWrapping;
                     
+                    // Cache the fallback texture
+                    textureCacheRef.current[path] = { texture: fallbackTexture, aspectRatio: 1.0 };
+                    
                     resolve({texture: fallbackTexture, aspectRatio: 1.0});
                 }
             );
@@ -507,14 +643,21 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5)); // Limit pixel ratio to reduce pixelation
         // Set renderer clear color to match base background color
         renderer.setClearColor(new THREE.Color(BASE_BACKGROUND_COLOR), 1);
+        // Make sure the canvas doesn't block pointer events
+        renderer.domElement.style.pointerEvents = 'none';
+        renderer.domElement.style.position = 'relative'; // Ensure proper positioning
+        renderer.domElement.style.zIndex = '-1'; // Ensure canvas is behind UI elements
         currentMount.appendChild(renderer.domElement);
         rendererRef.current = renderer;
         logDebug('Renderer created and mounted');
+        console.log('[DynamicBackground3D] Renderer initialized:', renderer);
+        console.log('[DynamicBackground3D] Canvas element:', renderer.domElement);
 
         const group = new THREE.Group(); // This group holds cards and stars for rotation
         groupRef.current = group;
         scene.add(group);
         logDebug('Group created and added to scene');
+        console.log('[DynamicBackground3D] Group initialized:', group);
 
         // Parse RGBA values for gradient
         const parseRGBA = (rgbaString: string) => {
@@ -560,10 +703,44 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
         renderer.autoClear = false; // Manage clearing manually
         logDebug('Gradient background created');
 
+        // Create shared materials for each card type (4 suits × 3 styles × 2 states = 24 materials)
+        const sharedMaterials: THREE.SpriteMaterial[] = [];
+        const materialMap: { [key: string]: number } = {}; // Map from card type to material index
+        
+        // Create a material for each card type
+        CARD_STYLES.forEach(style => {
+            CARD_SUITS.forEach(suit => {
+                // Create filled material
+                const filledMaterial = new THREE.SpriteMaterial({
+                    color: 0x444444, // Dark gray default color
+                    transparent: true,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false,
+                    sizeAttenuation: true,
+                });
+                const filledKey = `${style}-${suit}-filled`;
+                materialMap[filledKey] = sharedMaterials.length;
+                sharedMaterials.push(filledMaterial);
+                
+                // Create hollow material
+                const hollowMaterial = new THREE.SpriteMaterial({
+                    color: 0x444444, // Dark gray default color
+                    transparent: true,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false,
+                    sizeAttenuation: true,
+                });
+                const hollowKey = `${style}-${suit}-hollow`;
+                materialMap[hollowKey] = sharedMaterials.length;
+                sharedMaterials.push(hollowMaterial);
+            });
+        });
+        
+        logDebug('Created', sharedMaterials.length, 'shared materials for card types');
+
         // Card System (Added to the rotating group)
         const cardDataArray: CardData[] = [];
         const cardSprites: THREE.Sprite[] = [];
-        const cardMaterials: THREE.SpriteMaterial[] = [];
 
         // Create cards with different styles and suits
         for (let i = 0; i < MAX_CARDS; i++) {
@@ -589,6 +766,17 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
             // Set opacity similar to 2D version
             const baseOpacity = Math.random() * 0.7 + 0.3;
             
+            // Get material index for this card type
+            const materialKey = `${style}-${suit}-${isFilled ? 'filled' : 'hollow'}`;
+            const materialIndex = materialMap[materialKey];
+            
+            // Add random offset for fill animation to make transitions random
+            const randomOffset = Math.random() * Math.PI * 2;
+            
+            // Start cards at random fill progress to avoid synchronized animation
+            const initialFillProgress = Math.random();
+            const initialFillDirection = Math.random() > 0.5 ? 1 : -1;
+            
             cardDataArray.push({
                 position: new THREE.Vector3(x, y, z),
                 velocity: new THREE.Vector3(
@@ -604,25 +792,18 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
                 suit: suit,
                 style: style,
                 isFilled: isFilled,
-                fillProgress: isFilled ? 1 : 0,
-                fillDirection: isFilled ? -1 : 1, // Start filling if hollow, start hollowing if filled
-                filledTexture: null,
-                hollowTexture: null,
+                fillProgress: initialFillProgress,
+                fillDirection: initialFillDirection,
                 aspectRatio: 1.0, // Default square aspect ratio
-                currentSize: size // Initialize current size for LOD system
+                currentSize: size, // Initialize current size for LOD system
+                materialIndex: materialIndex, // Index to the shared material
+                lodLevel: 0, // Start with highest LOD level
+                distanceToCamera: 0, // Initialize distance
+                randomOffset: randomOffset // Add random offset for fill animation
             });
             
-            // Create a material for the card with a subtle default texture
-            const material = new THREE.SpriteMaterial({
-                color: 0x444444, // Dark gray default color
-                transparent: true,
-                blending: THREE.AdditiveBlending,
-                depthWrite: false,
-                sizeAttenuation: true,
-            });
-            cardMaterials.push(material);
-            
-            // Create sprite with initial scale
+            // Create sprite with the shared material
+            const material = sharedMaterials[materialIndex];
             const sprite = new THREE.Sprite(material);
             sprite.position.set(x, y, z);
             sprite.scale.set(size, size, 1);
@@ -631,14 +812,14 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
         }
         cardsRef.current.data = cardDataArray;
         cardsRef.current.sprites = cardSprites;
-        cardsRef.current.materials = cardMaterials;
-        logDebug('Created', cardDataArray.length, 'cards');
+        cardsRef.current.materials = sharedMaterials;
+        logDebug('Created', cardDataArray.length, 'cards using', sharedMaterials.length, 'shared materials');
 
         logDebug('Starting texture loading');
         
-        // Load textures for all cards
+        // Load textures for all card types
         const loadTextures = async () => {
-            logDebug('Starting to load textures for', cardDataArray.length, 'cards');
+            logDebug('Starting to load textures for card types');
             let loadedCount = 0;
             let errorCount = 0;
             
@@ -648,83 +829,79 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
                 if (onReady) {
                     onReady();
                 }
-            }, 30000); // 30 second timeout
+            }, 30000); // Reverted to 30 seconds
             
-            // Process cards in batches to avoid blocking the UI
-            const batchSize = 10;
-            for (let i = 0; i < cardDataArray.length; i += batchSize) {
-                const batchEnd = Math.min(i + batchSize, cardDataArray.length);
-                const batchPromises = [];
-                
-                for (let j = i; j < batchEnd; j++) {
-                    const card = cardDataArray[j];
-                    const suit = card.suit as keyof typeof CARD_ASSETS.Fullcard;
-                    const style = card.style as keyof typeof CARD_ASSETS;
-                    
-                    // Load filled and hollow textures
-                    const filledPath = CARD_ASSETS[style][suit].filled;
-                    const hollowPath = CARD_ASSETS[style][suit].hollow;
-                    
-                    logDebug(`Loading textures for card ${j}: ${filledPath}, ${hollowPath}`);
-                    
-                    batchPromises.push(
-                        Promise.all([
-                            loadCardTexture(filledPath),
-                            loadCardTexture(hollowPath)
-                        ]).then(([filledResult, hollowResult]) => {
-                            // Update card data with loaded textures and aspect ratio
-                            card.filledTexture = filledResult.texture;
-                            card.hollowTexture = hollowResult.texture;
-                            // Use the aspect ratio from the filled texture (assuming both are the same)
-                            card.aspectRatio = filledResult.aspectRatio;
+            // Load textures for each card type
+            for (const style of CARD_STYLES) {
+                for (const suit of CARD_SUITS) {
+                    try {
+                        // Load filled texture
+                        const filledPath = CARD_ASSETS[style as keyof typeof CARD_ASSETS][suit as keyof typeof CARD_ASSETS.Fullcard].filled;
+                        const filledResult = await loadCardTexture(filledPath);
+                        const filledKey = `${style}-${suit}-filled`;
+                        const filledMaterialIndex = materialMap[filledKey];
+                        const filledMaterial = sharedMaterials[filledMaterialIndex];
+                        
+                        if (filledMaterial) {
+                            filledMaterial.map = filledResult.texture;
+                            filledMaterial.needsUpdate = true;
                             
                             // Apply anisotropic filtering if renderer is available
                             if (rendererRef.current) {
                                 const anisotropy = rendererRef.current.capabilities.getMaxAnisotropy();
                                 filledResult.texture.anisotropy = anisotropy;
+                            }
+                        }
+                        
+                        // Load hollow texture
+                        const hollowPath = CARD_ASSETS[style as keyof typeof CARD_ASSETS][suit as keyof typeof CARD_ASSETS.Fullcard].hollow;
+                        const hollowResult = await loadCardTexture(hollowPath);
+                        const hollowKey = `${style}-${suit}-hollow`;
+                        const hollowMaterialIndex = materialMap[hollowKey];
+                        const hollowMaterial = sharedMaterials[hollowMaterialIndex];
+                        
+                        if (hollowMaterial) {
+                            hollowMaterial.map = hollowResult.texture;
+                            hollowMaterial.needsUpdate = true;
+                            
+                            // Apply anisotropic filtering if renderer is available
+                            if (rendererRef.current) {
+                                const anisotropy = rendererRef.current.capabilities.getMaxAnisotropy();
                                 hollowResult.texture.anisotropy = anisotropy;
                             }
-                            
-                            // Set initial texture based on isFilled state
-                            const materialIndex = j;
-                            if (cardMaterials[materialIndex]) {
-                                cardMaterials[materialIndex].map = card.isFilled ? filledResult.texture : hollowResult.texture;
-                                cardMaterials[materialIndex].needsUpdate = true;
+                        }
+                        
+                        // Update all cards of this type with the aspect ratio
+                        for (let i = 0; i < cardDataArray.length; i++) {
+                            const card = cardDataArray[i];
+                            if (card.suit === suit && card.style === style) {
+                                card.aspectRatio = filledResult.aspectRatio; // Use filled texture aspect ratio
+                                
+                                // Update sprite scale to maintain aspect ratio
+                                const sprite = cardSprites[i];
+                                if (sprite) {
+                                    const scaleX = card.size * card.aspectRatio;
+                                    const scaleY = card.size;
+                                    sprite.scale.set(scaleX, scaleY, 1);
+                                }
                             }
-                            
-                            // Update sprite scale to maintain aspect ratio
-                            const sprite = cardSprites[j];
-                            if (sprite) {
-                                const scaleX = card.size * card.aspectRatio;
-                                const scaleY = card.size;
-                                sprite.scale.set(scaleX, scaleY, 1);
-                            }
-                            
-                            loadedCount++;
-                            if (loadedCount % 10 === 0) {
-                                logDebug(`Loaded textures for ${loadedCount}/${cardDataArray.length} cards`);
-                            }
-                            
-                            return true;
-                        }).catch(error => {
-                            logDebug(`Failed to load textures for card ${j}:`, error);
-                            errorCount++;
-                            return false;
-                        })
-                    );
+                        }
+                        
+                        loadedCount += 2; // Two textures loaded (filled and hollow)
+                        logDebug(`Loaded textures for ${style}-${suit}`);
+                    } catch (error) {
+                        logDebug(`Failed to load textures for ${style}-${suit}:`, error);
+                        errorCount++;
+                    }
                 }
-                
-                // Wait for this batch to complete
-                await Promise.all(batchPromises);
-                
-                // Small delay between batches to avoid blocking the UI
-                await new Promise(resolve => setTimeout(resolve, 10));
             }
             
             // Clear the timeout since we're done
             clearTimeout(timeoutId);
             
             logDebug(`Finished loading textures: ${loadedCount} successful, ${errorCount} failed, calling onReady callback`);
+            logDebug(`Texture cache contains ${Object.keys(textureCacheRef.current).length} unique textures`);
+            
             // Notify that background is ready
             if (onReady) {
                 onReady();
@@ -743,7 +920,7 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
             if (onReady) {
                 onReady();
             }
-        }, 5000); // 5 second fallback
+        }, 5000); // Reverted to 5 seconds
 
         // Shooting Star Shared Material
         const sharedSpriteMaterial = new THREE.SpriteMaterial({
@@ -805,9 +982,95 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
                 }
             }
             
-            // Full reset every 30 minutes for long-term stability
-            if (elapsed - perf.lastFullResetTime > perf.fullResetInterval) {
-                performFullReset();
+            // Apply smooth reset transition if active
+            if (performanceRef.current.isResetting) {
+                const elapsed = clock.getElapsedTime();
+                const resetProgress = Math.min((elapsed - performanceRef.current.resetStartTime) / performanceRef.current.resetDuration, 1.0);
+                
+                // Apply fade out effect during reset
+                const data = cardsRef.current.data;
+                const sprites = cardsRef.current.sprites;
+                
+                for (let i = 0; i < data.length; i++) {
+                    const sprite = sprites[i];
+                    if (sprite && sprite.material) {
+                        // Fade out cards during reset
+                        const fadeProgress = 1.0 - resetProgress;
+                        (sprite.material as THREE.SpriteMaterial).opacity = data[i].baseOpacity * fadeProgress;
+                    }
+                }
+                
+                // When reset transition is complete, perform the actual reset
+                if (resetProgress >= 1.0) {
+                    // Perform the actual reset
+                    if (groupRef.current && cardsRef.current.data.length) {
+                        logDebug('Performing smooth full animation reset for stability');
+                        
+                        // Reset all card positions to fresh random positions
+                        const data = cardsRef.current.data;
+                        for (let i = 0; i < data.length; i++) {
+                            const c = data[i];
+                            c.position.set(
+                                (Math.random() - 0.5) * CARD_SPREAD_XY * 0.8,
+                                (Math.random() - 0.5) * CARD_SPREAD_XY * 0.8,
+                                (Math.random() - 0.5) * CARD_Z_RANGE * 0.5
+                            );
+                            // Reset velocity to prevent accumulated errors
+                            c.velocity.set(
+                                (Math.random() - 0.5) * 0.2,
+                                (Math.random() - 0.5) * 0.2,
+                                0
+                            );
+                            
+                            // Reset fill animation state
+                            c.fillProgress = Math.random();
+                            c.fillDirection = Math.random() > 0.5 ? 1 : -1;
+                        }
+                        
+                        // Clear all shooting stars and start fresh
+                        shootingStarsRef.current.forEach(star => {
+                            if (groupRef.current) {
+                                groupRef.current.remove(star.sprite);
+                                groupRef.current.remove(star.line);
+                            }
+                            star.lineGeometry.dispose();
+                            if (star.sprite.material) {
+                                const material = star.sprite.material as THREE.SpriteMaterial;
+                                if (material.map) {
+                                    material.map.dispose();
+                                }
+                                material.dispose();
+                            }
+                            (star.line.material as THREE.Material).dispose();
+                        });
+                        shootingStarsRef.current.length = 0;
+                        
+                        // Reset group rotation to prevent accumulated rotation errors
+                        if (groupRef.current) {
+                            groupRef.current.rotation.set(0, 0, 0);
+                        }
+                        
+                        // Reset rotation animation state
+                        rotationAnimationRef.current.active = false;
+                    }
+                    
+                    // Reset the reset transition state
+                    performanceRef.current.isResetting = false;
+                    
+                    // Update performance tracking
+                    performanceRef.current.lastFullResetTime = elapsed;
+                    performanceRef.current.frameCount = 0;
+                    performanceRef.current.accumulatedTime = 0;
+                    performanceRef.current.lastPartialResetTime = elapsed;
+                }
+            } else {
+                // Normal reset check (every 1 minute)
+                const elapsed = clock.getElapsedTime();
+                if (elapsed - performanceRef.current.lastPartialResetTime > BACKGROUND_RESET_INTERVAL) { // Configurable reset interval
+                    // Start the smooth reset transition
+                    performanceRef.current.isResetting = true;
+                    performanceRef.current.resetStartTime = elapsed;
+                }
             }
 
             // Apply smooth rotation animation if active
@@ -837,21 +1100,30 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
             const currentShootingStarCount = shootingStarsRef.current.length;
             
             // Periodic cleanup: Remove old shooting stars to prevent accumulation
-            if (elapsed - perf.lastResetTime > 5 && currentShootingStarCount > MAX_SHOOTING_STARS * 1.5) {
-                // Remove excess shooting stars
-                const excessCount = currentShootingStarCount - MAX_SHOOTING_STARS;
-                for (let i = 0; i < excessCount && shootingStarsRef.current.length > 0; i++) {
-                    const star = shootingStarsRef.current.pop();
-                    if (star && groupRef.current) {
-                        groupRef.current.remove(star.sprite);
-                        groupRef.current.remove(star.line);
-                        star.lineGeometry.dispose();
-                        if (star.sprite.material && star.sprite.material !== shootingStarsRef.current.sharedSpriteMaterial) {
-                            (star.sprite.material as THREE.Material).dispose();
+            // Use a separate timer for shooting star cleanup to avoid conflicts with main performance timer
+            if (elapsed - performanceRef.current.lastShootingStarCleanup > 5) {
+                if (currentShootingStarCount > MAX_SHOOTING_STARS * 1.5) {
+                    // Remove excess shooting stars
+                    const excessCount = currentShootingStarCount - MAX_SHOOTING_STARS;
+                    for (let i = 0; i < excessCount && shootingStarsRef.current.length > 0; i++) {
+                        const star = shootingStarsRef.current.pop();
+                        if (star && groupRef.current) {
+                            groupRef.current.remove(star.sprite);
+                            groupRef.current.remove(star.line);
+                            star.lineGeometry.dispose();
+                            if (star.sprite.material) {
+                                const material = star.sprite.material as THREE.SpriteMaterial;
+                                if (material.map) {
+                                    material.map.dispose();
+                                }
+                                material.dispose();
+                            }
+                            (star.line.material as THREE.Material).dispose();
                         }
-                        (star.line.material as THREE.Material).dispose();
                     }
                 }
+                // Update the last cleanup time
+                performanceRef.current.lastShootingStarCleanup = elapsed;
             }
             
             // Calculate how many shooting stars we should add this frame
@@ -914,84 +1186,137 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
                  try { currentMount.removeChild(renderer.domElement); } catch (e) { logDebug("Error removing renderer DOM element:", e); }
             }
 
-            // --- Start of Corrected Cleanup Logic ---
+            // --- Start of Enhanced Cleanup Logic ---
+            
+            // Force cleanup of all resources
+            try {
+                forceCleanup();
+            } catch (e) {
+                logDebug("Error during force cleanup:", e);
+            }
 
             // Dispose textures explicitly first (safer)
-            starTexture?.dispose();
-            gradientMaterial?.uniforms?.topColor?.value?.dispose?.(); // Example if color was complex type
-            gradientMaterial?.uniforms?.bottomColor?.value?.dispose?.();
-            gradientMaterial?.dispose(); // Dispose the gradient material itself
+            try {
+                starTexture?.dispose();
+            } catch (e) {
+                logDebug("Error disposing star texture:", e);
+            }
+            
+            try {
+                gradientMaterial?.uniforms?.topColor?.value?.dispose?.(); // Example if color was complex type
+                gradientMaterial?.uniforms?.bottomColor?.value?.dispose?.();
+                gradientMaterial?.dispose(); // Dispose the gradient material itself
+            } catch (e) {
+                logDebug("Error disposing gradient material:", e);
+            }
 
             // Dispose shared sprite material map texture and material
-            shootingStarsRef.current?.sharedSpriteMaterial?.map?.dispose();
-            shootingStarsRef.current?.sharedSpriteMaterial?.dispose();
+            try {
+                shootingStarsRef.current?.sharedSpriteMaterial?.map?.dispose();
+                shootingStarsRef.current?.sharedSpriteMaterial?.dispose();
+            } catch (e) {
+                logDebug("Error disposing shooting star material:", e);
+            }
 
-            // Dispose card materials and textures
-            cardsRef.current.materials.forEach(material => {
-                material.map?.dispose();
-                material.dispose();
-            });
+            // Dispose shared card materials and textures
+            try {
+                sharedMaterials.forEach(material => {
+                    material.map?.dispose();
+                    material.dispose();
+                });
+            } catch (e) {
+                logDebug("Error disposing shared materials:", e);
+            }
             
-            // Dispose card textures
-            cardsRef.current.data.forEach(card => {
-                card.filledTexture?.dispose();
-                card.hollowTexture?.dispose();
-            });
+            // Dispose texture cache
+            try {
+                Object.values(textureCacheRef.current).forEach(cached => {
+                    cached.texture.dispose();
+                });
+                textureCacheRef.current = {};
+            } catch (e) {
+                logDebug("Error disposing texture cache:", e);
+            }
 
             // Dispose geometries and materials found during scene traversal
-            scene.traverse(object => {
-                // Dispose Geometry
-                // Check if it's a BufferGeometry instance first
-                 if (object instanceof THREE.BufferGeometry) {
-                    object.dispose();
-                 }
-                 // Then check common object types that have geometry
-                 else if (object instanceof THREE.Mesh || object instanceof THREE.Points || object instanceof THREE.Line || object instanceof THREE.Sprite) {
-                    if (object.geometry) {
-                        object.geometry.dispose();
+            try {
+                scene.traverse(object => {
+                    // Dispose Geometry
+                    // Check if it's a BufferGeometry instance first
+                     if (object instanceof THREE.BufferGeometry) {
+                        try {
+                            object.dispose();
+                        } catch (e) {
+                            logDebug("Error disposing geometry:", e);
+                        }
+                     }
+                     // Then check common object types that have geometry
+                     else if (object instanceof THREE.Mesh || object instanceof THREE.Points || object instanceof THREE.Line || object instanceof THREE.Sprite) {
+                        if (object.geometry) {
+                            try {
+                                object.geometry.dispose();
+                            } catch (e) {
+                                logDebug("Error disposing object geometry:", e);
+                            }
+                        }
                     }
-                }
 
-                // Dispose Material(s)
-                 // Check if the object has a 'material' property and it's not undefined
-                 if ('material' in object && object.material) {
-                    const material = object.material as THREE.Material | THREE.Material[]; // Type assertion
-                    if (Array.isArray(material)) {
-                        // If it's an array of materials
-                        material.forEach(mat => {
-                            // Use type assertions for specific material types that have these properties
-                            const materialWithMap = mat as unknown as { map?: THREE.Texture };
+                    // Dispose Material(s)
+                     // Check if the object has a 'material' property and it's not undefined
+                     if ('material' in object && object.material) {
+                        const material = object.material as THREE.Material | THREE.Material[]; // Type assertion
+                        if (Array.isArray(material)) {
+                            // If it's an array of materials
+                            material.forEach(mat => {
+                                // Use type assertions for specific material types that have these properties
+                                const materialWithMap = mat as unknown as { map?: THREE.Texture };
+                                materialWithMap.map?.dispose();
+                                
+                                const materialWithAlphaMap = mat as unknown as { alphaMap?: THREE.Texture };
+                                materialWithAlphaMap.alphaMap?.dispose();
+                                
+                                mat.dispose();
+                            });
+                        } else {
+                            // If it's a single material
+                            const materialWithMap = material as unknown as { map?: THREE.Texture };
                             materialWithMap.map?.dispose();
                             
-                            const materialWithAlphaMap = mat as unknown as { alphaMap?: THREE.Texture };
+                            const materialWithAlphaMap = material as unknown as { alphaMap?: THREE.Texture };
                             materialWithAlphaMap.alphaMap?.dispose();
                             
-                            mat.dispose();
-                        });
-                    } else {
-                        // If it's a single material
-                        const materialWithMap = material as unknown as { map?: THREE.Texture };
-                        materialWithMap.map?.dispose();
-                        
-                        const materialWithAlphaMap = material as unknown as { alphaMap?: THREE.Texture };
-                        materialWithAlphaMap.alphaMap?.dispose();
-                        
-                        material.dispose();
+                            material.dispose();
+                        }
                     }
-                }
-            });
+                });
+            } catch (e) {
+                logDebug("Error during scene traversal disposal:", e);
+            }
 
             // Also dispose gradient scene objects (specifically its geometry)
-             gradientScene.traverse(object => {
-                 if (object instanceof THREE.Mesh) {
-                     object.geometry?.dispose();
-                     // Gradient material already handled above
-                 }
-             });
+             try {
+                 gradientScene.traverse(object => {
+                     if (object instanceof THREE.Mesh) {
+                         object.geometry?.dispose();
+                         // Gradient material already handled above
+                     }
+                 });
+             } catch (e) {
+                 logDebug("Error disposing gradient scene:", e);
+             }
 
-            renderer?.dispose(); // Dispose renderer resources
+            // Force renderer disposal
+            try {
+                renderer?.dispose(); // Dispose renderer resources
+                // Force WebGL context loss
+                if (renderer && typeof (renderer as unknown as { forceContextLoss?: () => void }).forceContextLoss === 'function') {
+                    (renderer as unknown as { forceContextLoss: () => void }).forceContextLoss();
+                }
+            } catch (e) {
+                logDebug("Error disposing renderer:", e);
+            }
 
-            // --- End of Corrected Cleanup Logic ---
+            // --- End of Enhanced Cleanup Logic ---
 
             // Clear refs
             rendererRef.current = null;
@@ -999,6 +1324,7 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
             cameraRef.current = null;
             groupRef.current = null;
             cardsRef.current = { sprites: [], materials: [], data: [] };
+            textureCacheRef.current = {};
             shootingStarsRef.current = []; // Reset the ref array
 
             logDebug("Cleaned up Three.js resources");
@@ -1012,19 +1338,20 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
     const updateCards = (delta: number, elapsed: number) => {
         const data = cardsRef.current.data;
         const sprites = cardsRef.current.sprites;
-        const materials = cardsRef.current.materials;
-        const bounds = CARD_SPREAD_XY * 0.95; // Use most of the area
 
         for (let i = 0; i < data.length; i++) {
             const c = data[i];
             const sprite = sprites[i];
-            const material = materials[i];
 
             // Update position with velocity
             c.position.x += c.velocity.x;
             c.position.y += c.velocity.y;
+            c.position.z += c.velocity.z; // Add Z velocity update
 
-            // Bounce off edges
+            // Bounce off edges including Z-axis
+            const bounds = CARD_SPREAD_XY * 0.95; // Use most of the area
+            const zBounds = CARD_Z_RANGE * 0.5; // Z-axis bounds
+            
             if (Math.abs(c.position.x) > bounds) {
                 c.velocity.x *= -1;
                 c.position.x = Math.sign(c.position.x) * bounds;
@@ -1033,44 +1360,126 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
                 c.velocity.y *= -1;
                 c.position.y = Math.sign(c.position.y) * bounds;
             }
+            if (Math.abs(c.position.z) > zBounds) {
+                c.velocity.z *= -1;
+                c.position.z = Math.sign(c.position.z) * zBounds;
+            }
 
             // Apply position to sprite
             if (sprite) {
                 sprite.position.set(c.position.x, c.position.y, c.position.z);
             }
 
-            // Update fill animation
-            c.fillProgress += delta * CARD_TWINKLE_RATE * c.fillDirection;
+            // Calculate distance to camera for LOD
+            let distance = 0;
+            if (cameraRef.current) {
+                distance = c.position.distanceTo(cameraRef.current.position);
+            }
+            c.distanceToCamera = distance;
+
+            // Determine LOD level based on distance (closer = higher detail)
+            // LOD levels: 0 = full size, 1 = 3/4 size, 2 = 1/2 size, 3 = 1/4 size
+            let lodLevel = 0;
+            if (distance > 1000) {
+                lodLevel = 3; // Farthest - smallest
+            } else if (distance > 750) {
+                lodLevel = 2;
+            } else if (distance > 500) {
+                lodLevel = 1;
+            }
+            c.lodLevel = lodLevel;
+
+            // Update card size based on LOD level
+            let sizeMultiplier = 1.0;
+            switch (lodLevel) {
+                case 1: sizeMultiplier = 0.75; break;
+                case 2: sizeMultiplier = 0.5; break;
+                case 3: sizeMultiplier = 0.25; break;
+                default: sizeMultiplier = 1.0; break;
+            }
+            c.currentSize = c.size * sizeMultiplier;
+
+            // Update fill animation with gradual transition and random timing
+            // Use the random offset to make each card's animation unique
+            // Add variation to the speed and direction of each card's animation
+            const speedVariation = 0.1 + Math.random() * 0.3; // 0.1x to 0.4x normal speed (much slower)
+            c.fillProgress += delta * CARD_TWINKLE_RATE * c.fillDirection * speedVariation;
             
-            // Reverse direction at bounds
+            // Reverse direction at bounds with some randomness
             if (c.fillProgress >= 1.0) {
                 c.fillProgress = 1.0;
-                c.fillDirection = -1;
+                // Add slight randomness to when cards start hollowing
+                if (Math.random() > 0.5) { // 50% chance to reverse (much slower cycling)
+                    c.fillDirection = -1;
+                }
             } else if (c.fillProgress <= 0.0) {
                 c.fillProgress = 0.0;
-                c.fillDirection = 1;
-            }
-
-            // Update texture based on fill progress
-            if (c.filledTexture && c.hollowTexture && material) {
-                // Switch at 50% point for crisp transition
-                const useFilled = c.fillProgress > 0.5;
-                if (material.map !== (useFilled ? c.filledTexture : c.hollowTexture)) {
-                    material.map = useFilled ? c.filledTexture : c.hollowTexture;
-                    material.needsUpdate = true;
+                // Add slight randomness to when cards start filling
+                if (Math.random() > 0.5) { // 50% chance to reverse (much slower cycling)
+                    c.fillDirection = 1;
                 }
             }
 
-            // Apply aspect ratio to sprite scale
+            // Apply material switching based on fill state with dissolve effect
+            // Calculate material indices based on the order they were created
+            // Materials are created in pairs: filled then hollow
+            // Find the base index for this card's style and suit
+            const styleIndex = CARD_STYLES.indexOf(c.style);
+            const suitIndex = CARD_SUITS.indexOf(c.suit);
+            
+            if (styleIndex !== -1 && suitIndex !== -1) {
+                // Each style has 4 suits, each suit has 2 materials (filled + hollow)
+                const baseIndex = (styleIndex * CARD_SUITS.length + suitIndex) * 2;
+                const filledMaterialIndex = baseIndex;      // First of the pair
+                const hollowMaterialIndex = baseIndex + 1;  // Second of the pair
+                
+                // Implement dissolve effect by blending between materials
+                // Use the card's random offset to stagger transitions
+                const transitionWidth = 0.7; // Even wider transition zone for more visible dissolve
+                // Offset the transition point for each card
+                const offsetTransitionPoint = 0.5 + Math.sin(c.randomOffset) * 0.15; // Vary between 0.35 and 0.65
+                const transitionStart = offsetTransitionPoint - transitionWidth / 2;
+                const transitionEnd = offsetTransitionPoint + transitionWidth / 2;
+                
+                if (c.fillProgress < transitionStart) {
+                    // Show hollow material only
+                    if (sprite && c.materialIndex !== hollowMaterialIndex) {
+                        sprite.material = cardsRef.current.materials[hollowMaterialIndex];
+                        c.materialIndex = hollowMaterialIndex;
+                    }
+                } else if (c.fillProgress > transitionEnd) {
+                    // Show filled material only
+                    if (sprite && c.materialIndex !== filledMaterialIndex) {
+                        sprite.material = cardsRef.current.materials[filledMaterialIndex];
+                        c.materialIndex = filledMaterialIndex;
+                    }
+                } else {
+                    // In transition zone - blend by switching materials
+                    // This creates a dissolve effect by alternating between materials
+                    const transitionProgress = (c.fillProgress - transitionStart) / transitionWidth;
+                    // Use the card's random offset to create unique switching patterns
+                    // Much slower switching for more visible effect
+                    const switchValue = Math.sin(transitionProgress * Math.PI + c.randomOffset);
+                    const useFilledMaterial = switchValue > 0;
+                    const targetMaterialIndex = useFilledMaterial ? filledMaterialIndex : hollowMaterialIndex;
+                    
+                    if (sprite && c.materialIndex !== targetMaterialIndex) {
+                        sprite.material = cardsRef.current.materials[targetMaterialIndex];
+                        c.materialIndex = targetMaterialIndex;
+                    }
+                }
+            }
+
+            // Apply aspect ratio and LOD-based scaling to sprite
             if (sprite && c.aspectRatio > 0) {
-                const scaleX = c.size * c.aspectRatio;
-                const scaleY = c.size;
+                const scaleX = c.currentSize * c.aspectRatio;
+                const scaleY = c.currentSize;
                 sprite.scale.set(scaleX, scaleY, 1);
             }
 
             // Apply opacity with subtle variation
-            if (material) {
-                material.opacity = c.baseOpacity + Math.sin(elapsed * 2 + i * 0.1) * 0.1;
+            if (sprite.material) {
+                (sprite.material as THREE.SpriteMaterial).opacity = c.baseOpacity + Math.sin(elapsed * 2 + i * 0.1) * 0.1;
             }
         }
     };
@@ -1078,8 +1487,11 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
     // --- Shooting Star Update Logic ---
     const updateShootingStars = (delta: number) => {
         const stars = shootingStarsRef.current;
-        const elapsed = clock.getElapsedTime(); // Add elapsed time declaration
-        for (let i = stars.length - 1; i >= 0; i--) {
+        const elapsed = clock.getElapsedTime();
+        // Create a new array to store active stars
+        const activeStars: ShootingStarData[] = [];
+        
+        for (let i = 0; i < stars.length; i++) {
             const star = stars[i];
             
             // Update progress
@@ -1087,8 +1499,25 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
             
             // Remove if completed
             if (star.progress >= 1.0) {
-                continue; // We'll clean up later
+                // Clean up completed star
+                if (groupRef.current) {
+                    groupRef.current.remove(star.sprite);
+                    groupRef.current.remove(star.line);
+                }
+                star.lineGeometry.dispose();
+                if (star.sprite.material) {
+                    const material = star.sprite.material as THREE.SpriteMaterial;
+                    if (material.map) {
+                        material.map.dispose();
+                    }
+                    material.dispose();
+                }
+                (star.line.material as THREE.Material).dispose();
+                continue; // Skip adding to active stars
             }
+            
+            // Add to active stars
+            activeStars.push(star);
             
             // Update sprite position along the line
             const startParticle = cardsRef.current.data[star.startParticleId];
@@ -1102,20 +1531,30 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
                     t
                 );
                 
+                // Handle gradual fade-in over first 10 frames
+                let fadeInFactor = 1.0;
+                if (star.spawnFrame !== undefined) {
+                    const framesSinceSpawn = performanceRef.current.frameCount - star.spawnFrame;
+                    if (framesSinceSpawn < 10) {
+                        // Gradually increase opacity and size over first 10 frames
+                        fadeInFactor = framesSinceSpawn / 10;
+                    }
+                }
+                
                 // Update sprite size and opacity based on progress for smooth fade in/out
                 const fadeInOut = Math.sin(t * Math.PI); // Smooth fade in/out
-                star.sprite.scale.setScalar(fadeInOut * 30); // Scale based on fade
-                (star.sprite.material as THREE.SpriteMaterial).opacity = fadeInOut;
+                const effectiveScale = fadeInOut * 30 * fadeInFactor;
+                const effectiveOpacity = fadeInOut * fadeInFactor;
                 
-                // Update head twinkle with faster cycle
+                star.sprite.scale.setScalar(effectiveScale); // Scale based on fade
+                (star.sprite.material as THREE.SpriteMaterial).opacity = effectiveOpacity;
+                
+                // Add twinkle effect without color tinting
+                // Use brightness adjustment instead of color tinting for twinkle effect
                 const twinkle = (Math.sin(elapsed * SHOOTING_STAR_TWINKLE_RATE * 2 + i) + 1) * 0.5;
-                star.sprite.material.color.set(
-                    new THREE.Color().lerpColors(
-                        new THREE.Color(0.7, 0.7, 1.0), // Base color
-                        new THREE.Color(1.0, 1.0, 1.0), // Highlight color
-                        twinkle * 0.5
-                    )
-                );
+                // Adjust brightness only, keeping color as white to preserve original emoji colors
+                const brightness = 0.7 + (twinkle * 0.3); // Base brightness 0.7, twinkle adds up to 0.3
+                star.sprite.material.color.setRGB(brightness, brightness, brightness);
                 
                 // Update line vertices
                 const positions = star.lineGeometry.attributes.position;
@@ -1128,9 +1567,12 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
                 }
                 
                 // Update line opacity to match sprite
-                (star.line.material as THREE.LineBasicMaterial).opacity = fadeInOut * 0.3;
+                (star.line.material as THREE.LineBasicMaterial).opacity = effectiveOpacity * 0.3;
             }
         }
+        
+        // Update the shooting stars array with only active stars
+        shootingStarsRef.current = activeStars as ShootingStarRefData;
     };
 
     // --- Helper to create a new shooting star ---
@@ -1151,11 +1593,11 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
         const positions = new Float32Array(2 * 3); // 2 points, 3 coordinates each
         lineGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
         
-        // Create material for the line
+        // Create material for the line with initial transparency
         const lineMaterial = new THREE.LineBasicMaterial({
             color: currentStarColorRef.current,
             transparent: true,
-            opacity: 0.3,
+            opacity: 0, // Start fully transparent
             blending: THREE.AdditiveBlending,
             depthWrite: false,
         });
@@ -1163,19 +1605,23 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
         // Create the line
         const line = new THREE.Line(lineGeometry, lineMaterial);
 
-        // Create sprite for the star head
-        const spriteMaterial = shootingStarsRef.current.sharedSpriteMaterial || 
-            new THREE.SpriteMaterial({
-                map: createStarTexture(),
-                color: currentStarColorRef.current.getHex(),
-                transparent: true,
-                blending: THREE.AdditiveBlending,
-                depthWrite: false,
-                sizeAttenuation: true,
-            });
+        // Create sprite for the star head using money emoji
+        const emojis = ['$', '💸', '💰', '🪙', ]; // Added more money symbols
+        const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+        const starTexture = createMoneyStarTexture(emoji);
+        
+        const spriteMaterial = new THREE.SpriteMaterial({
+            map: starTexture,
+            color: 0xffffff, // White color to preserve original emoji colors
+            transparent: true,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false,
+            sizeAttenuation: true,
+            opacity: 0, // Start fully transparent
+        });
         
         const sprite = new THREE.Sprite(spriteMaterial);
-        sprite.scale.setScalar(30); // Initial size
+        sprite.scale.setScalar(0); // Start at zero size
         sprite.position.copy(startParticle.position);
 
         // Add to scene
@@ -1194,6 +1640,7 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
             progress: 0,
             speed: SHOOTING_STAR_SPEED,
             color: currentStarColorRef.current.clone(),
+            spawnFrame: performanceRef.current.frameCount, // Track when the star was spawned
         };
 
         shootingStarsRef.current.push(star);
@@ -1276,8 +1723,11 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
             width: '100%', 
             height: '100%', 
             overflow: 'hidden',
-            backgroundColor: BASE_BACKGROUND_COLOR
-        }} />
+            backgroundColor: BASE_BACKGROUND_COLOR,
+            pointerEvents: 'none' // Allow pointer events to pass through to children
+        }}>
+
+        </div>
     );
 };
 

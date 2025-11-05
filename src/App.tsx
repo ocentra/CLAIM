@@ -1,32 +1,75 @@
 import { QueryProvider } from './providers/QueryProvider'
+import { AuthProvider } from './providers/AuthProvider'
+import { useAuth } from './providers/AuthProvider'
 import { useGameStore } from './store/gameStore'
 import { useAssetManager } from './utils/useAssetManager'
-import DynamicBackground3D from './ui/components/Background/DynamicBackground3D'
-import { useState, useEffect } from 'react'
+import DynamicBackground3D, { type RotationControlAPI } from './ui/components/Background/DynamicBackground3D'
+import LoginDialog from './ui/components/Auth/LoginDialog'
+import { useState, useEffect, useRef } from 'react'
 import './App.css'
 
 function App() {
+  const { isAuthenticated, login, logout, loginWithFacebook, loginWithGoogle, loginAsGuest } = useAuth();
   const { error } = useGameStore()
   const { isInitialized, isLoading, error: assetError } = useAssetManager({ autoInitialize: true })
   const [isBackgroundReady, setIsBackgroundReady] = useState(false)
   const [shouldShowLoading, setShouldShowLoading] = useState(true)
+  const [showLoginDialog, setShowLoginDialog] = useState(false);
+  const rotationRef = useRef<RotationControlAPI | null>(null); // Ref to access rotation API
+
+  console.log('App render', { 
+    isAuthenticated, 
+    isInitialized, 
+    isLoading, 
+    isBackgroundReady, 
+    shouldShowLoading,
+    showLoginDialog
+  });
 
   // Hide loading screen when background is ready
   useEffect(() => {
     if (isBackgroundReady) {
-      // Wait 1 second before starting to dissolve
+      console.log('Background is ready, starting loading screen dissolve timer');
+      // Wait 0.5 seconds before starting to dissolve (balanced timing)
       const waitTimer = setTimeout(() => {
-        // Then dissolve over 1.5 seconds (3 times longer than before)
+        console.log('Starting to dissolve loading screen');
+        // Then dissolve over 1.0 seconds (smooth transition)
         const dissolveTimer = setTimeout(() => {
+          console.log('Loading screen completely dissolved');
           setShouldShowLoading(false);
-        }, 1500);
+        }, 1000);
         
         return () => clearTimeout(dissolveTimer);
-      }, 1000);
+      }, 500);
       
       return () => clearTimeout(waitTimer);
     }
   }, [isBackgroundReady]);
+  
+  // Show login dialog after background is ready and loading screen has dissolved
+  useEffect(() => {
+    console.log('Login dialog effect triggered', { 
+      isAuthenticated, 
+      isBackgroundReady, 
+      shouldShowLoading,
+      showLoginDialog
+    });
+    
+    if (!isAuthenticated && isBackgroundReady && !shouldShowLoading) {
+      console.log('Conditions met to show login dialog, setting timer');
+      // Add a small delay for smooth appearance
+      const timer = setTimeout(() => {
+        console.log('Showing login dialog');
+        setShowLoginDialog(true);
+      }, 300); // 300ms delay for smooth transition
+      
+      return () => clearTimeout(timer);
+    } else if (isAuthenticated) {
+      // Make sure login dialog is hidden when user is authenticated
+      console.log('User is authenticated, hiding login dialog');
+      setShowLoginDialog(false);
+    }
+  }, [isAuthenticated, isBackgroundReady, shouldShowLoading]);
 
   if (error) {
     return (
@@ -95,12 +138,16 @@ function App() {
     )
   }
 
-  // Always render the background, but show loading overlay until it's ready
+  // Main app render - always show background
   return (
     <div className="app" style={{ position: 'relative', width: '100%', height: '100%' }}>
-      <DynamicBackground3D onReady={() => {
-        setIsBackgroundReady(true);
-      }} />
+      <DynamicBackground3D 
+        controlRef={rotationRef} // Pass the ref to access rotation API
+        onReady={() => {
+          console.log('Background is ready');
+          setIsBackgroundReady(true);
+        }} 
+      />
       
       {shouldShowLoading && (
         <div style={{
@@ -138,10 +185,10 @@ function App() {
             fontFamily: 'Arial, sans-serif',
             animation: 'pulse 2s ease-in-out infinite alternate'
           }}>
-            Initializing...
+            Initializing game...
           </p>
           
-          {/* Static 3D-like text effect using CSS */}
+          {/* Optimized growing 3D text effect */}
           <div style={{
             position: 'absolute',
             top: '50%',
@@ -165,6 +212,7 @@ function App() {
               0 10px 10px rgba(0,0,0,.2),
               0 20px 20px rgba(0,0,0,.15)
             `,
+            animation: 'grow 6s linear infinite',
             pointerEvents: 'none'
           }}>
             CLAIM
@@ -179,7 +227,105 @@ function App() {
               0% { transform: translate(-50%, calc(-50% + 100px)) scale(1); }
               100% { transform: translate(-50%, calc(-50% + 100px)) scale(1.1); }
             }
+            @keyframes grow {
+              0% { transform: translate(-50%, -50%) scale(1); }
+              100% { transform: translate(-50%, -50%) scale(15); }
+            }
           `}</style>
+        </div>
+      )}
+      
+      {/* Show login dialog if user is not authenticated and it's time to show it */}
+      {!isAuthenticated && showLoginDialog && (
+        <LoginDialog
+          onLogin={async (username, password) => {
+            const success = await login(username, password);
+            if (success) {
+              console.log('Login successful');
+            } else {
+              console.log('Login failed');
+            }
+          }}
+          onSignUp={async (userData) => {
+            // For now, we'll just simulate a successful sign up
+            console.log(`Sign up attempt with data:`, userData);
+            
+            // Simulate API call delay
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // For demo purposes, accept any non-empty username/password
+            if (userData.username && userData.password) {
+              // After signing up, automatically log the user in
+              const success = await login(userData.username, userData.password);
+              if (success) {
+                console.log('Sign up and login successful');
+              } else {
+                console.log('Sign up successful but login failed');
+              }
+            } else {
+              console.log('Sign up failed');
+            }
+          }}
+          onFacebookLogin={async () => {
+            const success = await loginWithFacebook();
+            if (success) {
+              console.log('Facebook login successful');
+            } else {
+              console.log('Facebook login failed');
+            }
+          }}
+          onGoogleLogin={async () => {
+            const success = await loginWithGoogle();
+            if (success) {
+              console.log('Google login successful');
+            } else {
+              console.log('Google login failed');
+            }
+          }}
+          onGuestLogin={async () => {
+            const success = await loginAsGuest();
+            if (success) {
+              console.log('Guest login successful');
+            } else {
+              console.log('Guest login failed');
+            }
+          }}
+          onTabSwitch={() => {
+            // Trigger background rotation when switching tabs
+            if (rotationRef.current && rotationRef.current.rotate) {
+              rotationRef.current.rotate();
+            }
+          }}
+        />
+      )}
+      
+      {/* Show main app content if user is authenticated */}
+      {isAuthenticated && (
+        <div style={{
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          color: 'white',
+          textAlign: 'center',
+          zIndex: 1000
+        }}>
+          <h1>Welcome to CLAIM</h1>
+          <p>You are successfully logged in!</p>
+          <button 
+            onClick={logout}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: 'rgba(255, 0, 0, 0.7)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: 'pointer',
+              fontSize: '16px'
+            }}
+          >
+            Logout
+          </button>
         </div>
       )}
     </div>
@@ -189,7 +335,9 @@ function App() {
 export default function AppWrapper() {
   return (
     <QueryProvider>
-      <App />
+      <AuthProvider>
+        <App />
+      </AuthProvider>
     </QueryProvider>
   )
 }
