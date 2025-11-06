@@ -6,6 +6,14 @@ import type { Auth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import type { Firestore } from 'firebase/firestore';
 
+const prefix = '[FirebaseConfig]';
+
+// Auth flow logging flags
+const LOG_AUTH_FLOW = true;        // Main auth flow tracking
+const LOG_AUTH_INIT = true;        // Firebase initialization
+const LOG_AUTH_CONFIG = true;      // Configuration status
+const LOG_AUTH_ERROR = true;        // Error logging
+
 // Check if Firebase config is available
 const hasFirebaseConfig = import.meta.env.VITE_FIREBASE_API_KEY && 
                          import.meta.env.VITE_FIREBASE_AUTH_DOMAIN &&
@@ -28,14 +36,20 @@ if (hasFirebaseConfig) {
     };
 
     // Log configuration status for debugging (without exposing sensitive data)
-    console.log('Firebase config status:', {
-      hasApiKey: !!import.meta.env.VITE_FIREBASE_API_KEY,
-      hasAuthDomain: !!import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-      hasProjectId: !!import.meta.env.VITE_FIREBASE_PROJECT_ID,
-      hasStorageBucket: !!import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-      hasMessagingSenderId: !!import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-      hasAppId: !!import.meta.env.VITE_FIREBASE_APP_ID
-    });
+    if (LOG_AUTH_CONFIG) {
+      console.log(prefix, 'Firebase config status:', {
+        hasApiKey: !!import.meta.env.VITE_FIREBASE_API_KEY,
+        hasAuthDomain: !!import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+        hasProjectId: !!import.meta.env.VITE_FIREBASE_PROJECT_ID,
+        hasStorageBucket: !!import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+        hasMessagingSenderId: !!import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+        hasAppId: !!import.meta.env.VITE_FIREBASE_APP_ID
+      });
+    }
+
+    if (LOG_AUTH_INIT) {
+      console.log(prefix, 'Initializing Firebase app...');
+    }
 
     // Initialize Firebase
     app = initializeApp(firebaseConfig);
@@ -44,16 +58,25 @@ if (hasFirebaseConfig) {
     auth = getAuth(app);
     db = getFirestore(app);
     
-    console.log('Firebase initialized successfully');
+    if (LOG_AUTH_INIT) {
+      console.log(prefix, '✅ Firebase initialized successfully');
+    }
+    if (LOG_AUTH_FLOW) {
+      console.log(prefix, 'Auth and Firestore services ready');
+    }
   } catch (error) {
-    console.error('Failed to initialize Firebase:', error);
+    if (LOG_AUTH_ERROR) {
+      console.error(prefix, '❌ Failed to initialize Firebase:', error);
+    }
     app = null;
     auth = null;
     db = null;
   }
 } else {
-  console.warn('Firebase configuration not found. Running in offline mode.');
-  console.info('To enable Firebase, add your configuration to the .env file');
+  if (LOG_AUTH_FLOW) {
+    console.warn(prefix, '⚠️ Firebase configuration not found. Running in offline mode.');
+    console.info(prefix, 'To enable Firebase, add your configuration to the .env file');
+  }
 }
 
 export { auth, db };

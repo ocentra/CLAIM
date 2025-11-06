@@ -1,41 +1,243 @@
-// Logging flags - set to true to enable logging for specific modules
+/**
+ * Centralized Logging System
+ * 
+ * Provides logging functions that write to both console (if enabled) and IndexedDB.
+ * Similar to the Rust MCP pattern for persistent log storage.
+ */
+
+import { getLogStorage, type LogLevel, type LogSource } from './logStorage';
+
+// Logging flags - set to true to enable console logging for specific modules
 export const LOG_FLAGS = {
-  UI: true,           // UI component logs
-  GAME_ENGINE: true,   // Game engine logs
+  UI: false,           // UI component logs
+  GAME_ENGINE: false,   // Game engine logs
   AI: false,           // AI related logs
   NETWORK: false,      // Network related logs
   ASSETS: false,       // Asset loading logs
-  STORE: true,        // Store/state management logs
+  STORE: false,        // Store/state management logs
 }
 
-// Generic logging function
-export function log(module: keyof typeof LOG_FLAGS, ...args: unknown[]) {
-  if (LOG_FLAGS[module]) {
-    console.log(`[${module}]`, ...args)
+// Map module names to LogSource
+const MODULE_TO_SOURCE: Record<keyof typeof LOG_FLAGS, LogSource> = {
+  UI: 'UI',
+  GAME_ENGINE: 'GameEngine',
+  AI: 'System',
+  NETWORK: 'Network',
+  ASSETS: 'Assets',
+  STORE: 'Store',
+};
+
+/**
+ * Get context from stack trace (file/component name)
+ */
+function getContextFromStack(): string {
+  try {
+    const stack = new Error().stack;
+    if (!stack) return 'Unknown';
+    
+    const lines = stack.split('\n');
+    // Skip the first few lines (Error, getContextFromStack, log function)
+    for (let i = 3; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line) continue;
+      
+      // Try to extract file/component name
+      // Match patterns like: at ComponentName (file.tsx:123:45)
+      const match = line.match(/at\s+(\w+)\s+\([^)]+\)/);
+      if (match && match[1]) {
+        return match[1];
+      }
+      
+      // Match patterns like: at file.tsx:123:45
+      const fileMatch = line.match(/at\s+([^/]+\.(tsx?|jsx?)):/);
+      if (fileMatch && fileMatch[1]) {
+        return fileMatch[1].replace(/\.(tsx?|jsx?)$/, '');
+      }
+    }
+  } catch {
+    // Ignore errors in context extraction
+  }
+  
+  return 'Unknown';
+}
+
+/**
+ * Format log arguments into a message string
+ */
+function formatMessage(args: unknown[]): string {
+  return args.map(arg => {
+    if (typeof arg === 'object' && arg !== null) {
+      try {
+        return JSON.stringify(arg, null, 2);
+      } catch {
+        return String(arg);
+      }
+    }
+    return String(arg);
+  }).join(' ');
+}
+
+/**
+ * Store log entry in IndexedDB and also send to Node.js server
+ */
+async function storeLogEntry(
+  level: LogLevel,
+  module: keyof typeof LOG_FLAGS,
+  context: string,
+  message: string,
+  args: unknown[],
+  stack?: string,
+  tags?: string[] // Tags/flags like LOG_AUTH_FLOW, LOG_AUTH_ERROR, etc.
+): Promise<void> {
+  try {
+    const storage = getLogStorage();
+    const source = MODULE_TO_SOURCE[module] || 'Other';
+    const logEntry = {
+      level,
+      context,
+      message,
+      source,
+      timestamp: Date.now(),
+      args: args.length > 0 ? args : undefined,
+      stack,
+    };
+    
+    // Store in IndexedDB (browser)
+    await storage.storeLog(logEntry);
+    
+    // Also send to Node.js server so /mcp can access it
+    try {
+      await fetch('/api/logs/store', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(logEntry),
+      }).catch(() => {
+        // Ignore if server not ready
+      });
+    } catch {
+      // Ignore fetch errors
+    }
+    
+  } catch (error) {
+    // Silently fail - don't break the app if log storage fails
+    console.warn('[Logger] Failed to store log:', error);
   }
 }
 
-// Specific logging functions for each module
+/**
+ * Generic logging function
+ */
+export function log(module: keyof typeof LOG_FLAGS, level: LogLevel, ...args: unknown[]): void {
+  const context = getContextFromStack();
+  const message = formatMessage(args);
+  
+  // Write to console if enabled
+  if (LOG_FLAGS[module]) {
+    const consoleMethod = level === 'error' ? console.error :
+                         level === 'warn' ? console.warn :
+                         level === 'info' ? console.info :
+                         level === 'debug' ? console.debug :
+                         console.log;
+    
+    consoleMethod(`[${module}]`, ...args);
+  }
+  
+  // Always store in IndexedDB (async, non-blocking)
+  const stack = level === 'error' ? new Error().stack : undefined;
+  storeLogEntry(level, module, context, message, args, stack).catch(() => {
+    // Ignore errors
+  });
+}
+
+/**
+ * Specific logging functions for each module
+ */
 export function logUI(...args: unknown[]) {
-  log('UI', ...args)
+  log('UI', 'log', ...args);
 }
 
 export function logGameEngine(...args: unknown[]) {
-  log('GAME_ENGINE', ...args)
+  log('GAME_ENGINE', 'log', ...args);
 }
 
 export function logAI(...args: unknown[]) {
-  log('AI', ...args)
+  log('AI', 'log', ...args);
 }
 
 export function logNetwork(...args: unknown[]) {
-  log('NETWORK', ...args)
+  log('NETWORK', 'log', ...args);
 }
 
 export function logAssets(...args: unknown[]) {
-  log('ASSETS', ...args)
+  log('ASSETS', 'log', ...args);
 }
 
 export function logStore(...args: unknown[]) {
-  log('STORE', ...args)
+  log('STORE', 'log', ...args);
+}
+
+/**
+ * Error logging functions
+ */
+export function logError(module: keyof typeof LOG_FLAGS, ...args: unknown[]) {
+  log(module, 'error', ...args);
+}
+
+export function logWarn(module: keyof typeof LOG_FLAGS, ...args: unknown[]) {
+  log(module, 'warn', ...args);
+}
+
+export function logInfo(module: keyof typeof LOG_FLAGS, ...args: unknown[]) {
+  log(module, 'info', ...args);
+}
+
+export function logDebug(module: keyof typeof LOG_FLAGS, ...args: unknown[]) {
+  log(module, 'debug', ...args);
+}
+
+/**
+ * Auth-specific logging helper
+ * 
+ * This function is designed for auth logging that uses flags.
+ * It logs to console if the flag is enabled, and always stores to IndexedDB.
+ * 
+ * @param flag - Whether to log to console
+ * @param level - Log level
+ * @param context - Context/module name (e.g., "FirebaseService", "AuthProvider")
+ * @param args - Log arguments
+ */
+export function logAuth(
+  flag: boolean,
+  level: LogLevel,
+  context: string,
+  ...args: unknown[]
+): void {
+  const message = formatMessage(args);
+  
+  // Write to console if flag is enabled
+  if (flag) {
+    const consoleMethod = level === 'error' ? console.error :
+                         level === 'warn' ? console.warn :
+                         level === 'info' ? console.info :
+                         level === 'debug' ? console.debug :
+                         console.log;
+    
+    consoleMethod(`[${context}]`, ...args);
+  }
+  
+  // Always store in IndexedDB (async, non-blocking)
+  const stack = level === 'error' ? new Error().stack : undefined;
+  
+  // Store with Auth source
+  getLogStorage().storeLog({
+    level,
+    context,
+    message,
+    source: 'Auth',
+    timestamp: Date.now(),
+    args: args.length > 0 ? args : undefined,
+    stack,
+  }).catch(() => {
+    // Ignore errors
+  });
 }

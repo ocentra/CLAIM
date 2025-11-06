@@ -2,3 +2,10 @@
 .env.*
 
 node_modules
+/dist
+
+# Lock files
+.vite-dev.lock
+
+# Log files
+logs.json

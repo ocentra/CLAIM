@@ -4,6 +4,12 @@ import { Group } from 'three'
 import { useSpring, animated, config } from '@react-spring/three'
 import { InteractiveCard3D } from './InteractiveCard3D'
 import { type Card } from '@/types'
+import { logGameEngine } from '@/utils/logger'
+
+const prefix = '[CardFlipSystem]';
+
+// Game engine logging flags
+const LOG_GAME_ENGINE_WARN = false; // Warning logging (disabled for focus on auth)
 
 interface FlipCard {
   card: Card
@@ -46,7 +52,9 @@ export function CardFlipSystem({
       try {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
       } catch (error) {
-        console.warn('Audio context not available:', error)
+        if (LOG_GAME_ENGINE_WARN) {
+          logGameEngine('⚠️ Audio context not available:', error)
+        }
       }
     }
   }, [flipSound])
@@ -73,7 +81,9 @@ export function CardFlipSystem({
       oscillator.start(ctx.currentTime)
       oscillator.stop(ctx.currentTime + 0.1)
     } catch (error) {
-      console.warn('Failed to play flip sound:', error)
+      if (LOG_GAME_ENGINE_WARN) {
+        logGameEngine('⚠️ Failed to play flip sound:', error)
+      }
     }
   }, [flipSound])
 

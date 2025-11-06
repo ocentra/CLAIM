@@ -4,6 +4,14 @@ import facebookLogo from '../../../assets/Auth/facebook.png';
 import googleLogo from '../../../assets/Auth/google.png';
 import guestLogo from '../../../assets/Auth/annon.png';
 import { handleRedirectResult } from '../../../services/firebaseService';
+import { logAuth } from '../../../utils/logger';
+
+const prefix = '[LoginDialog]';
+
+// Auth flow logging flags
+const LOG_AUTH_UI = true;          // UI interactions
+const LOG_AUTH_REDIRECT = true;    // Redirect handling
+const LOG_AUTH_ERROR = true;       // Error logging
 
 interface LoginDialogProps {
   onLogin: (username: string, password: string) => Promise<boolean>;
@@ -35,12 +43,18 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
 
   useEffect(() => {
     const checkRedirect = async () => {
+      logAuth(LOG_AUTH_REDIRECT, 'log', prefix, '[useEffect] Checking for redirect result on mount...');
       const result = await handleRedirectResult();
       if (result.success) {
-        console.log("Login successful after redirect:", result.user);
+        logAuth(LOG_AUTH_REDIRECT, 'log', prefix, '[useEffect] ✅ Login successful after redirect:', { 
+          uid: result.user?.uid, 
+          displayName: result.user?.displayName 
+        });
       } else {
         if (result.error && result.error !== 'No redirect result') {
-          console.error("Login failed after redirect:", result.error);
+          logAuth(LOG_AUTH_ERROR, 'error', prefix, '[useEffect] ❌ Login failed after redirect:', result.error);
+        } else {
+          logAuth(LOG_AUTH_REDIRECT, 'log', prefix, '[useEffect] No redirect result (normal if not returning from OAuth)');
         }
       }
     };
@@ -66,16 +80,16 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
   useEffect(() => {
     const loadAvatars = async () => {
       try {
-        const modules = import.meta.glob('../../../assets/Avatars/*.png', { eager: true, as: 'url' });
+        const modules = import.meta.glob('../../../assets/Avatars/*.png', { eager: true, query: '?url', import: 'default' });
         const avatarList = Object.entries(modules).map(([path, url]) => {
           const fileName = path.split('/').pop() || '';
           const id = parseInt(fileName.split('.')[0]);
-          return { id, url };
+          return { id, url: url as string };
         }).sort((a, b) => a.id - b.id);
         
         setAvatarOptions(avatarList);
       } catch (error) {
-        console.error('Failed to load avatars:', error);
+        logAuth(LOG_AUTH_ERROR, 'error', prefix, '[useEffect] ❌ Failed to load avatars:', error);
         // Fallback to some default avatars if loading fails
         setAvatarOptions([
           { id: 1, url: '' },
@@ -91,18 +105,32 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (isSignIn) {
+      logAuth(LOG_AUTH_UI, 'log', prefix, '[handleSubmit] Sign in form submitted:', { username });
       onLogin(username, password).then(success => {
         if (!success) {
           // Handle login failure
-          console.log('Login failed');
+          logAuth(LOG_AUTH_ERROR, 'error', prefix, '[handleSubmit] ❌ Login failed');
+        } else {
+          logAuth(LOG_AUTH_UI, 'log', prefix, '[handleSubmit] ✅ Login callback returned success');
         }
       });
     } else {
+      logAuth(LOG_AUTH_UI, 'log', prefix, '[handleSubmit] Sign up form submitted:', { 
+        alias, 
+        username, 
+        hasAvatar: !!avatar 
+      });
       // For sign up, you might want to add validation for matching passwords
+      if (password !== confirmPassword) {
+        logAuth(LOG_AUTH_ERROR, 'error', prefix, '[handleSubmit] ❌ Password mismatch');
+        return;
+      }
       onSignUp({ alias, avatar, username, password }).then(success => {
         if (!success) {
           // Handle sign up failure
-          console.log('Sign up failed');
+          logAuth(LOG_AUTH_ERROR, 'error', prefix, '[handleSubmit] ❌ Sign up failed');
+        } else {
+          logAuth(LOG_AUTH_UI, 'log', prefix, '[handleSubmit] ✅ Sign up callback returned success');
         }
       });
     }
@@ -122,7 +150,7 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
     if (file) {
       // Check if file is an image
       if (!file.type.match('image.*')) {
-        console.error('Please select an image file');
+        logAuth(LOG_AUTH_ERROR, 'error', prefix, '[handleFileSelect] ❌ Please select an image file');
         return;
       }
 
@@ -148,19 +176,19 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
               setShowAvatarSelector(false);
             }
           } catch (error) {
-            console.error('Error resizing image:', error);
+            logAuth(LOG_AUTH_ERROR, 'error', prefix, '[handleFileSelect] ❌ Error resizing image:', error);
           }
         };
         
         img.onerror = () => {
-          console.error('Error loading image');
+          logAuth(LOG_AUTH_ERROR, 'error', prefix, '[handleFileSelect] ❌ Error loading image');
         };
         
         img.src = e.target?.result as string;
       };
       
       reader.onerror = () => {
-        console.error('Error reading file');
+        logAuth(LOG_AUTH_ERROR, 'error', prefix, '[handleFileSelect] ❌ Error reading file');
       };
       
       reader.readAsDataURL(file);
@@ -176,6 +204,7 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
               className={`tab-button ${isSignIn ? 'active' : ''}`}
               onClick={() => {
                 if (!isSignIn && onTabSwitch) {
+                  logAuth(LOG_AUTH_UI, 'log', prefix, '[onClick] Switching to Sign In tab');
                   onTabSwitch(); // Trigger rotation when switching to Sign In
                 }
                 setIsSignIn(true);
@@ -187,6 +216,7 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
               className={`tab-button ${!isSignIn ? 'active' : ''}`}
               onClick={() => {
                 if (isSignIn && onTabSwitch) {
+                  logAuth(LOG_AUTH_UI, 'log', prefix, '[onClick] Switching to Sign Up tab');
                   onTabSwitch(); // Trigger rotation when switching to Sign Up
                 }
                 setIsSignIn(false);
@@ -309,7 +339,10 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
                 <button 
                   type="button" 
                   className="social-button"
-                  onClick={onFacebookLogin}
+                  onClick={() => {
+                    logAuth(LOG_AUTH_UI, 'log', prefix, '[onClick] Facebook login button clicked');
+                    onFacebookLogin();
+                  }}
                 >
                   <img src={facebookLogo} alt="Facebook" className="social-icon" />
                 </button>
@@ -317,7 +350,10 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
                 <button 
                   type="button" 
                   className="social-button"
-                  onClick={onGoogleLogin}
+                  onClick={() => {
+                    logAuth(LOG_AUTH_UI, 'log', prefix, '[onClick] Google login button clicked');
+                    onGoogleLogin();
+                  }}
                 >
                   <img src={googleLogo} alt="Google" className="social-icon" />
                 </button>
@@ -325,7 +361,10 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
                 <button 
                   type="button" 
                   className="social-button"
-                  onClick={onGuestLogin}
+                  onClick={() => {
+                    logAuth(LOG_AUTH_UI, 'log', prefix, '[onClick] Guest login button clicked');
+                    onGuestLogin();
+                  }}
                 >
                   <img src={guestLogo} alt="Guest" className="social-icon" />
                 </button>

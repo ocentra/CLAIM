@@ -1,4 +1,10 @@
 import { type Card, type Player, type GameState } from '@/types'
+import { logGameEngine } from '@/utils/logger'
+
+const prefix = '[ScoreCalculator]';
+
+// Game engine logging flags
+const LOG_GAME_ENGINE_WARN = false; // Warning logging (disabled for focus on auth)
 
 export interface ScoreBreakdown {
   baseScore: number
@@ -73,7 +79,9 @@ export class ScoreCalculator {
     
     // Check if budget is exceeded (simplified check)
     if (budgetUsage > 1352) {
-      console.warn(`Player ${player.name} exceeded 1352-point budget: ${budgetUsage}`);
+      if (LOG_GAME_ENGINE_WARN) {
+        logGameEngine(`⚠️ Player ${player.name} exceeded 1352-point budget: ${budgetUsage}`);
+      }
     }
     
     // Total score

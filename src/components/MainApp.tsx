@@ -6,6 +6,15 @@ import LoginDialog from '../ui/components/Auth/LoginDialog';
 import DynamicBackground3D from '../ui/components/Background/DynamicBackground3D';
 import type { RotationControlAPI } from '../ui/components/Background/DynamicBackground3D';
 
+const prefix = '[MainApp]';
+
+// Auth flow logging flags
+const LOG_AUTH_FLOW = true;        // Main auth flow tracking
+const LOG_AUTH_UI = true;          // UI state changes
+const LOG_AUTH_RENDER = true;      // Component renders
+const LOG_AUTH_CALLBACKS = true;   // Auth callback handlers
+const LOG_AUTH_ERROR = true;       // Error logging
+
 const MainApp: React.FC = () => {
   const { isAuthenticated, user, login, signUp, logout, loginWithFacebook, loginWithGoogle, loginAsGuest } = useAuth();
   const { error } = useGameStore();
@@ -15,25 +24,34 @@ const MainApp: React.FC = () => {
   const [showLoginDialog, setShowLoginDialog] = useState(false);
   const rotationRef = useRef<RotationControlAPI | null>(null);
 
-  console.log('App render', { 
-    isAuthenticated, 
-    isInitialized, 
-    isLoading, 
-    isBackgroundReady, 
-    shouldShowLoading,
-    showLoginDialog
-  });
+  if (LOG_AUTH_RENDER) {
+    console.log(prefix, '[render] Component render:', { 
+      isAuthenticated, 
+      user: user ? { uid: user.uid, displayName: user.displayName } : null,
+      isInitialized, 
+      isLoading, 
+      isBackgroundReady, 
+      shouldShowLoading,
+      showLoginDialog
+    });
+  }
 
   // Hide loading screen when background is ready
   useEffect(() => {
     if (isBackgroundReady) {
-      console.log('Background is ready, starting loading screen dissolve timer');
+      if (LOG_AUTH_UI) {
+        console.log(prefix, '[useEffect] Background is ready, starting loading screen dissolve timer');
+      }
       // Wait 0.5 seconds before starting to dissolve (balanced timing)
       const waitTimer = setTimeout(() => {
-        console.log('Starting to dissolve loading screen');
+        if (LOG_AUTH_UI) {
+          console.log(prefix, '[useEffect] Starting to dissolve loading screen');
+        }
         // Then dissolve over 1.0 seconds (smooth transition)
         const dissolveTimer = setTimeout(() => {
-          console.log('Loading screen completely dissolved');
+          if (LOG_AUTH_UI) {
+            console.log(prefix, '[useEffect] ✅ Loading screen completely dissolved');
+          }
           setShouldShowLoading(false);
         }, 1000);
         
@@ -46,30 +64,41 @@ const MainApp: React.FC = () => {
   
   // Show login dialog after background is ready and loading screen has dissolved
   useEffect(() => {
-    console.log('Login dialog effect triggered', { 
-      isAuthenticated, 
-      isBackgroundReady, 
-      shouldShowLoading,
-      showLoginDialog
-    });
+    if (LOG_AUTH_UI) {
+      console.log(prefix, '[useEffect] Login dialog effect triggered:', { 
+        isAuthenticated, 
+        isBackgroundReady, 
+        shouldShowLoading,
+        showLoginDialog
+      });
+    }
     
     if (!isAuthenticated && isBackgroundReady && !shouldShowLoading) {
-      console.log('Conditions met to show login dialog, setting timer');
+      if (LOG_AUTH_UI) {
+        console.log(prefix, '[useEffect] ✅ Conditions met to show login dialog, setting timer');
+      }
       // Add a small delay for smooth appearance
       const timer = setTimeout(() => {
-        console.log('Showing login dialog');
+        if (LOG_AUTH_UI) {
+          console.log(prefix, '[useEffect] ✅ Showing login dialog');
+        }
         setShowLoginDialog(true);
       }, 300); // 300ms delay for smooth transition
       
       return () => clearTimeout(timer);
     } else if (isAuthenticated) {
       // Make sure login dialog is hidden when user is authenticated
-      console.log('User is authenticated, hiding login dialog');
+      if (LOG_AUTH_UI) {
+        console.log(prefix, '[useEffect] ✅ User is authenticated, hiding login dialog');
+      }
       setShowLoginDialog(false);
     }
   }, [isAuthenticated, isBackgroundReady, shouldShowLoading]);
   
   if (error) {
+    if (LOG_AUTH_ERROR) {
+      console.error(prefix, '[render] ❌ Game store error:', error);
+    }
     return (
       <div className="error-container">
         <h1>Error</h1>
@@ -127,6 +156,9 @@ const MainApp: React.FC = () => {
   
   // Show asset error if there was a problem loading assets
   if (assetError) {
+    if (LOG_AUTH_ERROR) {
+      console.error(prefix, '[render] ❌ Asset loading error:', assetError);
+    }
     return (
       <div className="error-container">
         <h1>Asset Loading Error</h1>
@@ -142,7 +174,9 @@ const MainApp: React.FC = () => {
       <DynamicBackground3D 
         controlRef={rotationRef} // Pass the ref to access rotation API
         onReady={() => {
-          console.log('Background is ready');
+          if (LOG_AUTH_UI) {
+            console.log(prefix, '[onReady] ✅ Background is ready');
+          }
           setIsBackgroundReady(true);
         }} 
       />
@@ -237,51 +271,92 @@ const MainApp: React.FC = () => {
       {!isAuthenticated && showLoginDialog && (
         <LoginDialog
           onLogin={async (username, password) => {
+            if (LOG_AUTH_CALLBACKS) {
+              console.log(prefix, '[onLogin] Login callback called:', { username });
+            }
             const result = await login(username, password);
             if (result.success) {
-              console.log('Login successful');
+              if (LOG_AUTH_CALLBACKS) {
+                console.log(prefix, '[onLogin] ✅ Login callback successful');
+              }
             } else {
-              console.log('Login failed:', result.error);
+              if (LOG_AUTH_ERROR) {
+                console.error(prefix, '[onLogin] ❌ Login callback failed:', result.error);
+              }
             }
             return result.success;
           }}
           onSignUp={async (userData) => {
+            if (LOG_AUTH_CALLBACKS) {
+              console.log(prefix, '[onSignUp] Sign up callback called:', { 
+                alias: userData.alias, 
+                username: userData.username 
+              });
+            }
             const result = await signUp(userData);
             if (result.success) {
-              console.log('Sign up successful');
+              if (LOG_AUTH_CALLBACKS) {
+                console.log(prefix, '[onSignUp] ✅ Sign up callback successful');
+              }
             } else {
-              console.log('Sign up failed:', result.error);
+              if (LOG_AUTH_ERROR) {
+                console.error(prefix, '[onSignUp] ❌ Sign up callback failed:', result.error);
+              }
             }
             return result.success;
           }}
           onFacebookLogin={async () => {
+            if (LOG_AUTH_CALLBACKS) {
+              console.log(prefix, '[onFacebookLogin] Facebook login callback called');
+            }
             const result = await loginWithFacebook();
             if (result.success) {
-              console.log('Facebook login successful');
+              if (LOG_AUTH_CALLBACKS) {
+                console.log(prefix, '[onFacebookLogin] ✅ Facebook login callback successful');
+              }
             } else {
-              console.log('Facebook login failed:', result.error);
+              if (LOG_AUTH_ERROR) {
+                console.error(prefix, '[onFacebookLogin] ❌ Facebook login callback failed:', result.error);
+              }
             }
             return result.success;
           }}
           onGoogleLogin={async () => {
+            if (LOG_AUTH_CALLBACKS) {
+              console.log(prefix, '[onGoogleLogin] Google login callback called');
+            }
             const result = await loginWithGoogle();
             if (result.success) {
-              console.log('Google login successful');
+              if (LOG_AUTH_CALLBACKS) {
+                console.log(prefix, '[onGoogleLogin] ✅ Google login callback successful');
+              }
             } else {
-              console.log('Google login failed:', result.error);
+              if (LOG_AUTH_ERROR) {
+                console.error(prefix, '[onGoogleLogin] ❌ Google login callback failed:', result.error);
+              }
             }
             return result.success;
           }}
           onGuestLogin={async () => {
+            if (LOG_AUTH_CALLBACKS) {
+              console.log(prefix, '[onGuestLogin] Guest login callback called');
+            }
             const result = await loginAsGuest();
             if (result.success) {
-              console.log('Guest login successful');
+              if (LOG_AUTH_CALLBACKS) {
+                console.log(prefix, '[onGuestLogin] ✅ Guest login callback successful');
+              }
             } else {
-              console.log('Guest login failed:', result.error);
+              if (LOG_AUTH_ERROR) {
+                console.error(prefix, '[onGuestLogin] ❌ Guest login callback failed:', result.error);
+              }
             }
             return result.success;
           }}
           onTabSwitch={() => {
+            if (LOG_AUTH_UI) {
+              console.log(prefix, '[onTabSwitch] Tab switch triggered, rotating background');
+            }
             // Trigger background rotation when switching tabs
             if (rotationRef.current && rotationRef.current.rotate) {
               rotationRef.current.rotate();
@@ -305,7 +380,12 @@ const MainApp: React.FC = () => {
           {user && <p>Hello, {user.displayName}!</p>}
           <p>You are successfully logged in!</p>
           <button 
-            onClick={logout}
+            onClick={() => {
+              if (LOG_AUTH_CALLBACKS) {
+                console.log(prefix, '[onClick] Logout button clicked');
+              }
+              logout();
+            }}
             style={{
               padding: '10px 20px',
               backgroundColor: 'rgba(255, 0, 0, 0.7)',

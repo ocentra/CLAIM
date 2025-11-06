@@ -2,6 +2,12 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { AssetManager, getAssetManager } from './assetManager'
 import type { AssetManagerStats, LoadingProgress } from './types'
 import { TextureManager } from './textureManager'
+import { logAssets } from './logger'
+
+const prefix = '[useAssetManager]';
+
+// Asset logging flags
+const LOG_ASSETS_ERROR = false;  // Error logging
 
 export interface UseAssetManagerOptions {
   autoInitialize?: boolean
@@ -119,7 +125,9 @@ export function useAssetManager(options: UseAssetManagerOptions = {}) {
       const stats = await assetManagerRef.current.getStats()
       setState(prev => ({ ...prev, stats }))
     } catch (error) {
-      console.error('Failed to refresh stats:', error)
+      if (LOG_ASSETS_ERROR) {
+        logAssets('❌ Failed to refresh stats:', error)
+      }
     }
   }, [])
 

@@ -1,4 +1,11 @@
 import type { AssetCache } from './assetLoader'
+import { logAssets } from './logger'
+
+const prefix = '[IndexedDBCache]';
+
+// Asset logging flags
+const LOG_ASSETS_ERROR = false;  // Error logging
+const LOG_ASSETS_WARN = false; // Warning logging
 
 export class IndexedDBCache implements AssetCache {
   private dbName: string
@@ -58,7 +65,11 @@ export class IndexedDBCache implements AssetCache {
           const result = request.result
           if (result && result.data) {
             // Update access timestamp
-            this.updateTimestamp(key).catch(console.warn)
+            this.updateTimestamp(key).catch((error) => {
+              if (LOG_ASSETS_WARN) {
+                logAssets('⚠️ Failed to update timestamp:', error)
+              }
+            })
             resolve(result.data)
           } else {
             resolve(null)
@@ -66,7 +77,9 @@ export class IndexedDBCache implements AssetCache {
         }
       })
     } catch (error) {
-      console.error('IndexedDB get error:', error)
+      if (LOG_ASSETS_ERROR) {
+        logAssets('❌ IndexedDB get error:', error)
+      }
       return null
     }
   }
@@ -97,7 +110,9 @@ export class IndexedDBCache implements AssetCache {
         }
       })
     } catch (error) {
-      console.error('IndexedDB set error:', error)
+      if (LOG_ASSETS_ERROR) {
+        logAssets('❌ IndexedDB set error:', error)
+      }
       throw error
     }
   }
@@ -120,7 +135,9 @@ export class IndexedDBCache implements AssetCache {
         }
       })
     } catch (error) {
-      console.error('IndexedDB has error:', error)
+      if (LOG_ASSETS_ERROR) {
+        logAssets('❌ IndexedDB has error:', error)
+      }
       return false
     }
   }
@@ -143,7 +160,9 @@ export class IndexedDBCache implements AssetCache {
         }
       })
     } catch (error) {
-      console.error('IndexedDB delete error:', error)
+      if (LOG_ASSETS_ERROR) {
+        logAssets('❌ IndexedDB delete error:', error)
+      }
       throw error
     }
   }
@@ -166,7 +185,9 @@ export class IndexedDBCache implements AssetCache {
         }
       })
     } catch (error) {
-      console.error('IndexedDB clear error:', error)
+      if (LOG_ASSETS_ERROR) {
+        logAssets('❌ IndexedDB clear error:', error)
+      }
       throw error
     }
   }
@@ -198,7 +219,9 @@ export class IndexedDBCache implements AssetCache {
         }
       })
     } catch (error) {
-      console.error('IndexedDB stats error:', error)
+      if (LOG_ASSETS_ERROR) {
+        logAssets('❌ IndexedDB stats error:', error)
+      }
       return { count: 0, totalSize: 0 }
     }
   }
@@ -246,7 +269,9 @@ export class IndexedDBCache implements AssetCache {
         }
       })
     } catch (error) {
-      console.error('IndexedDB cleanup error:', error)
+      if (LOG_ASSETS_ERROR) {
+        logAssets('❌ IndexedDB cleanup error:', error)
+      }
       throw error
     }
   }
@@ -283,7 +308,9 @@ export class IndexedDBCache implements AssetCache {
         }
       })
     } catch (error) {
-      console.error('IndexedDB timestamp update error:', error)
+      if (LOG_ASSETS_ERROR) {
+        logAssets('❌ IndexedDB timestamp update error:', error)
+      }
     }
   }
 

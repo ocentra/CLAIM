@@ -10,6 +10,13 @@ import {
   LOW_PRIORITY_ASSETS,
   getAssetBundle 
 } from './assetDefinitions'
+import { logAssets } from './logger'
+
+const prefix = '[AssetManager]';
+
+// Asset logging flags
+const LOG_ASSETS_ERROR = false;  // Error logging
+const LOG_ASSETS_WARN = false; // Warning logging
 
 
 
@@ -48,7 +55,9 @@ export class AssetManager {
     try {
       // Check IndexedDB support
       if (this.config.enableCaching && !IndexedDBCache.isSupported()) {
-        console.warn('IndexedDB not supported, caching disabled')
+        if (LOG_ASSETS_WARN) {
+          logAssets('⚠️ IndexedDB not supported, caching disabled')
+        }
         this.config.enableCaching = false
       }
 
@@ -62,7 +71,9 @@ export class AssetManager {
 
       this.isInitialized = true
     } catch (error) {
-      console.error('Failed to initialize AssetManager:', error)
+      if (LOG_ASSETS_ERROR) {
+        logAssets('❌ Failed to initialize AssetManager:', error)
+      }
       throw error
     }
   }

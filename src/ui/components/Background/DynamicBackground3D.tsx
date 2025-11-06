@@ -31,7 +31,7 @@ import ClubWithCirclesFilled from '../../../assets/BgCards/with circles/ClubWith
 import ClubWithCirclesHollow from '../../../assets/BgCards/with circles/ClubWithCirclesHollow.png';
 
 // Configurable logging flag
-const DEBUG_BACKGROUND = true;
+const DEBUG_BACKGROUND = false; // Set to true to enable background logging
 
 const logDebug = (...args: unknown[]) => {
   if (DEBUG_BACKGROUND) {
@@ -650,14 +650,14 @@ const DynamicBackground3D: React.FC<DynamicBackground3DProps> = ({ controlRef, o
         currentMount.appendChild(renderer.domElement);
         rendererRef.current = renderer;
         logDebug('Renderer created and mounted');
-        console.log('[DynamicBackground3D] Renderer initialized:', renderer);
-        console.log('[DynamicBackground3D] Canvas element:', renderer.domElement);
+        logDebug('Renderer initialized:', renderer);
+        logDebug('Canvas element:', renderer.domElement);
 
         const group = new THREE.Group(); // This group holds cards and stars for rotation
         groupRef.current = group;
         scene.add(group);
         logDebug('Group created and added to scene');
-        console.log('[DynamicBackground3D] Group initialized:', group);
+        logDebug('Group initialized:', group);
 
         // Parse RGBA values for gradient
         const parseRGBA = (rgbaString: string) => {

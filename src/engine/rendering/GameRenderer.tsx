@@ -5,6 +5,12 @@ import { PokerTable } from './PokerTable'
 import { GameLayout } from './GameLayout'
 import { type Card, Suit, type CardValue } from '@/types'
 import { useAssetManager } from '@/utils/useAssetManager'
+import { logGameEngine } from '@/utils/logger'
+
+const prefix = '[GameRenderer]';
+
+// Game engine logging flags
+const LOG_GAME_ENGINE_UI = false; // UI interactions (disabled for focus on auth)
 
 interface GameRendererProps {
   showStats?: boolean
@@ -195,7 +201,11 @@ export function GameRenderer({ showStats = false, enableControls = true, gameSta
             floorCard={floorCard}
             discardPile={discardPile}
             deck={deck}
-            onCardClick={(playerId, card) => console.log(`Clicked card ${card.id} of player ${playerId}`)}
+            onCardClick={(playerId, card) => {
+              if (LOG_GAME_ENGINE_UI) {
+                logGameEngine(`Clicked card ${card.id} of player ${playerId}`)
+              }
+            }}
           />
           <Environment preset="studio" />
         </Suspense>

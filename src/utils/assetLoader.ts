@@ -1,6 +1,13 @@
 import { Texture, TextureLoader, LoadingManager, Object3D } from 'three'
 import { FBXLoader } from 'three-stdlib'
 import type { AssetBundle, AssetDefinition, LoadingProgress, AssetCache, AssetType } from './types'
+import { logAssets } from './logger'
+
+const prefix = '[AssetLoader]';
+
+// Asset logging flags
+const LOG_ASSETS_ERROR = false;  // Error logging
+const LOG_ASSETS_WARN = false; // Warning logging
 
 export class AssetLoader {
   private textureLoader: TextureLoader
@@ -27,7 +34,9 @@ export class AssetLoader {
     }
 
     this.loadingManager.onError = (url) => {
-      console.error(`Failed to load asset: ${url}`)
+      if (LOG_ASSETS_ERROR) {
+        logAssets(`❌ Failed to load asset: ${url}`)
+      }
     }
   }
 
@@ -143,7 +152,9 @@ export class AssetLoader {
         return this.createAssetFromBlob(asset, cachedData)
       }
     } catch (error) {
-      console.warn(`Failed to load ${asset.id} from cache:`, error)
+      if (LOG_ASSETS_WARN) {
+        logAssets(`⚠️ Failed to load ${asset.id} from cache:`, error)
+      }
     }
 
     // Load from network
@@ -159,12 +170,16 @@ export class AssetLoader {
       try {
         await this.cache.set(cacheKey, blob)
       } catch (error) {
-        console.warn(`Failed to cache ${asset.id}:`, error)
+        if (LOG_ASSETS_WARN) {
+          logAssets(`⚠️ Failed to cache ${asset.id}:`, error)
+        }
       }
 
       return this.createAssetFromBlob(asset, blob)
     } catch (error) {
-      console.error(`Failed to load asset ${asset.id}:`, error)
+      if (LOG_ASSETS_ERROR) {
+        logAssets(`❌ Failed to load asset ${asset.id}:`, error)
+      }
       throw error
     }
   }

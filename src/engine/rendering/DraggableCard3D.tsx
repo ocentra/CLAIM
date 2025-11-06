@@ -4,6 +4,12 @@ import { Box, useCursor } from '@react-three/drei'
 import { Texture, Group } from 'three'
 import { type Card } from '@/types'
 import { useCardTextures } from '@/utils/useAssetManager'
+import { logGameEngine } from '@/utils/logger'
+
+const prefix = '[DraggableCard3D]';
+
+// Game engine logging flags
+const LOG_GAME_ENGINE_ERROR = false; // Error logging (disabled for focus on auth)
 
 interface DraggableCard3DProps {
   card?: Card
@@ -66,7 +72,9 @@ export function DraggableCard3D({
           back: textures.back
         })
       } catch (error) {
-        console.error('Failed to load card textures:', error)
+        if (LOG_GAME_ENGINE_ERROR) {
+          logGameEngine('❌ Failed to load card textures:', error)
+        }
         // Fallback to null textures
         setCardTextures({ front: null, back: null })
       }

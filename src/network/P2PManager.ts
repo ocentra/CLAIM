@@ -10,6 +10,16 @@ import { WebRTCHandler } from './connection/WebRTCHandler'
 import { ConnectionRecovery } from './connection/ConnectionRecovery'
 import { NetworkMonitor, NetworkMetrics, AdaptiveSettings } from './connection/NetworkMonitor'
 import { StateSync, SyncConflict } from './connection/StateSync'
+import { logNetwork } from '../utils/logger'
+
+const prefix = '[P2PManager]';
+
+// Network logging flags
+const LOG_NETWORK_FLOW = false;  // Main network flow tracking
+const LOG_NETWORK_ERROR = false;  // Error logging
+const LOG_NETWORK_CONNECTION = false; // Connection events
+const LOG_NETWORK_ROOM = false;  // Room management
+const LOG_NETWORK_SYNC = false;  // State synchronization
 
 export interface P2PManagerConfig {
   localPlayerId: string
@@ -93,7 +103,9 @@ export class P2PManager {
 
     // Reconnection status
     this.connectionRecovery.onReconnectionStatus((peerId, attempt, maxAttempts) => {
-      console.log(`Reconnection attempt ${attempt}/${maxAttempts} for peer ${peerId}`)
+      if (LOG_NETWORK_CONNECTION) {
+        logNetwork(`Reconnection attempt ${attempt}/${maxAttempts} for peer ${peerId}`)
+      }
     })
   }
 
@@ -119,7 +131,9 @@ export class P2PManager {
         this.networkMonitor.startMonitoring()
       }
       
-      console.log(`Created room ${roomId} as host`)
+      if (LOG_NETWORK_ROOM) {
+        logNetwork(`Created room ${roomId} as host`)
+      }
       this.onRoomJoinedCallback?.(this.currentRoom)
       
       return roomId
@@ -156,7 +170,9 @@ export class P2PManager {
         this.networkMonitor.startMonitoring()
       }
       
-      console.log(`Joined room ${roomId}`)
+      if (LOG_NETWORK_ROOM) {
+        logNetwork(`Joined room ${roomId}`)
+      }
       this.onRoomJoinedCallback?.(this.currentRoom)
       
     } catch (error) {
@@ -170,7 +186,9 @@ export class P2PManager {
    */
   async connectToPeer(peerId: string): Promise<void> {
     try {
-      console.log(`Connecting to peer ${peerId}`)
+      if (LOG_NETWORK_CONNECTION) {
+        logNetwork(`Connecting to peer ${peerId}`)
+      }
       
       // Create peer connection
       await this.webrtcHandler.createPeerConnection(peerId)
@@ -195,7 +213,9 @@ export class P2PManager {
    */
   disconnectFromPeer(peerId: string): void {
     try {
-      console.log(`Disconnecting from peer ${peerId}`)
+      if (LOG_NETWORK_CONNECTION) {
+        logNetwork(`Disconnecting from peer ${peerId}`)
+      }
       
       this.webrtcHandler.closePeerConnection(peerId)
       
@@ -233,7 +253,9 @@ export class P2PManager {
       this.currentRoom.status = 'active'
       this.stateSync.startSync(initialGameState)
       
-      console.log('Game session started')
+      if (LOG_NETWORK_SYNC) {
+        logNetwork('Game session started')
+      }
       
     } catch (error) {
       this.handleError(new Error(`Failed to start game: ${error}`))
@@ -251,7 +273,9 @@ export class P2PManager {
       }
       
       this.stateSync.stopSync()
-      console.log('Game session ended')
+      if (LOG_NETWORK_SYNC) {
+        logNetwork('Game session ended')
+      }
       
     } catch (error) {
       this.handleError(new Error(`Failed to end game: ${error}`))
@@ -265,7 +289,9 @@ export class P2PManager {
     try {
       if (!this.currentRoom) return
       
-      console.log(`Leaving room ${this.currentRoom.id}`)
+      if (LOG_NETWORK_ROOM) {
+        logNetwork(`Leaving room ${this.currentRoom.id}`)
+      }
       
       // Disconnect from all peers
       const connectedPeers = this.webrtcHandler.getConnectedPeers()
@@ -292,7 +318,9 @@ export class P2PManager {
    * Handle connection status changes
    */
   private handleConnectionChange(peerId: string, status: ConnectionStatus): void {
-    console.log(`Connection status changed for peer ${peerId}: ${status}`)
+    if (LOG_NETWORK_CONNECTION) {
+      logNetwork(`Connection status changed for peer ${peerId}: ${status}`)
+    }
     this.onConnectionStatusCallback?.(peerId, status)
     
     if (status === ConnectionStatus.DISCONNECTED || status === ConnectionStatus.FAILED) {
@@ -306,12 +334,16 @@ export class P2PManager {
    * Handle network quality changes
    */
   private handleNetworkQualityChange(peerId: string, quality: NetworkQuality, metrics: NetworkMetrics): void {
-    console.log(`Network quality changed for peer ${peerId}: ${quality}`)
+    if (LOG_NETWORK_CONNECTION) {
+      logNetwork(`Network quality changed for peer ${peerId}: ${quality}`)
+    }
     this.onNetworkQualityCallback?.(peerId, quality)
     
     // Take action based on quality
     if (quality === 'poor') {
-      console.warn(`Poor network quality detected for peer ${peerId}`)
+      if (LOG_NETWORK_ERROR) {
+        logNetwork(`⚠️ Poor network quality detected for peer ${peerId}`)
+      }
       // Could implement quality-based adaptations here
     }
   }
@@ -320,7 +352,9 @@ export class P2PManager {
    * Handle adaptive settings changes
    */
   private handleAdaptiveSettingsChange(settings: AdaptiveSettings): void {
-    console.log('Adaptive network settings updated:', settings)
+    if (LOG_NETWORK_FLOW) {
+      logNetwork('Adaptive network settings updated:', settings)
+    }
     // Could notify the game engine about network adaptations
   }
 
@@ -328,7 +362,9 @@ export class P2PManager {
    * Handle state synchronization conflicts
    */
   private handleSyncConflict(conflict: SyncConflict): void {
-    console.warn('Game state synchronization conflict detected:', conflict.conflictType)
+    if (LOG_NETWORK_SYNC) {
+      logNetwork('⚠️ Game state synchronization conflict detected:', conflict.conflictType)
+    }
     // Could implement conflict resolution UI or automatic resolution
   }
 
@@ -336,7 +372,9 @@ export class P2PManager {
    * Handle errors
    */
   private handleError(error: Error): void {
-    console.error('P2P Manager error:', error)
+    if (LOG_NETWORK_ERROR) {
+      logNetwork('❌ P2P Manager error:', error)
+    }
     this.onErrorCallback?.(error)
   }
 

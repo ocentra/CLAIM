@@ -75,7 +75,6 @@ export class GameEngine {
     }
 
     logGameEngine('Game initialized with config:', config)
-    console.log('Game initialized with config:', config)
   }
 
   /**
@@ -226,7 +225,6 @@ export class GameEngine {
     logGameEngine('Starting game')
     await this.startGame()
     logGameEngine('Started single player game with difficulty:', difficulty)
-    console.log('Started single player game with difficulty:', difficulty)
   }
 
   startMultiplayer(roomId: string): void {
@@ -234,7 +232,7 @@ export class GameEngine {
       throw new Error('Game not initialized')
     }
     // TODO: Implementation will be added in task 11 (WebRTC networking)
-    console.log('Starting multiplayer game with room:', roomId)
+    logGameEngine('Starting multiplayer game with room:', roomId)
   }
 
   processPlayerAction(action: PlayerAction): ValidationResult {
@@ -245,7 +243,7 @@ export class GameEngine {
     // Validate the action
     const validation = this.stateValidator.validatePlayerAction(action, this.gameState)
     if (!validation.isValid) {
-      console.warn('Invalid action:', validation.errors)
+      logGameEngine('⚠️ Invalid action:', validation.errors)
       return validation
     }
 
@@ -340,8 +338,8 @@ export class GameEngine {
     
     const { winners, scores } = this.scoreCalculator.determineWinners(this.gameState)
     
-    console.log('Game ended. Winners:', winners.map(w => w.name))
-    console.log('Final scores:', Array.from(scores.entries()))
+    logGameEngine('Game ended. Winners:', winners.map(w => w.name))
+    logGameEngine('Final scores:', Array.from(scores.entries()))
   }
 
   /**

@@ -12,6 +12,18 @@ import {
 } from '../services/firebaseService';
 import type { AuthResult, UserProfile } from '../services/firebaseService';
 
+const prefix = '[AuthProvider]';
+
+// Auth flow logging flags
+const LOG_AUTH_FLOW = true;        // Main auth flow tracking
+const LOG_AUTH_STATE = true;       // Auth state changes
+const LOG_AUTH_LOGIN = true;       // Login operations
+const LOG_AUTH_SIGNUP = true;      // Sign up operations
+const LOG_AUTH_LOGOUT = true;      // Logout operations
+const LOG_AUTH_SOCIAL = true;      // Social login
+const LOG_AUTH_GUEST = true;       // Guest login
+const LOG_AUTH_ERROR = true;      // Error logging
+
 interface AuthContextType {
   isAuthenticated: boolean;
   user: UserProfile | null;
@@ -44,18 +56,48 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Listen for auth state changes
   useEffect(() => {
+    if (LOG_AUTH_STATE) {
+      console.log(prefix, '[useEffect] Setting up auth state listener...');
+    }
+
     // If Firebase isn't configured, skip auth state listening
     if (!auth) {
+      if (LOG_AUTH_FLOW) {
+        console.log(prefix, '[useEffect] ⚠️ Firebase not configured, skipping auth state listener');
+      }
       setLoading(false);
       return;
     }
     
+    if (LOG_AUTH_STATE) {
+      console.log(prefix, '[useEffect] ✅ Firebase auth available, setting up onAuthStateChanged listener');
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
+      if (LOG_AUTH_STATE) {
+        console.log(prefix, '[onAuthStateChanged] Auth state changed:', { 
+          hasUser: !!firebaseUser, 
+          uid: firebaseUser?.uid,
+          email: firebaseUser?.email 
+        });
+      }
+
       if (firebaseUser) {
         setIsAuthenticated(true);
+        if (LOG_AUTH_STATE) {
+          console.log(prefix, '[onAuthStateChanged] User signed in:', { 
+            uid: firebaseUser.uid, 
+            email: firebaseUser.email,
+            displayName: firebaseUser.displayName 
+          });
+        }
+        
         // User is signed in, get their profile data
         // For now, we'll set a basic user object
         // In a real implementation, you'd fetch the full profile from Firestore
+        if (LOG_AUTH_FLOW) {
+          console.log(prefix, '[onAuthStateChanged] ⚠️ Creating basic user object (should fetch from Firestore)');
+        }
         setUser({
           uid: firebaseUser.uid,
           displayName: firebaseUser.displayName || 'Anonymous',
@@ -70,21 +112,45 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           eloRating: 1200,
           achievements: []
         });
+        if (LOG_AUTH_STATE) {
+          console.log(prefix, '[onAuthStateChanged] ✅ User state set, isAuthenticated = true');
+        }
       } else {
         // User is signed out
+        if (LOG_AUTH_STATE) {
+          console.log(prefix, '[onAuthStateChanged] User signed out');
+        }
         setIsAuthenticated(false);
         setUser(null);
+        if (LOG_AUTH_STATE) {
+          console.log(prefix, '[onAuthStateChanged] ✅ User state cleared, isAuthenticated = false');
+        }
       }
       setLoading(false);
+      if (LOG_AUTH_STATE) {
+        console.log(prefix, '[onAuthStateChanged] Loading state set to false');
+      }
     });
 
     // Cleanup subscription on unmount
-    return () => unsubscribe();
+    return () => {
+      if (LOG_AUTH_STATE) {
+        console.log(prefix, '[useEffect] Cleaning up auth state listener');
+      }
+      unsubscribe();
+    };
   }, []);
 
   const login = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    if (LOG_AUTH_LOGIN) {
+      console.log(prefix, '[login] Starting login:', { username });
+    }
+
     // If Firebase isn't configured, use simulated auth
     if (!auth) {
+      if (LOG_AUTH_FLOW) {
+        console.log(prefix, '[login] ⚠️ Firebase not configured, using simulated auth');
+      }
       // Simulate successful login
       setIsAuthenticated(true);
       setUser({
@@ -100,25 +166,52 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         eloRating: 1200,
         achievements: []
       });
+      if (LOG_AUTH_LOGIN) {
+        console.log(prefix, '[login] ✅ Simulated login successful');
+      }
       return { success: true };
     }
     
     // For email/password login, we need the actual email
     // In a real implementation, you'd have a separate email field
     // For now, we'll assume the username is the email
+    if (LOG_AUTH_FLOW) {
+      console.log(prefix, '[login] Calling loginUser (assuming username is email)');
+    }
     const result: AuthResult = await loginUser(username, password);
     
     if (result.success && result.user) {
       setIsAuthenticated(true);
       setUser(result.user);
+      if (LOG_AUTH_LOGIN) {
+        console.log(prefix, '[login] ✅ Login successful, user state updated:', { 
+          uid: result.user.uid, 
+          displayName: result.user.displayName 
+        });
+      }
+    } else {
+      if (LOG_AUTH_ERROR) {
+        console.error(prefix, '[login] ❌ Login failed:', result.error);
+      }
     }
     
     return { success: result.success, error: result.error };
   };
 
   const signUp = async (userData: { alias: string; avatar: string; username: string; password: string }): Promise<{ success: boolean; error?: string }> => {
+    if (LOG_AUTH_SIGNUP) {
+      console.log(prefix, '[signUp] Starting sign up:', { 
+        alias: userData.alias, 
+        username: userData.username,
+        hasAvatar: !!userData.avatar 
+      });
+    }
+
     // If Firebase isn't configured, use simulated auth
     if (!auth) {
+      if (LOG_AUTH_FLOW) {
+        console.log(prefix, '[signUp] ⚠️ Firebase not configured, using simulated auth');
+      }
       // Simulate successful sign up
       setIsAuthenticated(true);
       setUser({
@@ -134,12 +227,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         eloRating: 1200,
         achievements: []
       });
+      if (LOG_AUTH_SIGNUP) {
+        console.log(prefix, '[signUp] ✅ Simulated sign up successful');
+      }
       return { success: true };
     }
     
     // For sign up, we need an email address
     // In a real implementation, you'd collect the email separately
     // For now, we'll use the username as the email
+    if (LOG_AUTH_FLOW) {
+      console.log(prefix, '[signUp] Calling registerUser (using username as email, avatar not saved)');
+    }
     const result: AuthResult = await registerUser(
       userData.username, // Using username as email for now
       userData.password,
@@ -149,16 +248,36 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (result.success && result.user) {
       setIsAuthenticated(true);
       setUser(result.user);
+      if (LOG_AUTH_SIGNUP) {
+        console.log(prefix, '[signUp] ✅ Sign up successful, user state updated:', { 
+          uid: result.user.uid, 
+          displayName: result.user.displayName 
+        });
+      }
+    } else {
+      if (LOG_AUTH_ERROR) {
+        console.error(prefix, '[signUp] ❌ Sign up failed:', result.error);
+      }
     }
     
     return { success: result.success, error: result.error };
   };
 
   const logout = async () => {
+    if (LOG_AUTH_LOGOUT) {
+      console.log(prefix, '[logout] Starting logout...');
+    }
+
     // If Firebase isn't configured, use simulated logout
     if (!auth) {
+      if (LOG_AUTH_FLOW) {
+        console.log(prefix, '[logout] ⚠️ Firebase not configured, using simulated logout');
+      }
       setIsAuthenticated(false);
       setUser(null);
+      if (LOG_AUTH_LOGOUT) {
+        console.log(prefix, '[logout] ✅ Simulated logout successful');
+      }
       return { success: true };
     }
     
@@ -166,13 +285,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (result.success) {
       setIsAuthenticated(false);
       setUser(null);
+      if (LOG_AUTH_LOGOUT) {
+        console.log(prefix, '[logout] ✅ Logout successful, user state cleared');
+      }
+    } else {
+      if (LOG_AUTH_ERROR) {
+        console.error(prefix, '[logout] ❌ Logout failed:', result.error);
+      }
     }
     return result;
   };
 
   const loginWithFacebookAuth = async (): Promise<{ success: boolean; error?: string }> => {
+    if (LOG_AUTH_SOCIAL) {
+      console.log(prefix, '[loginWithFacebook] Starting Facebook login...');
+    }
+
     // If Firebase isn't configured, use simulated auth
     if (!auth) {
+      if (LOG_AUTH_FLOW) {
+        console.log(prefix, '[loginWithFacebook] ⚠️ Firebase not configured, using simulated auth');
+      }
       // Simulate successful Facebook login
       setIsAuthenticated(true);
       setUser({
@@ -189,6 +322,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         eloRating: 1200,
         achievements: []
       });
+      if (LOG_AUTH_SOCIAL) {
+        console.log(prefix, '[loginWithFacebook] ✅ Simulated Facebook login successful');
+      }
       return { success: true };
     }
     
@@ -197,14 +333,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (result.success && result.user) {
       setIsAuthenticated(true);
       setUser(result.user);
+      if (LOG_AUTH_SOCIAL) {
+        console.log(prefix, '[loginWithFacebook] ✅ Facebook login successful, user state updated');
+      }
+    } else {
+      if (LOG_AUTH_ERROR) {
+        console.error(prefix, '[loginWithFacebook] ❌ Facebook login failed:', result.error);
+      }
     }
     
     return { success: result.success, error: result.error };
   };
 
   const loginWithGoogleAuth = async (): Promise<{ success: boolean; error?: string }> => {
+    if (LOG_AUTH_SOCIAL) {
+      console.log(prefix, '[loginWithGoogle] Starting Google login...');
+    }
+
     // If Firebase isn't configured, use simulated auth
     if (!auth) {
+      if (LOG_AUTH_FLOW) {
+        console.log(prefix, '[loginWithGoogle] ⚠️ Firebase not configured, using simulated auth');
+      }
       // Simulate successful Google login
       setIsAuthenticated(true);
       setUser({
@@ -221,6 +371,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         eloRating: 1200,
         achievements: []
       });
+      if (LOG_AUTH_SOCIAL) {
+        console.log(prefix, '[loginWithGoogle] ✅ Simulated Google login successful');
+      }
       return { success: true };
     }
     
@@ -229,14 +382,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (result.success && result.user) {
       setIsAuthenticated(true);
       setUser(result.user);
+      if (LOG_AUTH_SOCIAL) {
+        console.log(prefix, '[loginWithGoogle] ✅ Google login successful, user state updated');
+      }
+    } else {
+      if (LOG_AUTH_ERROR) {
+        console.error(prefix, '[loginWithGoogle] ❌ Google login failed:', result.error);
+      }
     }
     
     return { success: result.success, error: result.error };
   };
 
   const loginAsGuestAuth = async (): Promise<{ success: boolean; error?: string }> => {
+    if (LOG_AUTH_GUEST) {
+      console.log(prefix, '[loginAsGuest] Starting guest login...');
+    }
+
     // If Firebase isn't configured, use simulated auth
     if (!auth) {
+      if (LOG_AUTH_FLOW) {
+        console.log(prefix, '[loginAsGuest] ⚠️ Firebase not configured, using simulated auth');
+      }
       // Simulate successful guest login
       setIsAuthenticated(true);
       setUser({
@@ -253,6 +420,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         eloRating: 1200,
         achievements: []
       });
+      if (LOG_AUTH_GUEST) {
+        console.log(prefix, '[loginAsGuest] ✅ Simulated guest login successful');
+      }
       return { success: true };
     }
     
@@ -261,6 +431,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (result.success && result.user) {
       setIsAuthenticated(true);
       setUser(result.user);
+      if (LOG_AUTH_GUEST) {
+        console.log(prefix, '[loginAsGuest] ✅ Guest login successful, user state updated:', { 
+          uid: result.user.uid, 
+          displayName: result.user.displayName 
+        });
+      }
+    } else {
+      if (LOG_AUTH_ERROR) {
+        console.error(prefix, '[loginAsGuest] ❌ Guest login failed:', result.error);
+      }
     }
     
     return { success: result.success, error: result.error };

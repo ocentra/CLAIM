@@ -1,6 +1,12 @@
 import { useRef, useState, useEffect } from 'react'
 import { Group, Object3D } from 'three'
 import { useAssetManager } from '@/utils/useAssetManager'
+import { logGameEngine } from '@/utils/logger'
+
+const prefix = '[PokerTable]';
+
+// Game engine logging flags
+const LOG_GAME_ENGINE_ERROR = false; // Error logging (disabled for focus on auth)
 
 interface PokerTableProps {
   position?: [number, number, number]
@@ -38,7 +44,9 @@ export function PokerTable({
         }
         setLoading(false)
       } catch (err) {
-        console.error('Failed to load poker table model:', err)
+        if (LOG_GAME_ENGINE_ERROR) {
+          logGameEngine('❌ Failed to load poker table model:', err)
+        }
         setError(`Failed to load model: ${err instanceof Error ? err.message : 'Unknown error'}`)
         setLoading(false)
       }
@@ -49,7 +57,9 @@ export function PokerTable({
 
   // Show error state if model fails to load
   if (error) {
-    console.error('Poker table model error:', error)
+    if (LOG_GAME_ENGINE_ERROR) {
+      logGameEngine('❌ Poker table model error:', error)
+    }
   }
 
   // If we have the model, render it

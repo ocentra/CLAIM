@@ -23,5 +23,5 @@
     "noUncheckedSideEffectImports": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["vite.config.ts", "scripts/**/*.js"]
+  "include": ["vite.config.ts", "scripts/**/*.ts", "scripts/**/*.js"]
 }
