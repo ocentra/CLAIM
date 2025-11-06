@@ -1,11 +1,13 @@
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
-  signInWithPopup, 
+  signInWithRedirect, 
   signOut, 
   GoogleAuthProvider, 
   FacebookAuthProvider,
-  updateProfile
+  updateProfile,
+  signInAnonymously,
+  getRedirectResult
 } from 'firebase/auth';
 import type { User as FirebaseUser, UserCredential as FirebaseUserCredential } from 'firebase/auth';
 import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
@@ -132,46 +134,9 @@ export const loginWithGoogle = async (): Promise<AuthResult> => {
   
   try {
     const provider = new GoogleAuthProvider();
-    const userCredential: FirebaseUserCredential = await signInWithPopup(auth!, provider);
-    const user: FirebaseUser = userCredential.user;
-    
-    // Check if user profile exists, create if not
-    const userDoc = await getDoc(doc(db!, 'users', user.uid));
-    let userProfile: UserProfile;
-    
-    if (!userDoc.exists()) {
-      // Create new user profile
-      userProfile = {
-        uid: user.uid,
-        displayName: user.displayName || 'Anonymous',
-        email: user.email || '',
-        photoURL: user.photoURL || '',
-        createdAt: new Date(),
-        lastLoginAt: new Date(),
-        gamesPlayed: 0,
-        wins: 0,
-        losses: 0,
-        winRate: 0,
-        eloRating: 1200,
-        achievements: []
-      };
-      
-      // Save user profile to Firestore
-      await setDoc(doc(db!, 'users', user.uid), userProfile);
-    } else {
-      // Update existing user profile
-      userProfile = {
-        ...userDoc.data() as UserProfile,
-        uid: user.uid
-      };
-      
-      // Update last login time
-      await updateDoc(doc(db!, 'users', user.uid), {
-        lastLoginAt: new Date()
-      });
-    }
-    
-    return { success: true, user: userProfile };
+    await signInWithRedirect(auth!, provider);
+    // The result is handled by the onAuthStateChanged listener
+    return { success: true };
   } catch (error: unknown) {
     const firebaseError = error as FirebaseError;
     console.error('Google login error:', firebaseError);
@@ -188,46 +153,9 @@ export const loginWithFacebook = async (): Promise<AuthResult> => {
   
   try {
     const provider = new FacebookAuthProvider();
-    const userCredential: FirebaseUserCredential = await signInWithPopup(auth!, provider);
-    const user: FirebaseUser = userCredential.user;
-    
-    // Check if user profile exists, create if not
-    const userDoc = await getDoc(doc(db!, 'users', user.uid));
-    let userProfile: UserProfile;
-    
-    if (!userDoc.exists()) {
-      // Create new user profile
-      userProfile = {
-        uid: user.uid,
-        displayName: user.displayName || 'Anonymous',
-        email: user.email || '',
-        photoURL: user.photoURL || '',
-        createdAt: new Date(),
-        lastLoginAt: new Date(),
-        gamesPlayed: 0,
-        wins: 0,
-        losses: 0,
-        winRate: 0,
-        eloRating: 1200,
-        achievements: []
-      };
-      
-      // Save user profile to Firestore
-      await setDoc(doc(db!, 'users', user.uid), userProfile);
-    } else {
-      // Update existing user profile
-      userProfile = {
-        ...userDoc.data() as UserProfile,
-        uid: user.uid
-      };
-      
-      // Update last login time
-      await updateDoc(doc(db!, 'users', user.uid), {
-        lastLoginAt: new Date()
-      });
-    }
-    
-    return { success: true, user: userProfile };
+    await signInWithRedirect(auth!, provider);
+    // The result is handled by the onAuthStateChanged listener
+    return { success: true };
   } catch (error: unknown) {
     const firebaseError = error as FirebaseError;
     console.error('Facebook login error:', firebaseError);
@@ -237,33 +165,46 @@ export const loginWithFacebook = async (): Promise<AuthResult> => {
 
 // Guest login
 export const loginAsGuest = async (): Promise<AuthResult> => {
-  // If Firebase isn't configured, return an error
   if (!isFirebaseConfigured) {
     return { success: false, error: 'Firebase not configured' };
   }
-  
   try {
-    // For guest login, we'll create a temporary user profile
-    // In a real implementation, you might want to handle this differently
-    const guestId = `guest_${Date.now()}`;
-    const userProfile: UserProfile = {
-      uid: guestId,
-      displayName: `Guest${Math.floor(Math.random() * 1000)}`,
-      email: '',
-      createdAt: new Date(),
-      lastLoginAt: new Date(),
-      gamesPlayed: 0,
-      wins: 0,
-      losses: 0,
-      winRate: 0,
-      eloRating: 1200,
-      achievements: []
-    };
+    const userCredential = await signInAnonymously(auth!);
+    const user = userCredential.user;
+    
+    // Check if user profile exists, create if not
+    const userDoc = await getDoc(doc(db!, 'users', user.uid));
+    let userProfile: UserProfile;
+
+    if (!userDoc.exists()) {
+      // Create new user profile for anonymous user
+      userProfile = {
+        uid: user.uid,
+        displayName: `Guest-${user.uid.substring(0, 5)}`,
+        email: '',
+        photoURL: '',
+        createdAt: new Date(),
+        lastLoginAt: new Date(),
+        gamesPlayed: 0,
+        wins: 0,
+        losses: 0,
+        winRate: 0,
+        eloRating: 1200,
+        achievements: []
+      };
+      await setDoc(doc(db!, 'users', user.uid), userProfile);
+    } else {
+      // User profile already exists, just update last login
+      userProfile = { ...userDoc.data() as UserProfile, uid: user.uid };
+      await updateDoc(doc(db!, 'users', user.uid), {
+        lastLoginAt: new Date()
+      });
+    }
     
     return { success: true, user: userProfile };
   } catch (error: unknown) {
     const firebaseError = error as FirebaseError;
-    console.error('Guest login error:', firebaseError);
+    console.error('Anonymous login error:', firebaseError);
     return { success: false, error: firebaseError.message };
   }
 };
@@ -320,5 +261,64 @@ export const updateUserStats = async (
     const firebaseError = error as FirebaseError;
     console.error('Update user stats error:', firebaseError);
     return { success: false, error: firebaseError.message };
+  }
+};
+
+export const handleRedirectResult = async (): Promise<AuthResult> => {
+  if (!isFirebaseConfigured) {
+    return { success: false, error: 'Firebase not configured' };
+  }
+
+  try {
+    console.log("Checking for redirect result...");
+    const result = await getRedirectResult(auth!);
+    if (result) {
+      console.log("Redirect result found:", result);
+      const user = result.user;
+      
+      // Update last login time
+      await updateDoc(doc(db!, 'users', user.uid), {
+        lastLoginAt: new Date()
+      });
+
+      // Get user profile from Firestore
+      const userDoc = await getDoc(doc(db!, 'users', user.uid));
+      if (userDoc.exists()) {
+        const userProfile: UserProfile = {
+          ...userDoc.data() as UserProfile,
+          uid: user.uid
+        };
+        
+        return { success: true, user: userProfile };
+      } else {
+        // Create user profile if it doesn't exist
+        const userProfile: UserProfile = {
+          uid: user.uid,
+          displayName: user.displayName || '',
+          email: user.email || '',
+          photoURL: user.photoURL || '',
+          createdAt: new Date(),
+          lastLoginAt: new Date(),
+          gamesPlayed: 0,
+          wins: 0,
+          losses: 0,
+          winRate: 0,
+          eloRating: 1200, // Default ELO rating
+          achievements: []
+        };
+        
+        // Save user profile to Firestore
+        await setDoc(doc(db!, 'users', user.uid), userProfile);
+        return { success: true, user: userProfile };
+      }
+    } else {
+      console.log("No redirect result found.");
+      return { success: false, error: 'No redirect result' };
+    }
+  } catch (error: unknown) {
+    const firebaseError = error as FirebaseError;
+    console.error('Redirect result error:', firebaseError);
+    console.error('Full error object:', error); // Log the full error object
+    return { success: false, error: `Code: ${firebaseError.code}, Message: ${firebaseError.message}` };
   }
 };

@@ -3,6 +3,7 @@ import './LoginDialog.css';
 import facebookLogo from '../../../assets/Auth/facebook.png';
 import googleLogo from '../../../assets/Auth/google.png';
 import guestLogo from '../../../assets/Auth/annon.png';
+import { handleRedirectResult } from '../../../services/firebaseService';
 
 interface LoginDialogProps {
   onLogin: (username: string, password: string) => Promise<boolean>;
@@ -31,6 +32,21 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
   const [avatarOptions, setAvatarOptions] = useState<{id: number, url: string}[]>([]);
   const avatarSelectorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const checkRedirect = async () => {
+      const result = await handleRedirectResult();
+      if (result.success) {
+        console.log("Login successful after redirect:", result.user);
+      } else {
+        if (result.error && result.error !== 'No redirect result') {
+          console.error("Login failed after redirect:", result.error);
+        }
+      }
+    };
+
+    checkRedirect();
+  }, []);
 
   // Close avatar selector when clicking outside
   useEffect(() => {
