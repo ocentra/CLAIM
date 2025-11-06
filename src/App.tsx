@@ -12,15 +12,15 @@ function App() {
 export default function AppWrapper() {
   return (
     <BrowserRouter>
-      <QueryProvider>
-        <AuthProvider>
+    <QueryProvider>
+      <AuthProvider>
           <Routes>
             <Route path="/api/logs/query" element={<LogsQueryPage />} />
             <Route path="/api/logs/stats" element={<LogsQueryPage />} />
             <Route path="/*" element={<App />} />
           </Routes>
-        </AuthProvider>
-      </QueryProvider>
+      </AuthProvider>
+    </QueryProvider>
     </BrowserRouter>
   )
 }

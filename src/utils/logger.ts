@@ -5,7 +5,7 @@
  * Similar to the Rust MCP pattern for persistent log storage.
  */
 
-import { getLogStorage, type LogLevel, type LogSource } from './logStorage';
+import { type LogLevel, type LogSource } from './logStorage';
 
 // Logging flags - set to true to enable console logging for specific modules
 export const LOG_FLAGS = {
@@ -87,10 +87,9 @@ async function storeLogEntry(
   message: string,
   args: unknown[],
   stack?: string,
-  tags?: string[] // Tags/flags like LOG_AUTH_FLOW, LOG_AUTH_ERROR, etc.
+  tags?: string[] // Optional tags for filtering
 ): Promise<void> {
   try {
-    const storage = getLogStorage();
     const source = MODULE_TO_SOURCE[module] || 'Other';
     const logEntry = {
       level,
@@ -100,12 +99,10 @@ async function storeLogEntry(
       timestamp: Date.now(),
       args: args.length > 0 ? args : undefined,
       stack,
+      tags: tags && tags.length > 0 ? tags : undefined,
     };
     
-    // Store in IndexedDB (browser)
-    await storage.storeLog(logEntry);
-    
-    // Also send to Node.js server so /mcp can access it
+    // Send to Node.js server (stores in SQLite)
     try {
       await fetch('/api/logs/store', {
         method: 'POST',
@@ -142,9 +139,21 @@ export function log(module: keyof typeof LOG_FLAGS, level: LogLevel, ...args: un
     consoleMethod(`[${module}]`, ...args);
   }
   
-  // Always store in IndexedDB (async, non-blocking)
+  // Always store in SQLite (async, non-blocking)
   const stack = level === 'error' ? new Error().stack : undefined;
-  storeLogEntry(level, module, context, message, args, stack).catch(() => {
+  
+  // Auto-generate tags based on level and module
+  const tags: string[] = []
+  if (level === 'error') tags.push('error', 'critical')
+  if (level === 'warn') tags.push('warning')
+  if (module === 'UI') tags.push('ui')
+  if (module === 'GAME_ENGINE') tags.push('game')
+  if (module === 'AI') tags.push('ai')
+  if (module === 'NETWORK') tags.push('network')
+  if (module === 'ASSETS') tags.push('assets')
+  if (module === 'STORE') tags.push('store')
+  
+  storeLogEntry(level, module, context, message, args, stack, tags).catch(() => {
     // Ignore errors
   });
 }
@@ -225,18 +234,28 @@ export function logAuth(
     consoleMethod(`[${context}]`, ...args);
   }
   
-  // Always store in IndexedDB (async, non-blocking)
+  // Always store in SQLite (async, non-blocking)
   const stack = level === 'error' ? new Error().stack : undefined;
   
-  // Store with Auth source
-  getLogStorage().storeLog({
-    level,
-    context,
-    message,
-    source: 'Auth',
-    timestamp: Date.now(),
-    args: args.length > 0 ? args : undefined,
-    stack,
+  // Auto-generate tags for auth logs
+  const tags: string[] = ['auth']
+  if (level === 'error') tags.push('error', 'critical')
+  if (level === 'warn') tags.push('warning')
+  
+  // Store with Auth source - send to Node.js server (stores in SQLite)
+  fetch('/api/logs/store', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      level,
+      context,
+      message,
+      source: 'Auth',
+      timestamp: Date.now(),
+      args: args.length > 0 ? args : undefined,
+      stack,
+      tags: tags.length > 0 ? tags : undefined,
+    }),
   }).catch(() => {
     // Ignore errors
   });
