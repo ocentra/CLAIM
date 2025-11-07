@@ -7,11 +7,11 @@ const LOG_AUTH_CALLBACKS = true;   // Auth callback handlers
 const LOG_AUTH_ERROR = true;       // Error logging
 
 interface AuthHandlers {
-  login: (username: string, password: string) => Promise<boolean>;
-  signUp: (userData: { alias: string; avatar: string; username: string; password: string }) => Promise<boolean>;
-  facebookLogin: () => Promise<boolean>;
-  googleLogin: () => Promise<boolean>;
-  guestLogin: () => Promise<boolean>;
+  login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  signUp: (userData: { alias: string; avatar: string; username: string; password: string }) => Promise<{ success: boolean; error?: string }>;
+  facebookLogin: () => Promise<{ success: boolean; error?: string }>;
+  googleLogin: () => Promise<{ success: boolean; error?: string }>;
+  guestLogin: () => Promise<{ success: boolean; error?: string }>;
 }
 
 export function useAuthHandlers(
@@ -31,10 +31,10 @@ export function useAuthHandlers(
         } else {
           logAuth(LOG_AUTH_ERROR, 'error', prefix, '[onLogin] ❌ Login callback failed:', result.error);
         }
-        return result.success;
+        return { success: result.success, error: result.error };
       } catch (error) {
         logAuth(LOG_AUTH_ERROR, 'error', prefix, '[onLogin] ❌ Exception in login callback:', error);
-        return false;
+        return { success: false, error: 'An unexpected error occurred' };
       }
     },
 
@@ -50,10 +50,10 @@ export function useAuthHandlers(
         } else {
           logAuth(LOG_AUTH_ERROR, 'error', prefix, '[onSignUp] ❌ Sign up callback failed:', result.error);
         }
-        return result.success;
+        return { success: result.success, error: result.error };
       } catch (error) {
         logAuth(LOG_AUTH_ERROR, 'error', prefix, '[onSignUp] ❌ Exception in sign up callback:', error);
-        return false;
+        return { success: false, error: 'An unexpected error occurred' };
       }
     },
 
@@ -66,10 +66,10 @@ export function useAuthHandlers(
         } else {
           logAuth(LOG_AUTH_ERROR, 'error', prefix, '[onFacebookLogin] ❌ Facebook login callback failed:', result.error);
         }
-        return result.success;
+        return { success: result.success, error: result.error };
       } catch (error) {
         logAuth(LOG_AUTH_ERROR, 'error', prefix, '[onFacebookLogin] ❌ Exception in Facebook login callback:', error);
-        return false;
+        return { success: false, error: 'An unexpected error occurred' };
       }
     },
 
@@ -82,10 +82,10 @@ export function useAuthHandlers(
         } else {
           logAuth(LOG_AUTH_ERROR, 'error', prefix, '[onGoogleLogin] ❌ Google login callback failed:', result.error);
         }
-        return result.success;
+        return { success: result.success, error: result.error };
       } catch (error) {
         logAuth(LOG_AUTH_ERROR, 'error', prefix, '[onGoogleLogin] ❌ Exception in Google login callback:', error);
-        return false;
+        return { success: false, error: 'An unexpected error occurred' };
       }
     },
 
@@ -98,10 +98,10 @@ export function useAuthHandlers(
         } else {
           logAuth(LOG_AUTH_ERROR, 'error', prefix, '[onGuestLogin] ❌ Guest login callback failed:', result.error);
         }
-        return result.success;
+        return { success: result.success, error: result.error };
       } catch (error) {
         logAuth(LOG_AUTH_ERROR, 'error', prefix, '[onGuestLogin] ❌ Exception in Guest login callback:', error);
-        return false;
+        return { success: false, error: 'An unexpected error occurred' };
       }
     },
   };

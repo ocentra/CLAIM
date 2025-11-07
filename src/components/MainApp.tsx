@@ -13,7 +13,7 @@ import { useMainAppLogger } from '../hooks/useMainAppLogger';
 import { useLoadingState } from '../hooks/useLoadingState';
 
 const MainApp: React.FC = () => {
-  const { isAuthenticated, user, login, signUp, logout, loginWithFacebook, loginWithGoogle, loginAsGuest } = useAuth();
+  const { isAuthenticated, user, login, signUp, logout, loginWithFacebook, loginWithGoogle, loginAsGuest, sendPasswordReset } = useAuth();
   const authHandlers = useAuthHandlers(login, signUp, loginWithFacebook, loginWithGoogle, loginAsGuest);
   const logger = useMainAppLogger();
   const { error } = useGameStore();
@@ -81,6 +81,7 @@ const MainApp: React.FC = () => {
         onGoogleLogin={authHandlers.googleLogin}
         onGuestLogin={authHandlers.guestLogin}
         onLogout={logout}
+        onSendPasswordReset={sendPasswordReset}
         onLogoutClick={() => logger.logUI('[onClick] Logout button clicked')}
         onTabSwitch={() => {
           logger.logUI('[onTabSwitch] Tab switch triggered, rotating background');

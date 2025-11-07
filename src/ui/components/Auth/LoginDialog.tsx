@@ -14,11 +14,12 @@ const LOG_AUTH_REDIRECT = false;    // Redirect handling
 const LOG_AUTH_ERROR = false;       // Error logging
 
 interface LoginDialogProps {
-  onLogin: (username: string, password: string) => Promise<boolean>;
-  onSignUp: (userData: { alias: string; avatar: string; username: string; password: string }) => Promise<boolean>;
-  onFacebookLogin: () => Promise<boolean>;
-  onGoogleLogin: () => Promise<boolean>;
-  onGuestLogin: () => Promise<boolean>;
+  onLogin: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  onSignUp: (userData: { alias: string; avatar: string; username: string; password: string }) => Promise<{ success: boolean; error?: string }>;
+  onFacebookLogin: () => Promise<{ success: boolean; error?: string }>;
+  onGoogleLogin: () => Promise<{ success: boolean; error?: string }>;
+  onGuestLogin: () => Promise<{ success: boolean; error?: string }>;
+  onSendPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
   onTabSwitch?: () => void; // Add callback for tab switching
 }
 
@@ -28,6 +29,7 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
   onFacebookLogin,
   onGoogleLogin,
   onGuestLogin,
+  onSendPasswordReset,
   onTabSwitch // Destructure the new prop
 }) => {
   const [isSignIn, setIsSignIn] = useState(true);
@@ -38,8 +40,31 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
   const [avatar, setAvatar] = useState('');
   const [showAvatarSelector, setShowAvatarSelector] = useState(false);
   const [avatarOptions, setAvatarOptions] = useState<{id: number, url: string}[]>([]);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string>('');
+  const [successMessage, setSuccessMessage] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<{
+    email?: string;
+    password?: string;
+    confirmPassword?: string;
+  }>({});
   const avatarSelectorRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Email validation helper
+  const isValidEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  // Password validation helper
+  const validatePassword = (password: string): string | undefined => {
+    if (password.length < 6) {
+      return 'Password must be at least 6 characters.';
+    }
+    return undefined;
+  };
 
   useEffect(() => {
     const checkRedirect = async () => {
@@ -76,63 +101,127 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
     };
   }, []);
 
-  // Dynamically import all avatars
+  // Load avatars from shared constant (eagerly loaded, so instant)
   useEffect(() => {
-    const loadAvatars = async () => {
-      try {
-        const modules = import.meta.glob('../../../assets/Avatars/*.png', { eager: true, query: '?url', import: 'default' });
-        const avatarList = Object.entries(modules).map(([path, url]) => {
-          const fileName = path.split('/').pop() || '';
-          const id = parseInt(fileName.split('.')[0]);
-          return { id, url: url as string };
-        }).sort((a, b) => a.id - b.id);
-        
-        setAvatarOptions(avatarList);
-      } catch (error) {
-        logAuth(LOG_AUTH_ERROR, 'error', prefix, '[useEffect] ❌ Failed to load avatars:', error);
-        // Fallback to some default avatars if loading fails
-        setAvatarOptions([
-          { id: 1, url: '' },
-          { id: 2, url: '' },
-          { id: 3, url: '' },
-        ]);
-      }
-    };
-
-    loadAvatars();
+    import('../../../constants/avatars').then(({ AVATARS }) => {
+      const avatarList = AVATARS.map(avatar => ({
+        id: avatar.id,
+        url: avatar.path
+      }));
+      setAvatarOptions(avatarList);
+    }).catch(error => {
+      logAuth(LOG_AUTH_ERROR, 'error', prefix, '[useEffect] ❌ Failed to load avatars:', error);
+    });
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage('');
+    setSuccessMessage('');
+    setValidationErrors({});
+    setIsLoading(true);
+
+    // Client-side validation
+    const errors: { email?: string; password?: string; confirmPassword?: string } = {};
+
+    // Validate email format
+    if (!username) {
+      errors.email = 'Email is required.';
+    } else if (!isValidEmail(username)) {
+      errors.email = 'Please enter a valid email address.';
+    }
+
+    // Validate password
+    if (!password) {
+      errors.password = 'Password is required.';
+    } else if (!isSignIn) {
+      // For sign up, validate password strength
+      const passwordError = validatePassword(password);
+      if (passwordError) {
+        errors.password = passwordError;
+      }
+    }
+
+    // Validate confirm password for sign up
+    if (!isSignIn && password !== confirmPassword) {
+      errors.confirmPassword = 'Passwords do not match.';
+    }
+
+    // If validation errors exist, show them and stop
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      setIsLoading(false);
+      return;
+    }
+
     if (isSignIn) {
       logAuth(LOG_AUTH_UI, 'log', prefix, '[handleSubmit] Sign in form submitted:', { username });
-      onLogin(username, password).then(success => {
-        if (!success) {
-          // Handle login failure
-          logAuth(LOG_AUTH_ERROR, 'error', prefix, '[handleSubmit] ❌ Login failed');
+      try {
+        const result = await onLogin(username, password);
+        if (!result.success) {
+          setErrorMessage(result.error || 'Login failed. Please check your credentials.');
         } else {
           logAuth(LOG_AUTH_UI, 'log', prefix, '[handleSubmit] ✅ Login callback returned success');
         }
-      });
+      } catch (error) {
+        setErrorMessage('An error occurred. Please try again.');
+        logAuth(LOG_AUTH_ERROR, 'error', prefix, '[handleSubmit] ❌ Login exception:', error);
+      } finally {
+        setIsLoading(false);
+      }
     } else {
       logAuth(LOG_AUTH_UI, 'log', prefix, '[handleSubmit] Sign up form submitted:', { 
         alias, 
         username, 
         hasAvatar: !!avatar 
       });
-      // For sign up, you might want to add validation for matching passwords
-      if (password !== confirmPassword) {
-        logAuth(LOG_AUTH_ERROR, 'error', prefix, '[handleSubmit] ❌ Password mismatch');
-        return;
-      }
-      onSignUp({ alias, avatar, username, password }).then(success => {
-        if (!success) {
-          // Handle sign up failure
-          logAuth(LOG_AUTH_ERROR, 'error', prefix, '[handleSubmit] ❌ Sign up failed');
+      try {
+        const result = await onSignUp({ alias, avatar, username, password });
+        if (!result.success) {
+          setErrorMessage(result.error || 'Sign up failed. Please try again.');
         } else {
           logAuth(LOG_AUTH_UI, 'log', prefix, '[handleSubmit] ✅ Sign up callback returned success');
         }
-      });
+      } catch (error) {
+        setErrorMessage('An error occurred. Please try again.');
+        logAuth(LOG_AUTH_ERROR, 'error', prefix, '[handleSubmit] ❌ Sign up exception:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    setValidationErrors({});
+    
+    // Validate email format
+    if (!username) {
+      setErrorMessage('Please enter your email address.');
+      return;
+    }
+    
+    if (!isValidEmail(username)) {
+      setErrorMessage('Please enter a valid email address.');
+      return;
+    }
+    
+    setErrorMessage('');
+    setSuccessMessage('');
+    setIsLoading(true);
+
+    try {
+      const result = await onSendPasswordReset(username);
+      if (result.success) {
+        setSuccessMessage('Password reset email sent! Please check your inbox.');
+        setShowForgotPassword(false);
+      } else {
+        setErrorMessage(result.error || 'Failed to send password reset email.');
+      }
+    } catch (error) {
+      setErrorMessage('An error occurred. Please try again.');
+      logAuth(LOG_AUTH_ERROR, 'error', prefix, '[handleForgotPassword] ❌ Exception:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -293,12 +382,23 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
           
           <div className="input-group">
             <input
-              type="text"
-              placeholder="Username"
+              type="email"
+              placeholder={isSignIn ? "Email" : "Email (Username)"}
               value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="login-input"
+              onChange={(e) => {
+                setUsername(e.target.value);
+                if (validationErrors.email) {
+                  setValidationErrors({ ...validationErrors, email: undefined });
+                }
+              }}
+              className={`login-input ${validationErrors.email ? 'error' : ''}`}
+              disabled={showForgotPassword}
             />
+            {validationErrors.email && (
+              <div style={{ color: '#c33', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                {validationErrors.email}
+              </div>
+            )}
           </div>
           
           <div className="input-group">
@@ -306,10 +406,98 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
               type="password"
               placeholder="Password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="login-input"
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (validationErrors.password) {
+                  setValidationErrors({ ...validationErrors, password: undefined });
+                }
+              }}
+              className={`login-input ${validationErrors.password ? 'error' : ''}`}
+              disabled={showForgotPassword}
             />
+            {validationErrors.password && (
+              <div style={{ color: '#c33', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                {validationErrors.password}
+              </div>
+            )}
+            {isSignIn && !showForgotPassword && (
+              <button
+                type="button"
+                className="forgot-password-link"
+                onClick={() => {
+                  setShowForgotPassword(true);
+                  setErrorMessage('');
+                  setSuccessMessage('');
+                  setValidationErrors({});
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#666',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  marginTop: '0.5rem',
+                  textAlign: 'right',
+                  width: '100%',
+                  textDecoration: 'underline'
+                }}
+              >
+                Forgot Password?
+              </button>
+            )}
           </div>
+          
+          {isSignIn && showForgotPassword && (
+            <div className="forgot-password-section" style={{ marginTop: '1rem' }}>
+              <p style={{ marginBottom: '1rem', color: '#666', fontSize: '0.875rem' }}>
+                Enter your email address and we'll send you a link to reset your password.
+              </p>
+              <button
+                type="button"
+                className="sign-in-button"
+                onClick={handleForgotPassword}
+                disabled={isLoading}
+                style={{ marginBottom: '0.5rem' }}
+              >
+                {isLoading ? 'Sending...' : 'Send Reset Email'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowForgotPassword(false);
+                  setErrorMessage('');
+                  setSuccessMessage('');
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#666',
+                  cursor: 'pointer',
+                  fontSize: '0.875rem',
+                  width: '100%',
+                  textDecoration: 'underline'
+                }}
+              >
+                Back to Sign In
+              </button>
+            </div>
+          )}
+          
+          {(errorMessage || successMessage) && (
+            <div
+              style={{
+                padding: '0.75rem',
+                borderRadius: '4px',
+                marginTop: '1rem',
+                fontSize: '0.875rem',
+                backgroundColor: errorMessage ? '#fee' : '#efe',
+                color: errorMessage ? '#c33' : '#3c3',
+                textAlign: 'center'
+              }}
+            >
+              {errorMessage || successMessage}
+            </div>
+          )}
           
           {!isSignIn && (
             <div className="input-group">
@@ -317,15 +505,27 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
                 type="password"
                 placeholder="Confirm Password"
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="login-input"
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  if (validationErrors.confirmPassword) {
+                    setValidationErrors({ ...validationErrors, confirmPassword: undefined });
+                  }
+                }}
+                className={`login-input ${validationErrors.confirmPassword ? 'error' : ''}`}
               />
+              {validationErrors.confirmPassword && (
+                <div style={{ color: '#c33', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+                  {validationErrors.confirmPassword}
+                </div>
+              )}
             </div>
           )}
           
-          <button type="submit" className="sign-in-button">
-            {isSignIn ? 'SIGN IN' : 'SIGN UP'}
-          </button>
+          {!showForgotPassword && (
+            <button type="submit" className="sign-in-button" disabled={isLoading}>
+              {isLoading ? 'Loading...' : (isSignIn ? 'SIGN IN' : 'SIGN UP')}
+            </button>
+          )}
         </form>
         
         {isSignIn && (

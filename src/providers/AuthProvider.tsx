@@ -1,14 +1,18 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import type { User as FirebaseUser } from 'firebase/auth';
-import { auth } from '../config/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { auth, db } from '../config/firebase';
 import { 
   loginUser, 
   registerUser, 
   loginWithGoogle, 
   loginWithFacebook, 
   loginAsGuest, 
-  logoutUser
+  logoutUser,
+  sendPasswordReset,
+  handleRedirectResult,
+  updateUserProfile
 } from '../services/firebaseService';
 import type { AuthResult, UserProfile } from '../services/firebaseService';
 
@@ -33,6 +37,8 @@ interface AuthContextType {
   loginWithFacebook: () => Promise<{ success: boolean; error?: string }>;
   loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   loginAsGuest: () => Promise<{ success: boolean; error?: string }>;
+  sendPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
+  updateUserProfile: (updates: { displayName?: string; photoURL?: string }) => Promise<{ success: boolean; error?: string }>;
   updateUserStats: (stats: Partial<{
     gamesPlayed: number;
     wins: number;
@@ -92,26 +98,96 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           });
         }
         
-        // User is signed in, get their profile data
-        // For now, we'll set a basic user object
-        // In a real implementation, you'd fetch the full profile from Firestore
+        // User is signed in, fetch their profile from Firestore
         if (LOG_AUTH_FLOW) {
-          console.log(prefix, '[onAuthStateChanged] ⚠️ Creating basic user object (should fetch from Firestore)');
+          console.log(prefix, '[onAuthStateChanged] Fetching user profile from Firestore');
         }
-        setUser({
-          uid: firebaseUser.uid,
-          displayName: firebaseUser.displayName || 'Anonymous',
-          email: firebaseUser.email || '',
-          photoURL: firebaseUser.photoURL || '',
-          createdAt: new Date(),
-          lastLoginAt: new Date(),
-          gamesPlayed: 0,
-          wins: 0,
-          losses: 0,
-          winRate: 0,
-          eloRating: 1200,
-          achievements: []
-        });
+        
+        try {
+          if (db) {
+            const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
+            if (userDoc.exists()) {
+              const userData = userDoc.data() as UserProfile;
+              const userProfile: UserProfile = {
+                ...userData,
+                uid: firebaseUser.uid
+              };
+              setUser(userProfile);
+              if (LOG_AUTH_STATE) {
+                console.log(prefix, '[onAuthStateChanged] ✅ User profile loaded from Firestore:', {
+                  uid: userProfile.uid,
+                  displayName: userProfile.displayName
+                });
+              }
+            } else {
+              // Profile doesn't exist yet - this can happen with redirect flows
+              // It will be created by handleRedirectResult or the login function
+              if (LOG_AUTH_FLOW) {
+                console.log(prefix, '[onAuthStateChanged] ⚠️ User profile not found in Firestore, creating basic profile');
+              }
+              // Try to handle redirect result (for Facebook/login flows that use redirect)
+              const redirectResult = await handleRedirectResult();
+              if (redirectResult.success && redirectResult.user) {
+                setUser(redirectResult.user);
+                if (LOG_AUTH_STATE) {
+                  console.log(prefix, '[onAuthStateChanged] ✅ User profile created from redirect result');
+                }
+              } else {
+                // Fallback: create basic profile (shouldn't happen in normal flow)
+                setUser({
+                  uid: firebaseUser.uid,
+                  displayName: firebaseUser.displayName || 'Anonymous',
+                  email: firebaseUser.email || '',
+                  photoURL: firebaseUser.photoURL || '',
+                  createdAt: new Date(),
+                  lastLoginAt: new Date(),
+                  gamesPlayed: 0,
+                  wins: 0,
+                  losses: 0,
+                  winRate: 0,
+                  eloRating: 1200,
+                  achievements: []
+                });
+              }
+            }
+          } else {
+            // Firebase not configured - use basic profile
+            setUser({
+              uid: firebaseUser.uid,
+              displayName: firebaseUser.displayName || 'Anonymous',
+              email: firebaseUser.email || '',
+              photoURL: firebaseUser.photoURL || '',
+              createdAt: new Date(),
+              lastLoginAt: new Date(),
+              gamesPlayed: 0,
+              wins: 0,
+              losses: 0,
+              winRate: 0,
+              eloRating: 1200,
+              achievements: []
+            });
+          }
+        } catch (error) {
+          if (LOG_AUTH_ERROR) {
+            console.error(prefix, '[onAuthStateChanged] ❌ Error fetching user profile:', error);
+          }
+          // Fallback to basic profile on error
+          setUser({
+            uid: firebaseUser.uid,
+            displayName: firebaseUser.displayName || 'Anonymous',
+            email: firebaseUser.email || '',
+            photoURL: firebaseUser.photoURL || '',
+            createdAt: new Date(),
+            lastLoginAt: new Date(),
+            gamesPlayed: 0,
+            wins: 0,
+            losses: 0,
+            winRate: 0,
+            eloRating: 1200,
+            achievements: []
+          });
+        }
+        
         if (LOG_AUTH_STATE) {
           console.log(prefix, '[onAuthStateChanged] ✅ User state set, isAuthenticated = true');
         }
@@ -242,7 +318,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const result: AuthResult = await registerUser(
       userData.username, // Using username as email for now
       userData.password,
-      userData.alias
+      userData.alias,
+      userData.avatar // Pass the avatar/photoURL
     );
     
     if (result.success && result.user) {
@@ -469,6 +546,60 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const sendPasswordResetEmail = async (email: string): Promise<{ success: boolean; error?: string }> => {
+    if (LOG_AUTH_FLOW) {
+      console.log(prefix, '[sendPasswordResetEmail] Starting password reset:', { email });
+    }
+
+    if (!auth) {
+      if (LOG_AUTH_FLOW) {
+        console.log(prefix, '[sendPasswordResetEmail] ⚠️ Firebase not configured');
+      }
+      return { success: false, error: 'Firebase not configured' };
+    }
+
+    const result = await sendPasswordReset(email);
+    if (LOG_AUTH_FLOW) {
+      if (result.success) {
+        console.log(prefix, '[sendPasswordResetEmail] ✅ Password reset email sent');
+      } else {
+        console.error(prefix, '[sendPasswordResetEmail] ❌ Password reset failed:', result.error);
+      }
+    }
+    return result;
+  };
+
+  const updateProfile = async (updates: { displayName?: string; photoURL?: string }): Promise<{ success: boolean; error?: string }> => {
+    if (LOG_AUTH_FLOW) {
+      console.log(prefix, '[updateProfile] Starting profile update:', updates);
+    }
+
+    if (!auth || !user) {
+      if (LOG_AUTH_FLOW) {
+        console.log(prefix, '[updateProfile] ⚠️ Firebase not configured or user not logged in');
+      }
+      return { success: false, error: 'User not authenticated' };
+    }
+
+    const result = await updateUserProfile(user.uid, updates);
+    if (result.success) {
+      // Update local user state
+      setUser({
+        ...user,
+        displayName: updates.displayName || user.displayName,
+        photoURL: updates.photoURL !== undefined ? updates.photoURL : user.photoURL
+      });
+      if (LOG_AUTH_FLOW) {
+        console.log(prefix, '[updateProfile] ✅ Profile updated, local state refreshed');
+      }
+    } else {
+      if (LOG_AUTH_ERROR) {
+        console.error(prefix, '[updateProfile] ❌ Profile update failed:', result.error);
+      }
+    }
+    return result;
+  };
+
   const value = {
     isAuthenticated,
     user,
@@ -478,6 +609,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     loginWithFacebook: loginWithFacebookAuth,
     loginWithGoogle: loginWithGoogleAuth,
     loginAsGuest: loginAsGuestAuth,
+    sendPasswordReset: sendPasswordResetEmail,
+    updateUserProfile: updateProfile,
     updateUserStats: updateCurrentUserStats
   };
 

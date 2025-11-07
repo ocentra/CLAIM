@@ -10,7 +10,7 @@ const LOG_MCP_BRIDGE = false
 
 // WebSocket connections from browser tabs
 const browserConnections = new Set<WebSocket>()
-
+  
 /**
  * Send command to browser and await result
  */
@@ -37,15 +37,15 @@ async function sendToBrowser(
           clearTimeout(timeoutId)
           if (res.error) {
             reject(new Error(res.error))
-          } else {
+    } else {
             resolve(res.result)
-          }
-        }
+    }
+  }
       } catch {
         // Ignore parse errors for other messages
-      }
     }
-
+  }
+  
     const timeoutId = setTimeout(() => {
       client.off('message', listener)
       reject(new Error(`Timeout waiting for browser response after ${timeout}ms`))
@@ -109,26 +109,26 @@ function mcpBridgePlugin(): Plugin {
         res.setHeader('Access-Control-Allow-Origin', '*')
         res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
         res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
-
+        
         if (req.method === 'OPTIONS') {
           res.writeHead(200)
           res.end()
           return
         }
-
+        
         if (req.method === 'POST') {
           let body = ''
           req.on('data', (chunk: Buffer) => {
             body += chunk.toString()
           })
-
+          
           req.on('end', async () => {
             try {
               const request = JSON.parse(body)
-
+              
               // MCP JSON-RPC 2.0 format: { jsonrpc: "2.0", id, method, params }
               const { jsonrpc, id, method } = request
-
+              
               if (jsonrpc !== '2.0') {
                 res.writeHead(400, { 'Content-Type': 'application/json' })
                 res.end(JSON.stringify({
@@ -141,7 +141,7 @@ function mcpBridgePlugin(): Plugin {
                 }))
                 return
               }
-
+              
               // Handle MCP methods
               if (method === 'initialize') {
                 res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -161,7 +161,7 @@ function mcpBridgePlugin(): Plugin {
                 }))
                 return
               }
-
+              
               if (method === 'notifications/initialized') {
                 res.writeHead(200, { 'Content-Type': 'application/json' })
                 res.end(JSON.stringify({
@@ -171,7 +171,7 @@ function mcpBridgePlugin(): Plugin {
                 }))
                 return
               }
-
+              
               if (method === 'tools/list') {
                 res.writeHead(200, { 'Content-Type': 'application/json' })
                 res.end(JSON.stringify({
@@ -317,10 +317,10 @@ function mcpBridgePlugin(): Plugin {
                 }))
                 return
               }
-
+              
               if (method === 'tools/call') {
                 const { name, arguments: args } = request.params || {}
-
+                
                 // Helper function to return log results
                 const returnLogResults = (logs: unknown[]) => {
                   res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -341,7 +341,7 @@ function mcpBridgePlugin(): Plugin {
                     },
                   }))
                 }
-
+                
                 // Helper function to handle errors
                 const returnError = (error: unknown) => {
                   res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -358,7 +358,7 @@ function mcpBridgePlugin(): Plugin {
                     },
                   }))
                 }
-
+                
                 // Handle tool calls
                 try {
                   if (name === 'hello') {
@@ -382,7 +382,7 @@ function mcpBridgePlugin(): Plugin {
                     limit?: number
                   } = {}
 
-                  if (name === 'get_errors') {
+                if (name === 'get_errors') {
                     queryParams = {
                       level: 'error',
                       since: args?.since || '24h',
@@ -482,7 +482,7 @@ function mcpBridgePlugin(): Plugin {
                         ],
                       },
                     }))
-                    return
+                  return
                   } else if (name === 'clear_logs') {
                     // Clear logs in browser
                     const result = await sendToBrowser({
@@ -506,17 +506,17 @@ function mcpBridgePlugin(): Plugin {
                         ],
                       },
                     }))
-                    return
+                  return
                   } else {
-                    res.writeHead(400, { 'Content-Type': 'application/json' })
-                    res.end(JSON.stringify({
-                      jsonrpc: '2.0',
-                      id,
-                      error: {
-                        code: -32602,
-                        message: `Unknown tool: ${name}`,
-                      },
-                    }))
+                res.writeHead(400, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify({
+                  jsonrpc: '2.0',
+                  id,
+                  error: {
+                    code: -32602,
+                    message: `Unknown tool: ${name}`,
+                  },
+                }))
                     return
                   }
 
@@ -533,7 +533,7 @@ function mcpBridgePlugin(): Plugin {
                 }
                 return
               }
-
+              
               // Unknown method
               res.writeHead(400, { 'Content-Type': 'application/json' })
               res.end(JSON.stringify({

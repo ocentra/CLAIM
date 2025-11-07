@@ -6,12 +6,13 @@ interface AuthScreenProps {
   isAuthenticated: boolean;
   user: UserProfile | null;
   showLoginDialog: boolean;
-  onLogin: (username: string, password: string) => Promise<boolean>;
-  onSignUp: (userData: { alias: string; avatar: string; username: string; password: string }) => Promise<boolean>;
-  onFacebookLogin: () => Promise<boolean>;
-  onGoogleLogin: () => Promise<boolean>;
-  onGuestLogin: () => Promise<boolean>;
+  onLogin: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  onSignUp: (userData: { alias: string; avatar: string; username: string; password: string }) => Promise<{ success: boolean; error?: string }>;
+  onFacebookLogin: () => Promise<{ success: boolean; error?: string }>;
+  onGoogleLogin: () => Promise<{ success: boolean; error?: string }>;
+  onGuestLogin: () => Promise<{ success: boolean; error?: string }>;
   onLogout: () => void;
+  onSendPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
   onLogoutClick?: () => void;
   onTabSwitch?: () => void;
 }
@@ -26,6 +27,7 @@ export function AuthScreen({
   onGoogleLogin,
   onGuestLogin,
   onLogout,
+  onSendPasswordReset,
   onLogoutClick,
   onTabSwitch,
 }: AuthScreenProps) {
@@ -47,6 +49,7 @@ export function AuthScreen({
         onFacebookLogin={onFacebookLogin}
         onGoogleLogin={onGoogleLogin}
         onGuestLogin={onGuestLogin}
+        onSendPasswordReset={onSendPasswordReset}
         onTabSwitch={onTabSwitch}
       />
     );
