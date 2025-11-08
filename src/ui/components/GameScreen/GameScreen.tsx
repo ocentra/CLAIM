@@ -5,8 +5,10 @@ import { useAuth } from '../../../providers/AuthProvider';
 import GameBackground from './GameBackground';
 import GameHUD from './GameHUD';
 import CardInHand from './CardInHand';
+import CenterTable from './CenterTable';
+import PlayersOnTable from './PlayersOnTable';
 import './GameScreen.css';
-import { CARD_IN_HAND_DEFAULTS } from './CardInHand.constants';
+
 
 export const GameScreen: React.FC = () => {
   const { user, logout } = useAuth();
@@ -41,14 +43,12 @@ export const GameScreen: React.FC = () => {
         <GameHeader user={user} onLogout={logout} />
 
         <main className="game-screen__content">
-        <CardInHand
-            anchorPoint={hudAnchor ?? undefined}
+          <CenterTable  />
+          <PlayersOnTable />
+          <CardInHand
             position="fixed"
-            cardCount={CARD_IN_HAND_DEFAULTS.CARD_COUNT}
-            arcStart={CARD_IN_HAND_DEFAULTS.ARC_START}
-            arcEnd={CARD_IN_HAND_DEFAULTS.ARC_END}
-            radius={CARD_IN_HAND_DEFAULTS.RADIUS}
-            zIndex={CARD_IN_HAND_DEFAULTS.Z_INDEX_BASE}
+            anchorPoint={hudAnchor ?? undefined}
+            zIndex={120}
           />
 
           <GameHUD ref={hudCenterRef} />

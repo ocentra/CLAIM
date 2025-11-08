@@ -1,0 +1,11 @@
+.players-on-table {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 110;
+}
+
+.players-on-table .player-seat {
+  pointer-events: auto;
+}
+

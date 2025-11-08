@@ -6,4 +6,13 @@
   min-height: 100vh;
 }
 
+.game-screen__content {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+
 
