@@ -1,4 +1,4 @@
-import { GameState, PlayerAction } from '../types/game'
+import { GameState, PlayerAction } from '@types/game'
 import { 
   RoomConfig, 
   ConnectionStatus, 
@@ -10,7 +10,7 @@ import { WebRTCHandler } from './connection/WebRTCHandler'
 import { ConnectionRecovery } from './connection/ConnectionRecovery'
 import { NetworkMonitor, NetworkMetrics, AdaptiveSettings } from './connection/NetworkMonitor'
 import { StateSync, SyncConflict } from './connection/StateSync'
-import { logNetwork } from '../utils/logger'
+import { logNetwork } from '@lib/logging'
 
 const prefix = '[P2PManager]';
 

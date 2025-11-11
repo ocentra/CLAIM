@@ -2,8 +2,8 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import AppWrapper from './App.tsx'
-import { setupLogApiInterceptor } from './utils/logApi'
-import { initLogBridge } from './utils/logBridge'
+import { setupLogApiInterceptor } from '@lib/logging/logApi';
+import { initLogBridge } from '@lib/logging/logBridge';
 
 // Setup browser-side API interceptor for /api/logs/* routes
 setupLogApiInterceptor()

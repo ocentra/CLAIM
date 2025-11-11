@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import "./CardInHand.css";
 
-import defaultCardBack from "../../../assets/Cards/BackCard.png";
+import defaultCardBack from '@assets/Cards/BackCard.png';
 import { CARD_IN_HAND_DEFAULTS } from "./CardInHand.constants";
 
 interface AnchorPoint {

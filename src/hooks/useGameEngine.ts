@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useGameStore } from '@/store/gameStore'
 import { type PlayerAction } from '@/types'
-import { logGameEngine, logStore } from '@/utils/logger'
+import { logGameEngine, logStore } from '@lib/logging'
 
 export function useGameEngine() {
   const { gameEngine, setGameState } = useGameStore()

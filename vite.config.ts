@@ -584,7 +584,11 @@ export default defineConfig({
   plugins: [
     react({
       babel: {
-        plugins: [['babel-plugin-react-compiler']],
+        plugins: [
+          ['@babel/plugin-proposal-decorators', { legacy: true }],
+          ['@babel/plugin-transform-class-properties', { loose: true }],
+          ['babel-plugin-react-compiler'],
+        ],
       },
     }),
     mcpBridgePlugin(),
@@ -592,7 +596,16 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
-      '@assets': path.resolve(__dirname, './Assets'),
+      '@lib': path.resolve(__dirname, './src/lib'),
+      '@components': path.resolve(__dirname, './src/components'),
+      '@utils': path.resolve(__dirname, './src/utils'),
+      '@services': path.resolve(__dirname, './src/services'),
+      '@providers': path.resolve(__dirname, './src/providers'),
+      '@constants': path.resolve(__dirname, './src/constants'),
+      '@ui': path.resolve(__dirname, './src/ui'),
+      '@types': path.resolve(__dirname, './src/types'),
+      '@config': path.resolve(__dirname, './src/config'),
+      '@assets': path.resolve(__dirname, './src/assets'),
     },
   },
   optimizeDeps: {

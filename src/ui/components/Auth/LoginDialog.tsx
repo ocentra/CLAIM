@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './LoginDialog.css';
-import facebookLogo from '../../../assets/Auth/facebook.png';
-import googleLogo from '../../../assets/Auth/google.png';
-import guestLogo from '../../../assets/Auth/annon.png';
-import { handleRedirectResult } from '../../../services/firebaseService';
-import { logAuth } from '../../../utils/logger';
+import facebookLogo from '@assets/Auth/facebook.png';
+import googleLogo from '@assets/Auth/google.png';
+import guestLogo from '@assets/Auth/annon.png';
+import { handleRedirectResult } from '@services';
+import { logAuth } from '@lib/logging';
 
 const prefix = '[LoginDialog]';
 
@@ -103,7 +103,7 @@ const LoginDialog: React.FC<LoginDialogProps> = ({
 
   // Load avatars from shared constant (eagerly loaded, so instant)
   useEffect(() => {
-    import('../../../constants/avatars').then(({ AVATARS }) => {
+    import('@constants/avatars').then(({ AVATARS }) => {
       const avatarList = AVATARS.map(avatar => ({
         id: avatar.id,
         url: avatar.path

@@ -1,33 +1,41 @@
 /**
  * Log Storage System
- * 
+ *
  * Provides persistent IndexedDB storage for application logs, similar to the Rust MCP pattern.
  * Allows querying logs by level, source, context, and time range.
  */
 
 // Log entry structure matching Rust MCP pattern
 export interface LogEntry {
-  id: string;              // Unique ID (timestamp + random)
-  level: LogLevel;         // Log level (log, error, warn, info, debug)
-  context: string;         // Context/module name (e.g., "AuthProvider", "FirebaseService")
-  message: string;         // Log message
-  source: LogSource;        // Source type (Auth, Network, Assets, etc.)
-  timestamp: number;        // Timestamp in milliseconds
-  args?: unknown[];         // Additional arguments passed to log
-  stack?: string;          // Stack trace for errors
-  tags?: string[];         // Tags for filtering (e.g., ["auth", "critical"])
+  id: string; // Unique ID (timestamp + random)
+  level: LogLevel; // Log level (log, error, warn, info, debug)
+  context: string; // Context/module name (e.g., "AuthProvider", "FirebaseService")
+  message: string; // Log message
+  source: LogSource; // Source type (Auth, Network, Assets, etc.)
+  timestamp: number; // Timestamp in milliseconds
+  args?: unknown[]; // Additional arguments passed to log
+  stack?: string; // Stack trace for errors
+  tags?: string[]; // Tags for filtering (e.g., ["auth", "critical"])
 }
 
 export type LogLevel = 'log' | 'error' | 'warn' | 'info' | 'debug';
-export type LogSource = 'Auth' | 'Network' | 'Assets' | 'GameEngine' | 'UI' | 'Store' | 'System' | 'Other';
+export type LogSource =
+  | 'Auth'
+  | 'Network'
+  | 'Assets'
+  | 'GameEngine'
+  | 'UI'
+  | 'Store'
+  | 'System'
+  | 'Other';
 
 // Query parameters for filtering logs
 export interface LogQuery {
-  level?: LogLevel;        // Filter by log level
-  context?: string;        // Filter by context (partial match)
-  source?: LogSource;       // Filter by source
-  since?: string;          // RFC3339 timestamp (e.g., "2025-10-31T10:00:00Z")
-  limit?: number;           // Maximum number of results (1-10000, default 1000)
+  level?: LogLevel; // Filter by log level
+  context?: string; // Filter by context (partial match)
+  source?: LogSource; // Filter by source
+  since?: string; // RFC3339 timestamp (e.g., "2025-10-31T10:00:00Z")
+  limit?: number; // Maximum number of results (1-10000, default 1000)
 }
 
 // Log statistics
@@ -71,9 +79,9 @@ export class LogStorage {
         resolve();
       };
 
-      request.onupgradeneeded = (event) => {
+      request.onupgradeneeded = event => {
         const db = (event.target as IDBOpenDBRequest).result;
-        
+
         // Create object store if it doesn't exist
         if (!db.objectStoreNames.contains(this.storeName)) {
           const store = db.createObjectStore(this.storeName, { keyPath: 'id' });
@@ -150,17 +158,27 @@ export class LogStorage {
           const unit = relativeMatch[2];
           let ms = 0;
           switch (unit) {
-            case 's': ms = value * 1000; break;
-            case 'm': ms = value * 60 * 1000; break;
-            case 'h': ms = value * 60 * 60 * 1000; break;
-            case 'd': ms = value * 24 * 60 * 60 * 1000; break;
+            case 's':
+              ms = value * 1000;
+              break;
+            case 'm':
+              ms = value * 60 * 1000;
+              break;
+            case 'h':
+              ms = value * 60 * 60 * 1000;
+              break;
+            case 'd':
+              ms = value * 24 * 60 * 60 * 1000;
+              break;
           }
           sinceTimestamp = Date.now() - ms;
         } else {
           // Try to parse as RFC3339 timestamp
           const date = new Date(query.since);
-          if (isNaN(date.getTime())) {
-            throw new Error(`Invalid timestamp format: ${query.since}. Expected RFC3339 (e.g., "2025-01-01T00:00:00Z") or relative time (e.g., "1h", "24h", "7d")`);
+          if (Number.isNaN(date.getTime())) {
+            throw new Error(
+              `Invalid timestamp format: ${query.since}. Expected RFC3339 (e.g., "2025-01-01T00:00:00Z") or relative time (e.g., "1h", "24h", "7d")`
+            );
           }
           sinceTimestamp = date.getTime();
         }
@@ -169,11 +187,11 @@ export class LogStorage {
       return new Promise((resolve, reject) => {
         const transaction = this.db!.transaction([this.storeName], 'readonly');
         const store = transaction.objectStore(this.storeName);
-        
+
         // Use timestamp index for efficient sorting
         const index = store.index('timestamp');
         const request = index.openCursor(null, 'prev'); // Reverse order (newest first)
-        
+
         const results: LogEntry[] = [];
         let scanCount = 0;
         const MAX_SCAN = 100000; // Prevent infinite loops
@@ -182,9 +200,9 @@ export class LogStorage {
           reject(new Error(`Failed to query logs: ${request.error}`));
         };
 
-        request.onsuccess = (event) => {
+        request.onsuccess = event => {
           const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
-          
+
           if (scanCount >= MAX_SCAN) {
             console.warn('[LogStorage] Query exceeded max scan limit');
             resolve(results);
@@ -222,11 +240,7 @@ export class LogStorage {
   /**
    * Check if a log entry matches query criteria
    */
-  private matchesQuery(
-    entry: LogEntry,
-    query: LogQuery,
-    sinceTimestamp: number | null
-  ): boolean {
+  private matchesQuery(entry: LogEntry, query: LogQuery, sinceTimestamp: number | null): boolean {
     // Filter by level
     if (query.level && entry.level !== query.level) {
       return false;
@@ -256,7 +270,7 @@ export class LogStorage {
   async getLogStats(): Promise<LogStats> {
     try {
       const allLogs = await this.queryLogs({ limit: 10000 });
-      
+
       const stats: LogStats = {
         total_logs: allLogs.length,
         by_level: {
@@ -361,9 +375,11 @@ export class LogStorage {
 
         request.onsuccess = () => {
           // Count is not available, so we'll need to query first
-          this.queryLogs({ limit: 10000 }).then((logs) => {
-            resolve(logs.length);
-          }).catch(reject);
+          this.queryLogs({ limit: 10000 })
+            .then(logs => {
+              resolve(logs.length);
+            })
+            .catch(reject);
         };
       });
     } catch (error) {
@@ -385,4 +401,5 @@ export function getLogStorage(): LogStorage {
   }
   return logStorageInstance;
 }
+
 

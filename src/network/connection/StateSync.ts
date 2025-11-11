@@ -1,5 +1,5 @@
-import { GameState, PlayerAction } from '../../types/game'
-import { NetworkMessage, NetworkMessageType } from '../types'
+import { GameState, PlayerAction } from '@types/game'
+import { NetworkMessage, NetworkMessageType } from '@/network'
 import { WebRTCHandler } from './WebRTCHandler'
 
 export interface StateSyncConfig {

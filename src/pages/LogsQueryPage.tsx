@@ -6,7 +6,11 @@
 
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { parseQueryParams, queryLogsFromParams, getLogStatsFromParams } from '../utils/logRouteHandler';
+import {
+  parseQueryParams,
+  queryLogsFromParams,
+  getLogStatsFromParams,
+} from '@lib/logging/logRouteHandler';
 
 export function LogsQueryPage() {
   const location = useLocation();

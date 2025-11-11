@@ -5,7 +5,7 @@ import { PokerTable } from './PokerTable'
 import { GameLayout } from './GameLayout'
 import { type Card, Suit, type CardValue } from '@/types'
 import { useAssetManager } from '@/utils/useAssetManager'
-import { logGameEngine } from '@/utils/logger'
+import { logGameEngine } from '@lib/logging'
 
 const prefix = '[GameRenderer]';
 

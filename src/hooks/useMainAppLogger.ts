@@ -1,4 +1,4 @@
-import { logAuth } from '../utils/logger';
+import { logAuth } from '@lib/logging';
 
 const prefix = '[MainApp]';
 

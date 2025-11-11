@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { type GameState, type Player, type GameScreen } from '@/types'
 import { GameEngine } from '@/engine/GameEngine'
-import { logStore } from '@/utils/logger'
+import { logStore } from '@lib/logging'
 
 interface GameStore {
   // UI State

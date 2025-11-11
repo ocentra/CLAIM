@@ -10,7 +10,7 @@ import {
   LOW_PRIORITY_ASSETS,
   getAssetBundle 
 } from './assetDefinitions'
-import { logAssets } from './logger'
+import { logAssets } from '@lib/logging'
 
 const prefix = '[AssetManager]';
 
@@ -56,7 +56,7 @@ export class AssetManager {
       // Check IndexedDB support
       if (this.config.enableCaching && !IndexedDBCache.isSupported()) {
         if (LOG_ASSETS_WARN) {
-          logAssets('⚠️ IndexedDB not supported, caching disabled')
+          logAssets(`${prefix} ⚠️ IndexedDB not supported, caching disabled`)
         }
         this.config.enableCaching = false
       }
@@ -72,7 +72,7 @@ export class AssetManager {
       this.isInitialized = true
     } catch (error) {
       if (LOG_ASSETS_ERROR) {
-        logAssets('❌ Failed to initialize AssetManager:', error)
+        logAssets(`${prefix} ❌ Failed to initialize AssetManager:`, error)
       }
       throw error
     }
@@ -100,7 +100,7 @@ export class AssetManager {
   async loadBundle(bundleId: string): Promise<void> {
     const bundle = getAssetBundle(bundleId)
     if (!bundle) {
-      throw new Error(`Asset bundle not found: ${bundleId}`)
+      throw new Error(`${prefix} Asset bundle not found: ${bundleId}`)
     }
 
     await this.assetLoader.loadBundle(bundle)

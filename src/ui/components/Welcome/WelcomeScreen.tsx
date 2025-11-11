@@ -1,6 +1,6 @@
-import type { UserProfile } from '../../../services/firebaseService';
-import { GameHeader } from '../Header/GameHeader';
-import { GameFooter } from '../Footer/GameFooter';
+import type { UserProfile } from '@services';
+import { GameHeader } from '@ui/components/Header/GameHeader';
+import { GameFooter } from '@ui/components/Footer/GameFooter';
 import { GameModeSelector } from './GameModeSelector';
 import { GameInfoTabs } from './GameInfoTabs';
 import './WelcomeScreen.css';

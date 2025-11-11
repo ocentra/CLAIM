@@ -4,7 +4,7 @@ import { Box, useCursor } from '@react-three/drei'
 import { Texture, Group } from 'three'
 import { type Card } from '@/types'
 import { useCardTextures } from '@/utils/useAssetManager'
-import { logGameEngine } from '@/utils/logger'
+import { logGameEngine } from '@lib/logging'
 
 const prefix = '[DraggableCard3D]';
 

@@ -4,7 +4,7 @@ import { Group } from 'three'
 import { useSpring, animated, config } from '@react-spring/three'
 import { InteractiveCard3D } from './InteractiveCard3D'
 import { type Card } from '@/types'
-import { logGameEngine } from '@/utils/logger'
+import { logGameEngine } from '@lib/logging'
 
 const prefix = '[CardFlipSystem]';
 

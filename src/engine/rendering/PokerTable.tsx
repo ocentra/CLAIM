@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from 'react'
 import { Group, Object3D } from 'three'
 import { useAssetManager } from '@/utils/useAssetManager'
-import { logGameEngine } from '@/utils/logger'
+import { logGameEngine } from '@lib/logging'
 
 const prefix = '[PokerTable]';
 

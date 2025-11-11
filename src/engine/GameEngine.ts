@@ -8,8 +8,8 @@ import {
   type GameRules,
   type ValidationResult 
 } from './logic'
-import { AIManager } from '@/ai/AIManager'
-import { logGameEngine } from '@/utils/logger'
+import { AIManager } from '@/ai'
+import { logGameEngine } from '@lib/logging'
 
 export interface GameConfig {
   maxPlayers: number

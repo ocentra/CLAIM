@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useAuth } from '../../../providers/AuthProvider';
-import { AVATARS } from '../../../constants/avatars';
+import { useAuth } from '@providers';
+import { AVATARS } from '@constants/avatars';
 import './ProfilePictureModal.css';
 
 interface ProfilePictureModalProps {

@@ -1,140 +1,135 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { useMemo } from 'react';
 import './PlayerUI.css';
-import AvatarDefault from '../../../assets/Avatars/1.png';
+import AvatarDefault from '@assets/Avatars/1.png';
+import {
+  serializable,
+  serialize,
+  deserialize,
+  getSerializableFields,
+  type SerializableField,
+} from '@lib/serialization/Serializable';
 
-interface PlayerUIProps {
-  // Base Arc
-  baseArcRadius?: number;
-  baseArcCenterX?: number;
-  baseArcCenterY?: number;
-  baseArcFill?: string;
-  baseArcStartAngle?: number;
-  baseArcEndAngle?: number;
-  baseArcRotation?: number;
+export class PlayerUIConfig {
+  static readonly schemaVersion = 1;
 
-  // Edge Ring
-  edgeRingRadius?: number;
-  edgeRingStrokeWidth?: number;
-  edgeRingStrokeColor?: string;
-  edgeRingBevelEnabled?: boolean;
-  edgeRingGlowEnabled?: boolean;
-  edgeRingBevelBlur?: number;
-  edgeRingBevelSpecularConstant?: number;
-  edgeRingBevelSpecularExponent?: number;
-  edgeRingGlowStdDeviation?: number;
-  edgeRingGlowOpacity?: number;
+  baseArcRadius = 150;
+  baseArcCenterX = 200;
+  baseArcCenterY = 200;
+  baseArcFill = 'rgba(0, 102, 204, 0.85)';
+  baseArcStartAngle = -50;
+  baseArcEndAngle = 50;
 
-  // Label Text
-  labelText?: string;
-  labelFontSize?: number;
-  labelColor?: string;
-  labelArcRadius?: number;
-  labelArcStartAngle?: number;
-  labelArcEndAngle?: number;
-  labelAutoFlip?: boolean;
-  labelTextOffset?: number;
-  labelStartOffset?: number;
-  labelMaxCharacters?: number;
+  @serializable({ label: 'Arc rot°', min: 0, max: 360, step: 1, inputType: 'angle', group: 'arc' })
+  baseArcRotation = 0;
 
-  // Avatar Image
-  avatarUrl?: string;
-  avatarImageScale?: number;
-  avatarBaseScale?: number;
-  avatarBaseColor?: string;
-  avatarVisible?: boolean;
-  avatarAlignOffset?: { x: number; y: number };
+  edgeRingRadius = 115;
+  edgeRingStrokeWidth = 15;
+  edgeRingStrokeColor = 'rgba(255, 204, 51, 0.95)';
+  edgeRingBevelEnabled = true;
+  edgeRingGlowEnabled = true;
+  edgeRingBevelBlur = 3;
+  edgeRingBevelSpecularConstant = 1.4;
+  edgeRingBevelSpecularExponent = 20;
+  edgeRingGlowStdDeviation = 4;
+  edgeRingGlowOpacity = 0.5;
 
-  // Info Box
-  infoBoxWidth?: number;
-  infoBoxHeight?: number;
-  infoBoxRadius?: number;
-  infoBoxColor?: string;
-  infoBoxOpacity?: number;
-  infoBoxBevelEnabled?: boolean;
-  infoBoxGlowEnabled?: boolean;
-  infoBoxBevelBlur?: number;
-  infoBoxBevelSpecularConstant?: number;
-  infoBoxBevelSpecularExponent?: number;
-  infoBoxGlowStdDeviation?: number;
-  infoBoxGlowOpacity?: number;
-  infoBoxText?: string;
-  infoBoxAngle?: number;
-  infoBoxRadialDistance?: number;
-  infoBoxRotation?: number;
+  labelText = 'MY NAME IS PLAYER PLAYER PLAYER PLAYER PLAYER';
+  labelFontSize = 20;
+  labelColor = 'rgba(255, 255, 255, 1)';
+  labelArcRadius = 133;
+  labelArcStartAngle = -45;
+  labelArcEndAngle = 45;
+  labelAutoFlip = true;
+  labelTextOffset = 550;
+  labelStartOffset = 0;
+  labelMaxCharacters = 19;
 
-  // Canvas
-  canvasWidth?: number;
-  canvasHeight?: number;
-  overallScale?: number;
+  avatarUrl = AvatarDefault;
+  avatarImageScale = 1.2;
+  avatarBaseScale = 1.25;
+  avatarBaseColor = 'rgba(240, 240, 240, 1)';
+  avatarVisible = true;
+  avatarAlignOffset = { x: 0, y: 0 };
+
+  infoBoxWidth = 250;
+  infoBoxHeight = 60;
+  infoBoxRadius = 8;
+  infoBoxColor = 'rgba(0, 60, 120, 0.9)';
+  infoBoxOpacity = 0.8;
+  infoBoxBevelEnabled = true;
+  infoBoxGlowEnabled = true;
+  infoBoxBevelBlur = 2;
+  infoBoxBevelSpecularConstant = 1.1;
+  infoBoxBevelSpecularExponent = 18;
+  infoBoxGlowStdDeviation = 3.5;
+  infoBoxGlowOpacity = 0.5;
+  infoBoxText = '';
+
+  @serializable({ label: 'Info angle°', min: 0, max: 360, step: 1, inputType: 'angle', group: 'infoBox' })
+  infoBoxAngle = 180;
+
+  infoBoxRadialDistance = 160;
+
+  @serializable({ label: 'Info rot°', min: 0, max: 360, step: 1, inputType: 'angle', group: 'infoBox' })
+  infoBoxRotation = 0;
+
+  canvasWidth = 400;
+  canvasHeight = 400;
+  overallScale = 1;
+
+  static get DEFAULTS(): PlayerUIConfig {
+    return new PlayerUIConfig();
+  }
+
+  static get SERIALIZABLE_FIELDS(): ReadonlyArray<SerializableField> {
+    return getSerializableFields(PlayerUIConfig);
+  }
 }
 
-const PLAYER_UI_DEFAULTS: Required<PlayerUIProps> = {
-  // Base Arc
-  baseArcRadius: 150,
-  baseArcCenterX: 200,
-  baseArcCenterY: 200,
-  baseArcFill: 'rgba(0, 102, 204, 0.85)',
-  baseArcStartAngle: -50,
-  baseArcEndAngle: 50,
-  baseArcRotation: 0,
+export type PlayerUIProps = Partial<PlayerUIConfig>;
+export type SerializablePlayerUIKey = 'baseArcRotation' | 'infoBoxAngle' | 'infoBoxRotation';
+export const PLAYER_UI_SERIALIZABLE_KEYS: readonly SerializablePlayerUIKey[] = [
+  'baseArcRotation',
+  'infoBoxAngle',
+  'infoBoxRotation',
+] as const;
 
-  // Edge Ring
-  edgeRingRadius: 115,
-  edgeRingStrokeWidth: 15,
-  edgeRingStrokeColor: 'rgba(255, 204, 51, 0.95)',
-  edgeRingBevelEnabled: true,
-  edgeRingGlowEnabled: true,
-  edgeRingBevelBlur: 3,
-  edgeRingBevelSpecularConstant: 1.4,
-  edgeRingBevelSpecularExponent: 20,
-  edgeRingGlowStdDeviation: 4,
-  edgeRingGlowOpacity: 0.5,
+export const PLAYER_UI_SERIALIZABLE_FIELDS: ReadonlyArray<SerializableField> = PLAYER_UI_SERIALIZABLE_KEYS.map((key) => {
+  const field = PlayerUIConfig.SERIALIZABLE_FIELDS.find((item) => item.key === key);
+  if (!field) {
+    throw new Error(`Serializable metadata missing for PlayerUIConfig.${key}`);
+  }
+  return field;
+});
 
-  // Label Text
-  labelText: 'MY NAME IS PLAYER PLAYER PLAYER PLAYER PLAYER',
-  labelFontSize: 20,
-  labelColor: 'rgba(255, 255, 255, 1)',
-  labelArcRadius: 133,
-  labelArcStartAngle: -45,
-  labelArcEndAngle: 45,
-  labelAutoFlip: true,
-  labelTextOffset: 550,
-  labelStartOffset: 0,
-  labelMaxCharacters:19,
+const SERIALIZABLE_FIELD_KEYS = new Set<string>(PLAYER_UI_SERIALIZABLE_KEYS);
 
-  // Avatar Image
-  avatarUrl: AvatarDefault,
-  avatarImageScale: 1.2,
-  avatarBaseScale: 1.25,
-  avatarBaseColor: 'rgba(240, 240, 240, 1)',
-  avatarVisible: true,
-  avatarAlignOffset: { x: 0, y: 0 },
+export function sanitizePlayerUIOverrides(
+  source: Partial<Record<string, unknown>> | null | undefined,
+): Partial<Record<SerializablePlayerUIKey, number>> | undefined {
+  if (!source) {
+    return undefined;
+  }
+  const result: Partial<Record<SerializablePlayerUIKey, number>> = {};
+  SERIALIZABLE_FIELD_KEYS.forEach((key) => {
+    const value = source[key];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      result[key as SerializablePlayerUIKey] = value;
+    }
+  });
+  return Object.keys(result).length > 0 ? result : undefined;
+}
 
-  // Info Box
-  infoBoxWidth: 250,
-  infoBoxHeight: 60,
-  infoBoxRadius: 8,
-  infoBoxColor: 'rgba(0, 60, 120, 0.9)',
-  infoBoxOpacity: 0.8,
-  infoBoxBevelEnabled: true,
-  infoBoxGlowEnabled: true,
-  infoBoxBevelBlur: 2,
-  infoBoxBevelSpecularConstant: 1.1,
-  infoBoxBevelSpecularExponent: 18,
-  infoBoxGlowStdDeviation: 3.5,
-  infoBoxGlowOpacity: 0.5,
-  infoBoxText: '',
-  infoBoxAngle: 180,
-  infoBoxRadialDistance: 160,
-  infoBoxRotation: 0,
-
-  // Canvas
-  canvasWidth: 400,
-  canvasHeight: 400,
-  overallScale: 1,
+type PlayerUIComponent = React.FC<PlayerUIProps> & {
+  DEFAULTS: PlayerUIConfig;
+  SERIALIZABLE_FIELDS: ReadonlyArray<SerializableField>;
+  serializeConfig: (config: PlayerUIConfig) => Record<string, unknown>;
+  deserializeConfig: (json: Record<string, unknown>) => PlayerUIConfig;
+  sanitizeOverrides: (
+    source: Partial<Record<string, unknown>> | null | undefined,
+  ) => Partial<Record<string, number>> | undefined;
 };
-
-type PlayerUIComponent = React.FC<PlayerUIProps> & { DEFAULTS: typeof PLAYER_UI_DEFAULTS };
 
 // Helper function to convert polar coordinates to cartesian
 const polarToCartesian = (centerX: number, centerY: number, radius: number, angleInDegrees: number) => {
@@ -178,6 +173,7 @@ const createArcPathForText = (
 };
 
 const PlayerUI: PlayerUIComponent = (props) => {
+  const config = useMemo(() => Object.assign(new PlayerUIConfig(), props), [props]);
   const {
     // Base Arc
     baseArcRadius,
@@ -242,7 +238,7 @@ const PlayerUI: PlayerUIComponent = (props) => {
     canvasWidth,
     canvasHeight,
     overallScale,
-  } = { ...PLAYER_UI_DEFAULTS, ...props };
+  } = config;
   
   const scaledCanvasWidth = useMemo(() => canvasWidth * overallScale, [canvasWidth, overallScale]);
   const scaledCanvasHeight = useMemo(() => canvasHeight * overallScale, [canvasHeight, overallScale]);
@@ -378,7 +374,7 @@ const PlayerUI: PlayerUIComponent = (props) => {
               in="alphaBlur"
               specularConstant={edgeRingBevelSpecularConstant}
               specularExponent={edgeRingBevelSpecularExponent}
-              lighting-color="white"
+              lightingColor="white"
             >
               <fePointLight x="-50" y="30" z="200"/>
             </feSpecularLighting>
@@ -407,7 +403,7 @@ const PlayerUI: PlayerUIComponent = (props) => {
               in="alphaBlur"
               specularConstant={edgeRingBevelSpecularConstant}
               specularExponent={edgeRingBevelSpecularExponent}
-              lighting-color="white"
+              lightingColor="white"
             >
               <fePointLight x="-50" y="30" z="200"/>
             </feSpecularLighting>
@@ -434,7 +430,7 @@ const PlayerUI: PlayerUIComponent = (props) => {
               in="alphaBlur"
               specularConstant={infoBoxBevelSpecularConstant}
               specularExponent={infoBoxBevelSpecularExponent}
-              lighting-color="white"
+              lightingColor="white"
             >
               <fePointLight x="-30" y="20" z="150"/>
             </feSpecularLighting>
@@ -463,7 +459,7 @@ const PlayerUI: PlayerUIComponent = (props) => {
               in="alphaBlur"
               specularConstant={infoBoxBevelSpecularConstant}
               specularExponent={infoBoxBevelSpecularExponent}
-              lighting-color="white"
+              lightingColor="white"
             >
               <fePointLight x="-30" y="20" z="150"/>
             </feSpecularLighting>
@@ -594,6 +590,10 @@ const PlayerUI: PlayerUIComponent = (props) => {
   );
 };
 
-PlayerUI.DEFAULTS = PLAYER_UI_DEFAULTS;
+PlayerUI.DEFAULTS = PlayerUIConfig.DEFAULTS;
+PlayerUI.SERIALIZABLE_FIELDS = PLAYER_UI_SERIALIZABLE_FIELDS;
+PlayerUI.sanitizeOverrides = sanitizePlayerUIOverrides;
+PlayerUI.serializeConfig = (config: PlayerUIConfig) => serialize(config);
+PlayerUI.deserializeConfig = (json: Record<string, unknown>) => deserialize(PlayerUIConfig, json);
 
 export default PlayerUI;

@@ -1,7 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { GameState, PlayerAction } from '../../types/game'
-import { P2PManager, P2PManagerConfig, RoomInfo } from '../P2PManager'
-import { ConnectionStatus, NetworkQuality, RoomConfig } from '../types'
+import { GameState, PlayerAction } from '@types/game'
+import {
+  P2PManager,
+  type P2PManagerConfig,
+  type RoomInfo,
+  type ConnectionStatus,
+  type NetworkQuality,
+  type RoomConfig,
+} from '@/network'
 
 export interface UseP2PNetworkingOptions {
   localPlayerId: string

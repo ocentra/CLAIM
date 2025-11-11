@@ -1,6 +1,6 @@
 import { type GameState, type PlayerAction, AIPersonality } from '@/types'
 import { AIEngine, type AIConfig, type AIDecision } from './AIEngine'
-import { logAI } from '@/utils/logger'
+import { logAI } from '@lib/logging'
 
 export class AIManager {
   private aiEngines: Map<string, AIEngine> = new Map()

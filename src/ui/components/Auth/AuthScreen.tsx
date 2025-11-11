@@ -1,6 +1,6 @@
-import type { UserProfile } from '../../../services/firebaseService';
+import type { UserProfile } from '@services';
 import LoginDialog from './LoginDialog';
-import { WelcomeScreen } from '../Welcome/WelcomeScreen';
+import { WelcomeScreen } from '@ui/components/Welcome/WelcomeScreen';
 
 interface AuthScreenProps {
   isAuthenticated: boolean;

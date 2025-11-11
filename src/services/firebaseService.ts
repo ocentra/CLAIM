@@ -14,8 +14,8 @@ import {
 } from 'firebase/auth';
 import type { User as FirebaseUser, UserCredential as FirebaseUserCredential } from 'firebase/auth';
 import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
-import { auth, db } from '../config/firebase';
-import { logAuth } from '../utils/logger';
+import { auth, db } from '@config/firebase';
+import { logAuth } from '@lib/logging';
 
 const prefix = '[FirebaseService]';
 

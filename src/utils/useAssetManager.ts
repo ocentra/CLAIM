@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { AssetManager, getAssetManager } from './assetManager'
 import type { AssetManagerStats, LoadingProgress } from './types'
 import { TextureManager } from './textureManager'
-import { logAssets } from './logger'
+import { logAssets } from '@lib/logging'
 
 const prefix = '[useAssetManager]';
 
@@ -102,6 +102,9 @@ export function useAssetManager(options: UseAssetManagerOptions = {}) {
         stats
       }))
     } catch (error) {
+      if (LOG_ASSETS_ERROR) {
+        logAssets(`${prefix} ❌ Failed to load bundle ${bundleId}:`, error)
+      }
       setState(prev => ({
         ...prev,
         isLoading: false,

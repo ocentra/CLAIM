@@ -1,7 +1,7 @@
 import { Texture, TextureLoader, LoadingManager, Object3D } from 'three'
 import { FBXLoader } from 'three-stdlib'
 import type { AssetBundle, AssetDefinition, LoadingProgress, AssetCache, AssetType } from './types'
-import { logAssets } from './logger'
+import { logAssets } from '@lib/logging'
 
 const prefix = '[AssetLoader]';
 
@@ -77,6 +77,10 @@ export class AssetLoader {
       }
       
       this.progressCallbacks.forEach(callback => callback(progress))
+
+      if (LOG_ASSETS_WARN) {
+        logAssets(`${prefix} Progress ${progress.loaded}/${progress.total} (${progress.percentage.toFixed(2)}%) ${currentAsset ?? ''}`.trim())
+      }
     }
 
     updateProgress()
@@ -171,14 +175,14 @@ export class AssetLoader {
         await this.cache.set(cacheKey, blob)
       } catch (error) {
         if (LOG_ASSETS_WARN) {
-          logAssets(`⚠️ Failed to cache ${asset.id}:`, error)
+          logAssets(`${prefix} ⚠️ Failed to cache ${asset.id}:`, error)
         }
       }
 
       return this.createAssetFromBlob(asset, blob)
     } catch (error) {
       if (LOG_ASSETS_ERROR) {
-        logAssets(`❌ Failed to load asset ${asset.id}:`, error)
+        logAssets(`${prefix} ❌ Failed to load asset ${asset.id}:`, error)
       }
       throw error
     }

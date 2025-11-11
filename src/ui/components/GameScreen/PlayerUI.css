@@ -8,6 +8,7 @@
   display: block;
   background-color: transparent;
   shape-rendering: geometricPrecision;
+  overflow: visible;
 }
 
 .base-arc-group {

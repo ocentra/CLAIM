@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type { CSSProperties } from 'react';
-import Mlogo from '../../../assets/Mlogo.png';
+import Mlogo from '@assets/Mlogo.png';
+import { tableLayoutStore } from '@ui/layout';
 
 function extractAlphaFromRgba(color: string | undefined): number {
   if (!color) return 1;
@@ -259,7 +260,7 @@ const RESOLVED_DEFAULTS: ResolvedCenterTableSvgProps = {
   responsivePaddingY: 10,
 
   // Overall table geometry
-  curvature: 1,
+  curvature: 0.7,
 
   // Outer rim (gold metal)
   rimThickness: 3,
@@ -396,7 +397,18 @@ function resolveProps(props: CenterTableSVGProps): ResolvedCenterTableSvgProps {
 }
 
 export default function CenterTableSVG(props: CenterTableSVGProps) {
-  const p = resolveProps(props);
+  const layoutState = useSyncExternalStore(
+    tableLayoutStore.subscribe,
+    tableLayoutStore.getState,
+    tableLayoutStore.getState
+  );
+
+  const mergedProps = useMemo(
+    () => ({ ...layoutState.table, ...props }) as CenterTableSVGProps,
+    [layoutState.table, props]
+  );
+
+  const p = resolveProps(mergedProps);
   const { width, height, minScale, maxScale, responsivePaddingX, responsivePaddingY } = p;
   const [scale, setScale] = useState(1);
 

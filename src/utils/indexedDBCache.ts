@@ -1,5 +1,5 @@
-import type { AssetCache } from './assetLoader'
-import { logAssets } from './logger'
+import type { AssetCache } from './types'
+import { logAssets } from '@lib/logging'
 
 const prefix = '[IndexedDBCache]';
 
@@ -28,7 +28,7 @@ export class IndexedDBCache implements AssetCache {
       const request = indexedDB.open(this.dbName, this.version)
 
       request.onerror = () => {
-        reject(new Error(`Failed to open IndexedDB: ${request.error}`))
+        reject(new Error(`${prefix} Failed to open IndexedDB: ${request.error}`))
       }
 
       request.onsuccess = () => {
@@ -36,7 +36,7 @@ export class IndexedDBCache implements AssetCache {
         resolve(this.db)
       }
 
-      request.onupgradeneeded = (event) => {
+      request.onupgradeneeded = event => {
         const db = (event.target as IDBOpenDBRequest).result
         
         // Create object store if it doesn't exist
@@ -58,14 +58,14 @@ export class IndexedDBCache implements AssetCache {
         const request = store.get(key)
 
         request.onerror = () => {
-          reject(new Error(`Failed to get asset: ${request.error}`))
+          reject(new Error(`${prefix} Failed to get asset: ${request.error}`))
         }
 
         request.onsuccess = () => {
           const result = request.result
           if (result && result.data) {
             // Update access timestamp
-            this.updateTimestamp(key).catch((error) => {
+            this.updateTimestamp(key).catch(error => {
               if (LOG_ASSETS_WARN) {
                 logAssets('⚠️ Failed to update timestamp:', error)
               }
@@ -102,7 +102,7 @@ export class IndexedDBCache implements AssetCache {
         const request = store.put(record)
 
         request.onerror = () => {
-          reject(new Error(`Failed to store asset: ${request.error}`))
+          reject(new Error(`${prefix} Failed to store asset: ${request.error}`))
         }
 
         request.onsuccess = () => {
@@ -127,7 +127,7 @@ export class IndexedDBCache implements AssetCache {
         const request = store.count(key)
 
         request.onerror = () => {
-          reject(new Error(`Failed to check asset existence: ${request.error}`))
+          reject(new Error(`${prefix} Failed to check asset existence: ${request.error}`))
         }
 
         request.onsuccess = () => {
@@ -152,7 +152,7 @@ export class IndexedDBCache implements AssetCache {
         const request = store.delete(key)
 
         request.onerror = () => {
-          reject(new Error(`Failed to delete asset: ${request.error}`))
+          reject(new Error(`${prefix} Failed to delete asset: ${request.error}`))
         }
 
         request.onsuccess = () => {
@@ -177,7 +177,7 @@ export class IndexedDBCache implements AssetCache {
         const request = store.clear()
 
         request.onerror = () => {
-          reject(new Error(`Failed to clear cache: ${request.error}`))
+          reject(new Error(`${prefix} Failed to clear cache: ${request.error}`))
         }
 
         request.onsuccess = () => {

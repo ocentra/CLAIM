@@ -1,14 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { GameHeader } from '../Header/GameHeader';
-import { GameFooter } from '../Footer/GameFooter';
-import { useAuth } from '../../../providers/AuthProvider';
+import { GameHeader } from '@ui/components/Header/GameHeader';
+import { GameFooter } from '@ui/components/Footer/GameFooter';
+import { useAuth } from '@providers';
 import GameBackground from './GameBackground';
 import GameHUD from './GameHUD';
 import CardInHand from './CardInHand';
 import CenterTableSvg from './CenterTableSvg';
 import PlayersOnTable from './PlayersOnTable';
 import './GameScreen.css';
+import { GameModeProvider, getGameModeConfig } from '@ui/gameMode';
 
+const DEFAULT_GAME_MODE = getGameModeConfig('claim');
 
 export const GameScreen: React.FC = () => {
   const { user, logout } = useAuth();
@@ -36,6 +38,7 @@ export const GameScreen: React.FC = () => {
   }, []);
 
   return (
+    <GameModeProvider config={DEFAULT_GAME_MODE}>
     <div className="game-screen">
       <GameBackground />
 
@@ -44,7 +47,7 @@ export const GameScreen: React.FC = () => {
 
         <main className="game-screen__content">
           <CenterTableSvg />
-         {/* <PlayersOnTable /> */}
+            <PlayersOnTable />
           <CardInHand
             position="fixed"
             anchorPoint={hudAnchor ?? undefined}
@@ -57,6 +60,7 @@ export const GameScreen: React.FC = () => {
         <GameFooter />
       </div>
     </div>
+    </GameModeProvider>
   );
 };
 

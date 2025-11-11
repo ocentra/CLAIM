@@ -3,32 +3,32 @@ import React, { useEffect, useRef, useCallback, useMemo } from 'react';
 import * as THREE from 'three';
 
 // Import card assets as modules
-import CardSpadeFilled from '../../../assets/BgCards/Fullcard/CardSpadeFilled.png';
-import CardSpadeHollow from '../../../assets/BgCards/Fullcard/CardSpadeHollow.png';
-import CardHeartFilled from '../../../assets/BgCards/Fullcard/CardHeartFilled.png';
-import CardHeartHollow from '../../../assets/BgCards/Fullcard/CardHeartHollow.png';
-import CardDiamondFilled from '../../../assets/BgCards/Fullcard/CardDiamondFilled.png';
-import CardDiamondHollow from '../../../assets/BgCards/Fullcard/CardDiamondHollow.png';
-import CardClubFilled from '../../../assets/BgCards/Fullcard/CardClubFilled.png';
-import CardClubHollow from '../../../assets/BgCards/Fullcard/CardClubHollow.png';
+import CardSpadeFilled from '@assets/BgCards/Fullcard/CardSpadeFilled.png';
+import CardSpadeHollow from '@assets/BgCards/Fullcard/CardSpadeHollow.png';
+import CardHeartFilled from '@assets/BgCards/Fullcard/CardHeartFilled.png';
+import CardHeartHollow from '@assets/BgCards/Fullcard/CardHeartHollow.png';
+import CardDiamondFilled from '@assets/BgCards/Fullcard/CardDiamondFilled.png';
+import CardDiamondHollow from '@assets/BgCards/Fullcard/CardDiamondHollow.png';
+import CardClubFilled from '@assets/BgCards/Fullcard/CardClubFilled.png';
+import CardClubHollow from '@assets/BgCards/Fullcard/CardClubHollow.png';
 
-import SpadeFilled from '../../../assets/BgCards/WithoutCircles/SpadeFilled.png';
-import SpadeHollow from '../../../assets/BgCards/WithoutCircles/SpadeHollow.png';
-import HeartFilled from '../../../assets/BgCards/WithoutCircles/HeartFilled.png';
-import HeartHollow from '../../../assets/BgCards/WithoutCircles/HeartHollow.png';
-import DiamondFilled from '../../../assets/BgCards/WithoutCircles/DiamondFilled.png';
-import DiamondHollow from '../../../assets/BgCards/WithoutCircles/DiamondHollow.png';
-import ClubFilled from '../../../assets/BgCards/WithoutCircles/ClubFilled.png';
-import ClubHollow from '../../../assets/BgCards/WithoutCircles/ClubHollow.png';
+import SpadeFilled from '@assets/BgCards/WithoutCircles/SpadeFilled.png';
+import SpadeHollow from '@assets/BgCards/WithoutCircles/SpadeHollow.png';
+import HeartFilled from '@assets/BgCards/WithoutCircles/HeartFilled.png';
+import HeartHollow from '@assets/BgCards/WithoutCircles/HeartHollow.png';
+import DiamondFilled from '@assets/BgCards/WithoutCircles/DiamondFilled.png';
+import DiamondHollow from '@assets/BgCards/WithoutCircles/DiamondHollow.png';
+import ClubFilled from '@assets/BgCards/WithoutCircles/ClubFilled.png';
+import ClubHollow from '@assets/BgCards/WithoutCircles/ClubHollow.png';
 
-import SpadeWithCirclesFilled from '../../../assets/BgCards/with circles/SpadeWithCirclesFilled.png';
-import SpadeWithCirclesHollow from '../../../assets/BgCards/with circles/SpadeWithCirclesHollow.png';
-import HeartWithCirclesFilled from '../../../assets/BgCards/with circles/HeartWithCirclesFilled.png';
-import HeartWithCirclesHollow from '../../../assets/BgCards/with circles/HeartWithCirclesHollow.png';
-import DiamondWithCirclesFilled from '../../../assets/BgCards/with circles/DiamondWithCirclesFilled.png';
-import DiamondWithCirclesHollow from '../../../assets/BgCards/with circles/DiamondWithCirclesHollow.png';
-import ClubWithCirclesFilled from '../../../assets/BgCards/with circles/ClubWithCirclesFilled.png';
-import ClubWithCirclesHollow from '../../../assets/BgCards/with circles/ClubWithCirclesHollow.png';
+import SpadeWithCirclesFilled from '@assets/BgCards/with circles/SpadeWithCirclesFilled.png';
+import SpadeWithCirclesHollow from '@assets/BgCards/with circles/SpadeWithCirclesHollow.png';
+import HeartWithCirclesFilled from '@assets/BgCards/with circles/HeartWithCirclesFilled.png';
+import HeartWithCirclesHollow from '@assets/BgCards/with circles/HeartWithCirclesHollow.png';
+import DiamondWithCirclesFilled from '@assets/BgCards/with circles/DiamondWithCirclesFilled.png';
+import DiamondWithCirclesHollow from '@assets/BgCards/with circles/DiamondWithCirclesHollow.png';
+import ClubWithCirclesFilled from '@assets/BgCards/with circles/ClubWithCirclesFilled.png';
+import ClubWithCirclesHollow from '@assets/BgCards/with circles/ClubWithCirclesHollow.png';
 
 // Configurable logging flag
 const DEBUG_BACKGROUND = false; // Set to true to enable background logging

@@ -1,5 +1,5 @@
 import { type Card, type Player, type GameState } from '@/types'
-import { logGameEngine } from '@/utils/logger'
+import { logGameEngine } from '@lib/logging'
 
 const prefix = '[ScoreCalculator]';
 

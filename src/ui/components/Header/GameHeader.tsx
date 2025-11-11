@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { UserProfile } from '../../../services/firebaseService';
+import type { UserProfile } from '@services';
 import { ProfilePictureModal } from './ProfilePictureModal';
 import './GameHeader.css';
 

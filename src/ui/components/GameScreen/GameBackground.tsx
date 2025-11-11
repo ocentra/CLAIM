@@ -1,21 +1,21 @@
 import React, { useRef, useLayoutEffect } from "react";
-import cardBgTexture from "../../../assets/BgCards/CardBg.png";
-import cardClubFilled from "../../../assets/BgCards/Fullcard/256/CardClubFilled.png";
-import cardClubHollow from "../../../assets/BgCards/Fullcard/256/CardClubHollow.png";
-import cardDiamondFilled from "../../../assets/BgCards/Fullcard/256/CardDiamondFilled.png";
-import cardDiamondHollow from "../../../assets/BgCards/Fullcard/256/CardDiamondHollow.png";
-import cardHeartFilled from "../../../assets/BgCards/Fullcard/256/CardHeartFilled.png";
-import cardHeartHollow from "../../../assets/BgCards/Fullcard/256/CardHeartHollow.png";
-import cardSpadeFilled from "../../../assets/BgCards/Fullcard/256/CardSpadeFilled.png";
-import cardSpadeHollow from "../../../assets/BgCards/Fullcard/256/CardSpadeHollow.png";
-import clubCircleFilled from "../../../assets/BgCards/with circles/256/ClubWithCirclesFilled.png";
-import clubCircleHollow from "../../../assets/BgCards/with circles/256/ClubWithCirclesHollow.png";
-import diamondCircleFilled from "../../../assets/BgCards/with circles/256/DiamondWithCirclesFilled.png";
-import diamondCircleHollow from "../../../assets/BgCards/with circles/256/DiamondWithCirclesHollow.png";
-import heartCircleFilled from "../../../assets/BgCards/with circles/256/HeartWithCirclesFilled.png";
-import heartCircleHollow from "../../../assets/BgCards/with circles/256/HeartWithCirclesHollow.png";
-import spadeCircleFilled from "../../../assets/BgCards/with circles/256/SpadeWithCirclesFilled.png";
-import spadeCircleHollow from "../../../assets/BgCards/with circles/256/SpadeWithCirclesHollow.png";
+import cardBgTexture from '@assets/BgCards/CardBg.png';
+import cardClubFilled from '@assets/BgCards/Fullcard/256/CardClubFilled.png';
+import cardClubHollow from '@assets/BgCards/Fullcard/256/CardClubHollow.png';
+import cardDiamondFilled from '@assets/BgCards/Fullcard/256/CardDiamondFilled.png';
+import cardDiamondHollow from '@assets/BgCards/Fullcard/256/CardDiamondHollow.png';
+import cardHeartFilled from '@assets/BgCards/Fullcard/256/CardHeartFilled.png';
+import cardHeartHollow from '@assets/BgCards/Fullcard/256/CardHeartHollow.png';
+import cardSpadeFilled from '@assets/BgCards/Fullcard/256/CardSpadeFilled.png';
+import cardSpadeHollow from '@assets/BgCards/Fullcard/256/CardSpadeHollow.png';
+import clubCircleFilled from '@assets/BgCards/with circles/256/ClubWithCirclesFilled.png';
+import clubCircleHollow from '@assets/BgCards/with circles/256/ClubWithCirclesHollow.png';
+import diamondCircleFilled from '@assets/BgCards/with circles/256/DiamondWithCirclesFilled.png';
+import diamondCircleHollow from '@assets/BgCards/with circles/256/DiamondWithCirclesHollow.png';
+import heartCircleFilled from '@assets/BgCards/with circles/256/HeartWithCirclesFilled.png';
+import heartCircleHollow from '@assets/BgCards/with circles/256/HeartWithCirclesHollow.png';
+import spadeCircleFilled from '@assets/BgCards/with circles/256/SpadeWithCirclesFilled.png';
+import spadeCircleHollow from '@assets/BgCards/with circles/256/SpadeWithCirclesHollow.png';
 import "./GameBackground.css";
 
 const TILE_X = 2; // 2 tiles horizontally
