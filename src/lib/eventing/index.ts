@@ -10,6 +10,7 @@ export * from './events';
 export * from './behaviours';
 export * from './hooks';
 export * from './eventLogger';
+export * from './EventTypes';
 export {
   createDeferred,
   createOperationDeferred,

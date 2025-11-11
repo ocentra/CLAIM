@@ -1,6 +1,4 @@
-import { createContext } from 'react';
-import type { IEventBus } from '@lib/eventing/interfaces/IEventBus';
-import { EventBus } from '@lib/eventing/EventBus';
+import { createContext } from 'react'
+import type { IEventBus } from '@lib/eventing/interfaces/IEventBus'
 
-export const EventBusContext = createContext<IEventBus | null>(null);
-
+export const EventBusContext = createContext<IEventBus | null>(null)
