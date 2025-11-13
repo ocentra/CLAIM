@@ -5,83 +5,41 @@ export interface PeerConnection {
   connection: RTCPeerConnection
   dataChannel: RTCDataChannel | null
   status: ConnectionStatus
-  lastPing: number
-  latency: number
-  quality: NetworkQuality
+  remoteStream: MediaStream | null
 }
 
 export const ConnectionStatus = {
   CONNECTING: 'connecting',
   CONNECTED: 'connected',
   DISCONNECTED: 'disconnected',
-  RECONNECTING: 'reconnecting',
   FAILED: 'failed',
 } as const
 
 export type ConnectionStatus = (typeof ConnectionStatus)[keyof typeof ConnectionStatus]
 
-export const NetworkQuality = {
-  EXCELLENT: 'excellent', // < 50ms latency
-  GOOD: 'good',          // 50-100ms latency
-  FAIR: 'fair',          // 100-200ms latency
-  POOR: 'poor',          // > 200ms latency
-} as const
+export type PeerMessageType = 'chat' | 'system' | 'ping' | 'pong'
 
-export type NetworkQuality = (typeof NetworkQuality)[keyof typeof NetworkQuality]
-
-export interface NetworkMessage {
-  type: NetworkMessageType
+export interface PeerMessage<T = unknown> {
+  id: string
+  type: PeerMessageType
   senderId: string
   timestamp: number
-  data: unknown
-  messageId: string
+  payload?: T
 }
 
-export const NetworkMessageType = {
-  GAME_ACTION: 'game_action',
-  GAME_STATE_SYNC: 'game_state_sync',
-  PING: 'ping',
-  PONG: 'pong',
-  PLAYER_JOIN: 'player_join',
-  PLAYER_LEAVE: 'player_leave',
-  HEARTBEAT: 'heartbeat',
-  ERROR: 'error',
-} as const
-
-export type NetworkMessageType = (typeof NetworkMessageType)[keyof typeof NetworkMessageType]
-
-export interface RoomConfig {
-  maxPlayers: number
-  isPrivate: boolean
-  password?: string
-  gameSettings: GameSettings
-}
-
-export interface GameSettings {
-  timeLimit?: number
-  allowSpectators: boolean
-  aiDifficulty?: string
+export interface ChatMessagePayload {
+  text: string
 }
 
 export interface SignalingMessage {
-  type: 'offer' | 'answer' | 'ice-candidate' | 'room-join' | 'room-leave'
-  roomId: string
-  senderId: string
-  targetId?: string
-  data: unknown
+  type: 'offer' | 'answer' | 'ice-candidate'
+  from: string
+  to: string
+  sdp?: RTCSessionDescriptionInit
+  candidate?: RTCIceCandidateInit
 }
 
-export interface NetworkStats {
-  latency: number
-  packetLoss: number
-  bandwidth: number
-  jitter: number
-  lastUpdated: number
-}
-
-export interface ReconnectionConfig {
-  maxAttempts: number
-  baseDelay: number
-  maxDelay: number
-  backoffMultiplier: number
+export interface PeerMedia {
+  peerId: string
+  stream: MediaStream
 }

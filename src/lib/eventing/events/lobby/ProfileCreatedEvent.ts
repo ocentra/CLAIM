@@ -1,5 +1,5 @@
 import { EventArgsBase } from '@lib/eventing/base/EventArgsBase'
-import type { LobbyPlayer } from '@types/lobby'
+import type { LobbyPlayer } from '@types'
 
 export class ProfileCreatedEvent extends EventArgsBase {
   static readonly eventType = 'Lobby/ProfileCreated'

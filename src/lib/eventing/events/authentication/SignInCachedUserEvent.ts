@@ -1,6 +1,6 @@
 import { EventArgsBase } from '@lib/eventing/base/EventArgsBase'
 import { createOperationDeferred, type OperationDeferred } from '@lib/eventing'
-import type { AuthResult } from '@types/auth'
+import type { AuthResult } from '@types'
 
 export class SignInCachedUserEvent<TAuthResult = AuthResult> extends EventArgsBase {
   static readonly eventType = 'Authentication/SignInCachedUser'

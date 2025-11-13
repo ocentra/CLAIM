@@ -10,19 +10,23 @@ vi.mock('three', () => ({
     flipY = true
     generateMipmaps = true
     needsUpdate = false
-    dispose() {}
+    dispose(): void {
+      // no-op
+    }
   },
   TextureLoader: class MockTextureLoader {
-    constructor() {}
-    load(url: string, onLoad?: Function) {
+    load(url: string, onLoad?: (texture: InstanceType<typeof MockTexture>) => void): InstanceType<typeof MockTexture> {
+      void url
       const texture = new MockTexture()
-      if (onLoad) setTimeout(() => onLoad(texture), 0)
+      if (onLoad) {
+        setTimeout(() => onLoad(texture), 0)
+      }
       return texture
     }
   },
   LoadingManager: class MockLoadingManager {
-    onProgress: Function | null = null
-    onError: Function | null = null
+    onProgress: ((item: string, loaded: number, total: number) => void) | null = null
+    onError: ((item: string) => void) | null = null
   },
   RepeatWrapping: 1000,
   ClampToEdgeWrapping: 1001,
@@ -41,10 +45,12 @@ describe('AssetManager', () => {
     vi.clearAllMocks()
     
     // Mock successful fetch responses
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      blob: () => Promise.resolve(new Blob(['mock-data'], { type: 'image/png' }))
-    })
+    globalThis.fetch = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(new Blob(['mock-data'], { type: 'image/png' }), {
+        status: 200,
+        statusText: 'OK',
+      })
+    )
 
     assetManager = new AssetManager({
       enableCaching: false, // Disable caching for simpler testing
@@ -87,7 +93,7 @@ describe('AssetManager', () => {
 
   describe('progress tracking', () => {
     it('should track loading progress', async () => {
-      const progressUpdates: any[] = []
+      const progressUpdates: Array<ReturnType<typeof assetManager.getCurrentProgress>> = []
       
       assetManager.onProgress((progress) => {
         progressUpdates.push([...progress])
@@ -148,18 +154,17 @@ describe('AssetManager', () => {
 })
 
 describe('IndexedDBCache', () => {
-  let cache: IndexedDBCache
-
-  beforeEach(() => {
-    cache = new IndexedDBCache('TestDB', 'testStore', 1)
-  })
-
   describe('static methods', () => {
     it('should check IndexedDB support', () => {
       // In test environment, IndexedDB might not be available
       const isSupported = IndexedDBCache.isSupported()
       expect(typeof isSupported).toBe('boolean')
     })
+  })
+
+  it('should allow creating an instance', () => {
+    const cache = new IndexedDBCache('TestDB', 'testStore', 1)
+    expect(cache).toBeInstanceOf(IndexedDBCache)
   })
 
   // Note: Full IndexedDB testing would require a more sophisticated setup

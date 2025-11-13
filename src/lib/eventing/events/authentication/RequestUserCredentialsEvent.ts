@@ -1,6 +1,6 @@
 import { EventArgsBase } from '@lib/eventing/base/EventArgsBase'
 import { createOperationDeferred, type OperationDeferred } from '@lib/eventing'
-import type { UserCredentials } from '@types/auth'
+import type { UserCredentials } from '@types'
 
 export class RequestUserCredentialsEvent extends EventArgsBase {
   static readonly eventType = 'Authentication/RequestUserCredentials'

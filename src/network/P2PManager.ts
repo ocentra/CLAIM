@@ -1,491 +1,217 @@
-import { GameState, PlayerAction } from '@types/game'
-import { 
-  RoomConfig, 
-  ConnectionStatus, 
-  NetworkMessage, 
-  NetworkMessageType,
-  NetworkQuality 
-} from './types'
-import { WebRTCHandler } from './connection/WebRTCHandler'
-import { ConnectionRecovery } from './connection/ConnectionRecovery'
-import { NetworkMonitor, NetworkMetrics, AdaptiveSettings } from './connection/NetworkMonitor'
-import { StateSync, SyncConflict } from './connection/StateSync'
-import { logNetwork } from '@lib/logging'
-
-const prefix = '[P2PManager]';
-
-// Network logging flags
-const LOG_NETWORK_FLOW = false;  // Main network flow tracking
-const LOG_NETWORK_ERROR = false;  // Error logging
-const LOG_NETWORK_CONNECTION = false; // Connection events
-const LOG_NETWORK_ROOM = false;  // Room management
-const LOG_NETWORK_SYNC = false;  // State synchronization
+import { WebRTCHandler } from '@/network/connection/WebRTCHandler'
+import { ConnectionStatus } from '@/network/types'
+import type { PeerMessage, ChatMessagePayload } from '@/network/types'
 
 export interface P2PManagerConfig {
-  localPlayerId: string
-  maxPeers: number
-  enableNetworkMonitoring: boolean
-  enableAutoReconnect: boolean
-  signalingServerUrl?: string
+  localPeerId: string
+  rtcConfiguration?: RTCConfiguration
 }
 
-export interface RoomInfo {
-  id: string
-  hostId: string
-  playerIds: string[]
-  config: RoomConfig
-  status: 'waiting' | 'starting' | 'active' | 'ended'
-}
+export type ChatMessage = PeerMessage<ChatMessagePayload>
 
 export class P2PManager {
-  private config: P2PManagerConfig
-  private webrtcHandler: WebRTCHandler
-  private connectionRecovery: ConnectionRecovery
-  private networkMonitor: NetworkMonitor
-  private stateSync: StateSync
-  private currentRoom: RoomInfo | null = null
-  private isHost = false
-
-  // Event callbacks
-  private onRoomJoinedCallback?: (roomInfo: RoomInfo) => void
-  private onPlayerJoinedCallback?: (playerId: string) => void
-  private onPlayerLeftCallback?: (playerId: string) => void
-  private onGameActionCallback?: (action: PlayerAction) => void
-  private onGameStateUpdateCallback?: (gameState: GameState) => void
-  private onConnectionStatusCallback?: (peerId: string, status: ConnectionStatus) => void
-  private onNetworkQualityCallback?: (peerId: string, quality: NetworkQuality) => void
+  private readonly config: P2PManagerConfig
+  private readonly handler: WebRTCHandler
+  private connectionStatuses = new Map<string, ConnectionStatus>()
+  private onPeerConnectedCallback?: (peerId: string) => void
+  private onPeerDisconnectedCallback?: (peerId: string) => void
+  private onChatMessageCallback?: (message: ChatMessage) => void
+  private onRemoteStreamCallback?: (peerId: string, stream: MediaStream) => void
+  private onIceCandidateCallback?: (peerId: string, candidate: RTCIceCandidate) => void
   private onErrorCallback?: (error: Error) => void
+  private localStream: MediaStream | null = null
 
   constructor(config: P2PManagerConfig) {
     this.config = config
-    
-    // Initialize core components
-    this.webrtcHandler = new WebRTCHandler(config.localPlayerId)
-    this.connectionRecovery = new ConnectionRecovery(this.webrtcHandler)
-    this.networkMonitor = new NetworkMonitor(this.webrtcHandler)
-    this.stateSync = new StateSync(this.webrtcHandler, config.localPlayerId)
+    this.handler = new WebRTCHandler(config.localPeerId, config.rtcConfiguration)
 
-    this.setupEventHandlers()
-  }
+    this.handler.onMessage((peerId, message) => {
+      this.handleIncomingMessage(peerId, message)
+    })
 
-  /**
-   * Set up event handlers between components
-   */
-  private setupEventHandlers(): void {
-    // WebRTC connection changes
-    this.webrtcHandler.onConnectionChange((peerId, status) => {
+    this.handler.onConnectionChange((peerId, status) => {
+      this.connectionStatuses.set(peerId, status)
       this.handleConnectionChange(peerId, status)
     })
 
-    // Network quality changes
-    if (this.config.enableNetworkMonitoring) {
-      this.networkMonitor.onQualityChange((peerId, quality, metrics) => {
-        this.handleNetworkQualityChange(peerId, quality, metrics)
-      })
-
-      this.networkMonitor.onAdaptiveChange((settings) => {
-        this.handleAdaptiveSettingsChange(settings)
-      })
-    }
-
-    // State synchronization
-    this.stateSync.onStateSync((gameState) => {
-      this.onGameStateUpdateCallback?.(gameState)
+    this.handler.onRemoteStream((peerId, stream) => {
+      this.onRemoteStreamCallback?.(peerId, stream)
     })
 
-    this.stateSync.onAction((action) => {
-      this.onGameActionCallback?.(action)
-    })
-
-    this.stateSync.onConflict((conflict) => {
-      this.handleSyncConflict(conflict)
-    })
-
-    // Reconnection status
-    this.connectionRecovery.onReconnectionStatus((peerId, attempt, maxAttempts) => {
-      if (LOG_NETWORK_CONNECTION) {
-        logNetwork(`Reconnection attempt ${attempt}/${maxAttempts} for peer ${peerId}`)
-      }
+    this.handler.onIceCandidate((peerId, candidate) => {
+      this.onIceCandidateCallback?.(peerId, candidate)
     })
   }
 
-  /**
-   * Create a new game room
-   */
-  async createRoom(roomConfig: RoomConfig): Promise<string> {
+  setLocalStream(stream: MediaStream): void {
+    this.localStream = stream
+    this.handler.setLocalStream(stream)
+  }
+
+  clearLocalStream(): void {
+    this.localStream = null
+    this.handler.clearLocalStream()
+  }
+
+  async createOffer(peerId: string): Promise<RTCSessionDescriptionInit> {
     try {
-      const roomId = this.generateRoomId()
-      
-      this.currentRoom = {
-        id: roomId,
-        hostId: this.config.localPlayerId,
-        playerIds: [this.config.localPlayerId],
-        config: roomConfig,
-        status: 'waiting',
+      if (!this.connectionStatuses.has(peerId)) {
+        await this.handler.createPeerConnection(peerId)
+        // Initialize status to CONNECTING when peer connection is created
+        this.connectionStatuses.set(peerId, ConnectionStatus.CONNECTING)
+        if (this.localStream) {
+          this.handler.setLocalStream(this.localStream)
+        }
+        this.handler.createDataChannel(peerId)
       }
-      
-      this.isHost = true
-      
-      // Start monitoring if enabled
-      if (this.config.enableNetworkMonitoring) {
-        this.networkMonitor.startMonitoring()
-      }
-      
-      if (LOG_NETWORK_ROOM) {
-        logNetwork(`Created room ${roomId} as host`)
-      }
-      this.onRoomJoinedCallback?.(this.currentRoom)
-      
-      return roomId
+      return await this.handler.createOffer(peerId)
     } catch (error) {
-      this.handleError(new Error(`Failed to create room: ${error}`))
+      this.onErrorCallback?.(error as Error)
       throw error
     }
   }
 
-  /**
-   * Join an existing game room
-   */
-  async joinRoom(roomId: string): Promise<void> {
+  async handleOffer(peerId: string, offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit> {
     try {
-      // In a real implementation, this would connect to a signaling server
-      // For now, we'll simulate the room joining process
-      
-      this.currentRoom = {
-        id: roomId,
-        hostId: 'unknown', // Would be provided by signaling server
-        playerIds: [this.config.localPlayerId],
-        config: {
-          maxPlayers: 4,
-          isPrivate: false,
-          gameSettings: { allowSpectators: true },
-        },
-        status: 'waiting',
+      if (!this.connectionStatuses.has(peerId)) {
+        await this.handler.createPeerConnection(peerId)
+        // Initialize status to CONNECTING when peer connection is created
+        this.connectionStatuses.set(peerId, ConnectionStatus.CONNECTING)
+        if (this.localStream) {
+          this.handler.setLocalStream(this.localStream)
+        }
       }
-      
-      this.isHost = false
-      
-      // Start monitoring if enabled
-      if (this.config.enableNetworkMonitoring) {
-        this.networkMonitor.startMonitoring()
-      }
-      
-      if (LOG_NETWORK_ROOM) {
-        logNetwork(`Joined room ${roomId}`)
-      }
-      this.onRoomJoinedCallback?.(this.currentRoom)
-      
+      await this.handler.setRemoteDescription(peerId, offer)
+      return await this.handler.createAnswer(peerId)
     } catch (error) {
-      this.handleError(new Error(`Failed to join room: ${error}`))
+      this.onErrorCallback?.(error as Error)
       throw error
     }
   }
 
-  /**
-   * Connect to a specific peer
-   */
-  async connectToPeer(peerId: string): Promise<void> {
+  async handleAnswer(peerId: string, answer: RTCSessionDescriptionInit): Promise<void> {
     try {
-      if (LOG_NETWORK_CONNECTION) {
-        logNetwork(`Connecting to peer ${peerId}`)
-      }
-      
-      // Create peer connection
-      await this.webrtcHandler.createPeerConnection(peerId)
-      
-      // Create data channel (if we're the initiator)
-      this.webrtcHandler.createDataChannel(peerId)
-      
-      // Add peer to room
-      if (this.currentRoom && !this.currentRoom.playerIds.includes(peerId)) {
-        this.currentRoom.playerIds.push(peerId)
-        this.onPlayerJoinedCallback?.(peerId)
-      }
-      
+      await this.handler.setRemoteDescription(peerId, answer)
     } catch (error) {
-      this.handleError(new Error(`Failed to connect to peer ${peerId}: ${error}`))
+      this.onErrorCallback?.(error as Error)
       throw error
     }
   }
 
-  /**
-   * Disconnect from a specific peer
-   */
-  disconnectFromPeer(peerId: string): void {
+  async addIceCandidate(peerId: string, candidate: RTCIceCandidateInit): Promise<void> {
     try {
-      if (LOG_NETWORK_CONNECTION) {
-        logNetwork(`Disconnecting from peer ${peerId}`)
-      }
-      
-      this.webrtcHandler.closePeerConnection(peerId)
-      
-      // Remove peer from room
-      if (this.currentRoom) {
-        this.currentRoom.playerIds = this.currentRoom.playerIds.filter(id => id !== peerId)
-        this.onPlayerLeftCallback?.(peerId)
-      }
-      
+      await this.handler.addIceCandidate(peerId, candidate)
     } catch (error) {
-      this.handleError(new Error(`Failed to disconnect from peer ${peerId}: ${error}`))
-    }
-  }
-
-  /**
-   * Send game action to all peers
-   */
-  sendGameAction(action: PlayerAction): void {
-    try {
-      this.stateSync.broadcastAction(action)
-    } catch (error) {
-      this.handleError(new Error(`Failed to send game action: ${error}`))
-    }
-  }
-
-  /**
-   * Start game session
-   */
-  startGame(initialGameState: GameState): void {
-    try {
-      if (!this.currentRoom) {
-        throw new Error('No room joined')
-      }
-      
-      this.currentRoom.status = 'active'
-      this.stateSync.startSync(initialGameState)
-      
-      if (LOG_NETWORK_SYNC) {
-        logNetwork('Game session started')
-      }
-      
-    } catch (error) {
-      this.handleError(new Error(`Failed to start game: ${error}`))
+      this.onErrorCallback?.(error as Error)
       throw error
     }
   }
 
-  /**
-   * End game session
-   */
-  endGame(): void {
-    try {
-      if (this.currentRoom) {
-        this.currentRoom.status = 'ended'
+  disconnectPeer(peerId: string): void {
+    this.handler.closePeerConnection(peerId)
+    this.connectionStatuses.delete(peerId)
+    this.onPeerDisconnectedCallback?.(peerId)
+  }
+
+  disconnectAll(): void {
+    this.handler.closeAllConnections()
+    this.connectionStatuses.clear()
+  }
+
+  sendChatMessage(text: string, targetPeerId?: string): void {
+    const message: ChatMessage = {
+      id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `chat_${Date.now()}`,
+      type: 'chat',
+      senderId: this.config.localPeerId,
+      timestamp: Date.now(),
+      payload: { text },
+    }
+
+    if (targetPeerId) {
+      const sent = this.handler.sendMessage(targetPeerId, message)
+      if (!sent) {
+        this.onErrorCallback?.(new Error(`Failed to send chat message to ${targetPeerId}`))
       }
-      
-      this.stateSync.stopSync()
-      if (LOG_NETWORK_SYNC) {
-        logNetwork('Game session ended')
-      }
-      
-    } catch (error) {
-      this.handleError(new Error(`Failed to end game: ${error}`))
+    } else {
+      this.handler.broadcastMessage(message)
     }
+
+    // Emit locally as well
+    this.onChatMessageCallback?.(message)
   }
 
-  /**
-   * Leave current room
-   */
-  leaveRoom(): void {
-    try {
-      if (!this.currentRoom) return
-      
-      if (LOG_NETWORK_ROOM) {
-        logNetwork(`Leaving room ${this.currentRoom.id}`)
-      }
-      
-      // Disconnect from all peers
-      const connectedPeers = this.webrtcHandler.getConnectedPeers()
-      if (connectedPeers) {
-        connectedPeers.forEach(peerId => {
-          this.disconnectFromPeer(peerId)
-        })
-      }
-      
-      // Stop all services
-      this.stateSync.stopSync()
-      this.networkMonitor.stopMonitoring()
-      this.connectionRecovery.stopAllReconnections()
-      
-      this.currentRoom = null
-      this.isHost = false
-      
-    } catch (error) {
-      this.handleError(new Error(`Failed to leave room: ${error}`))
+  broadcastSystemMessage(payload: unknown): void {
+    const message: PeerMessage = {
+      id: typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `system_${Date.now()}`,
+      type: 'system',
+      senderId: this.config.localPeerId,
+      timestamp: Date.now(),
+      payload,
     }
+
+    this.handler.broadcastMessage(message)
   }
 
-  /**
-   * Handle connection status changes
-   */
-  private handleConnectionChange(peerId: string, status: ConnectionStatus): void {
-    if (LOG_NETWORK_CONNECTION) {
-      logNetwork(`Connection status changed for peer ${peerId}: ${status}`)
-    }
-    this.onConnectionStatusCallback?.(peerId, status)
-    
-    if (status === ConnectionStatus.DISCONNECTED || status === ConnectionStatus.FAILED) {
-      this.onPlayerLeftCallback?.(peerId)
-    } else if (status === ConnectionStatus.CONNECTED) {
-      this.onPlayerJoinedCallback?.(peerId)
-    }
-  }
-
-  /**
-   * Handle network quality changes
-   */
-  private handleNetworkQualityChange(peerId: string, quality: NetworkQuality, metrics: NetworkMetrics): void {
-    if (LOG_NETWORK_CONNECTION) {
-      logNetwork(`Network quality changed for peer ${peerId}: ${quality}`)
-    }
-    this.onNetworkQualityCallback?.(peerId, quality)
-    
-    // Take action based on quality
-    if (quality === 'poor') {
-      if (LOG_NETWORK_ERROR) {
-        logNetwork(`⚠️ Poor network quality detected for peer ${peerId}`)
-      }
-      // Could implement quality-based adaptations here
-    }
-  }
-
-  /**
-   * Handle adaptive settings changes
-   */
-  private handleAdaptiveSettingsChange(settings: AdaptiveSettings): void {
-    if (LOG_NETWORK_FLOW) {
-      logNetwork('Adaptive network settings updated:', settings)
-    }
-    // Could notify the game engine about network adaptations
-  }
-
-  /**
-   * Handle state synchronization conflicts
-   */
-  private handleSyncConflict(conflict: SyncConflict): void {
-    if (LOG_NETWORK_SYNC) {
-      logNetwork('⚠️ Game state synchronization conflict detected:', conflict.conflictType)
-    }
-    // Could implement conflict resolution UI or automatic resolution
-  }
-
-  /**
-   * Handle errors
-   */
-  private handleError(error: Error): void {
-    if (LOG_NETWORK_ERROR) {
-      logNetwork('❌ P2P Manager error:', error)
-    }
-    this.onErrorCallback?.(error)
-  }
-
-  /**
-   * Generate unique room ID
-   */
-  private generateRoomId(): string {
-    return Math.random().toString(36).substring(2, 8).toUpperCase()
-  }
-
-  /**
-   * Get current room information
-   */
-  getCurrentRoom(): RoomInfo | null {
-    return this.currentRoom
-  }
-
-  /**
-   * Get connected peers
-   */
   getConnectedPeers(): string[] {
-    return this.webrtcHandler.getConnectedPeers()
+    return this.handler.getConnectedPeers()
   }
 
-  /**
-   * Get connection status for a peer
-   */
-  getConnectionStatus(peerId: string): ConnectionStatus | null {
-    return this.webrtcHandler.getConnectionStatus(peerId)
+  getConnectionStatus(peerId: string): ConnectionStatus | undefined {
+    return this.connectionStatuses.get(peerId)
   }
 
-  /**
-   * Get network statistics
-   */
-  async getNetworkStats(peerId: string) {
-    return await this.webrtcHandler.getNetworkStats(peerId)
+  getRemoteStream(peerId: string): MediaStream | null {
+    return this.handler.getRemoteStream(peerId)
   }
 
-  /**
-   * Get network quality summary
-   */
-  getNetworkSummary() {
-    return this.networkMonitor.getNetworkSummary()
+  onPeerConnected(callback: (peerId: string) => void): void {
+    this.onPeerConnectedCallback = callback
   }
 
-  /**
-   * Check if network is suitable for gameplay
-   */
-  isNetworkSuitableForGameplay(): boolean {
-    return this.networkMonitor.isNetworkSuitableForGameplay()
+  onPeerDisconnected(callback: (peerId: string) => void): void {
+    this.onPeerDisconnectedCallback = callback
   }
 
-  /**
-   * Force reconnection to all disconnected peers
-   */
-  async reconnectAll(): Promise<void> {
-    await this.connectionRecovery.reconnectAllDisconnected()
+  onChatMessage(callback: (message: ChatMessage) => void): void {
+    this.onChatMessageCallback = callback
   }
 
-  /**
-   * Update game state
-   */
-  updateGameState(gameState: GameState): void {
-    this.stateSync.updateGameState(gameState)
+  onRemoteStream(callback: (peerId: string, stream: MediaStream) => void): void {
+    this.onRemoteStreamCallback = callback
   }
 
-  /**
-   * Force state synchronization
-   */
-  forceSyncState(): void {
-    this.stateSync.forceSyncState()
-  }
-
-  // Event handler setters
-  onRoomJoined(callback: (roomInfo: RoomInfo) => void): void {
-    this.onRoomJoinedCallback = callback
-  }
-
-  onPlayerJoined(callback: (playerId: string) => void): void {
-    this.onPlayerJoinedCallback = callback
-  }
-
-  onPlayerLeft(callback: (playerId: string) => void): void {
-    this.onPlayerLeftCallback = callback
-  }
-
-  onGameAction(callback: (action: PlayerAction) => void): void {
-    this.onGameActionCallback = callback
-  }
-
-  onGameStateUpdate(callback: (gameState: GameState) => void): void {
-    this.onGameStateUpdateCallback = callback
-  }
-
-  onConnectionStatus(callback: (peerId: string, status: ConnectionStatus) => void): void {
-    this.onConnectionStatusCallback = callback
-  }
-
-  onNetworkQuality(callback: (peerId: string, quality: NetworkQuality) => void): void {
-    this.onNetworkQualityCallback = callback
+  onIceCandidate(callback: (peerId: string, candidate: RTCIceCandidate) => void): void {
+    this.onIceCandidateCallback = callback
   }
 
   onError(callback: (error: Error) => void): void {
     this.onErrorCallback = callback
   }
 
-  /**
-   * Cleanup all resources
-   */
   destroy(): void {
-    this.leaveRoom()
-    this.webrtcHandler.closeAllConnections()
+    this.disconnectAll()
+  }
+
+  private handleIncomingMessage(peerId: string, message: PeerMessage): void {
+    if (message.type === 'chat') {
+      this.onChatMessageCallback?.(message as ChatMessage)
+      return
+    }
+
+    if (message.type === 'system') {
+      // System messages are surfaced as-is to consumers
+      this.onChatMessageCallback?.(message as ChatMessage)
+      return
+    }
+  }
+
+  private handleConnectionChange(peerId: string, status: ConnectionStatus): void {
+    if (status === ConnectionStatus.CONNECTED) {
+      this.onPeerConnectedCallback?.(peerId)
+    }
+
+    if (status === ConnectionStatus.DISCONNECTED || status === ConnectionStatus.FAILED) {
+      this.onPeerDisconnectedCallback?.(peerId)
+    }
   }
 }

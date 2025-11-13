@@ -1,4 +1,6 @@
 import type { UserProfile } from '@services';
+import { EventBus } from '@/lib/eventing/EventBus'
+import { ShowScreenEvent } from '@/lib/eventing/events/lobby'
 import { GameHeader } from '@ui/components/Header/GameHeader';
 import { GameFooter } from '@ui/components/Footer/GameFooter';
 import { GameModeSelector } from './GameModeSelector';
@@ -19,6 +21,10 @@ export function WelcomeScreen({ user, onLogout, onLogoutClick }: WelcomeScreenPr
     onLogout();
   };
 
+  const handleSettingsClick = () => {
+    EventBus.instance.publish(new ShowScreenEvent('settings'))
+  };
+
   const handlePlaySinglePlayer = (config: { aiCount: number; aiModel: string }) => {
     console.log('Starting single player game...', config);
     // TODO: Navigate to single player game
@@ -32,6 +38,15 @@ export function WelcomeScreen({ user, onLogout, onLogoutClick }: WelcomeScreenPr
   return (
     <div className="welcome-screen">
       <GameHeader user={user} onLogout={handleLogout} showProfile={true} />
+      
+      {/* Settings button */}
+      <button 
+        className="settings-button"
+        onClick={handleSettingsClick}
+        title="AI Settings"
+      >
+        ⚙️ Settings
+      </button>
       
       {/* Tagline right below header */}
       <div className="tagline-section">

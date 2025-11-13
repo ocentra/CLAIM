@@ -80,7 +80,7 @@ export class ScoreCalculator {
     // Check if budget is exceeded (simplified check)
     if (budgetUsage > 1352) {
       if (LOG_GAME_ENGINE_WARN) {
-        logGameEngine(`⚠️ Player ${player.name} exceeded 1352-point budget: ${budgetUsage}`);
+        logGameEngine(`${prefix} ⚠️ Player ${player.name} exceeded 1352-point budget: ${budgetUsage}`);
       }
     }
     

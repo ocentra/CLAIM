@@ -18,8 +18,8 @@
       "@providers": ["src/providers/index.ts"],
       "@providers/*": ["src/providers/*"],
       "@constants/*": ["src/constants/*"],
+      "@types": ["src/types/index.ts"],
       "@ui/*": ["src/ui/*"],
-      "@types/*": ["src/types/*"],
       "@config/*": ["src/config/*"],
       "@assets/*": ["src/assets/*"]
     },

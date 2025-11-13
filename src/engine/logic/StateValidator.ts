@@ -211,12 +211,13 @@ export class StateValidator {
         }
         break
 
-      case GamePhase.SHOWDOWN:
+      case GamePhase.SHOWDOWN: {
         const declaredPlayers = gameState.players.filter(p => p.declaredSuit !== null)
         if (declaredPlayers.length === 0) {
           errors.push('Showdown called but no players have declared intent')
         }
         break
+      }
 
       case GamePhase.GAME_END:
         // Game should be complete
@@ -243,6 +244,7 @@ export class StateValidator {
     errors: string[], 
     warnings: string[]
   ): void {
+    void warnings
     const actionTime = action.timestamp.getTime()
     const lastActionTime = gameState.lastAction.getTime()
 
@@ -316,6 +318,7 @@ export class StateValidator {
     errors: string[],
     warnings: string[]
   ): void {
+    void warnings
     if (player.declaredSuit === null) {
       errors.push('Player must declare intent before calling showdown')
     }
@@ -332,6 +335,7 @@ export class StateValidator {
     errors: string[],
     warnings: string[]
   ): void {
+    void warnings
     if (player.declaredSuit !== null) {
       errors.push('Only undeclared players can make rebuttals')
     }
@@ -353,6 +357,7 @@ export class StateValidator {
     errors: string[],
     warnings: string[]
   ): void {
+    void warnings
     // Check for impossible actions (e.g., playing cards not in hand)
     if (action.type === 'rebuttal') {
       const data = action.data as { cards: Card[] }

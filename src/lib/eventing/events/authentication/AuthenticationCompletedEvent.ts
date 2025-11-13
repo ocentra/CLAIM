@@ -1,5 +1,5 @@
 import { EventArgsBase } from '@lib/eventing/base/EventArgsBase'
-import type { AuthPlayerData } from '@types/auth'
+import type { AuthPlayerData } from '@types'
 
 export class AuthenticationCompletedEvent<TPlayerData = AuthPlayerData> extends EventArgsBase {
   static readonly eventType = 'Authentication/Completed'

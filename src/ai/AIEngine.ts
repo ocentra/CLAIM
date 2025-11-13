@@ -5,6 +5,19 @@ import { type Player, type Card, type GameState, Suit, GamePhase } from '@/types
 env.allowLocalModels = false
 env.useBrowserCache = true
 
+type TextGenerationResult = Array<{
+  generated_text: string
+}>
+
+type TextGenerationFn = (
+  prompt: string,
+  options?: {
+    max_new_tokens?: number
+    temperature?: number
+    do_sample?: boolean
+  }
+) => Promise<TextGenerationResult>
+
 export interface AIDecision {
   action: 'pick_up' | 'decline' | 'declare_intent' | 'call_showdown' | 'rebuttal'
   data?: Record<string, unknown>
@@ -18,7 +31,7 @@ export interface AIConfig {
 }
 
 export class AIEngine {
-  private generator: unknown = null
+  private generator: TextGenerationFn | null = null
   private config: AIConfig
   private playerId: string
 
@@ -31,7 +44,7 @@ export class AIEngine {
     try {
       // Initialize the text generation pipeline
       // Using a lightweight model for game strategy decisions
-      this.generator = await pipeline('text-generation', 'Xenova/distilgpt2')
+      this.generator = (await pipeline('text-generation', 'Xenova/distilgpt2')) as TextGenerationFn
       console.log('AI engine initialized for player:', this.playerId)
     } catch (error) {
       console.error('Failed to initialize AI engine:', error)
@@ -61,7 +74,7 @@ export class AIEngine {
       const prompt = this.createGameStatePrompt(gameState, player)
       
       // Generate a decision based on the prompt
-      const output = await (this.generator as (...args: any[]) => Promise<any>)(prompt, {
+      const output = await this.generator(prompt, {
         max_new_tokens: 50,
         temperature: this.getTemperature(),
         do_sample: true

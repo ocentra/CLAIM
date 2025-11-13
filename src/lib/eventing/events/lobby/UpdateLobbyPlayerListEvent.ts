@@ -1,5 +1,5 @@
 import { EventArgsBase } from '@lib/eventing/base/EventArgsBase'
-import type { LobbyDetails } from '@types/lobby'
+import type { LobbyDetails } from '@types'
 
 export class UpdateLobbyPlayerListEvent extends EventArgsBase {
   static readonly eventType = 'Lobby/UpdateLobbyPlayerList'

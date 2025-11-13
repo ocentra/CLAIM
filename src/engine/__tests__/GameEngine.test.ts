@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { GameEngine } from '../GameEngine'
-import { GamePhase, Suit } from '@/types'
+import { GamePhase } from '@/types'
 
 describe('GameEngine', () => {
   let gameEngine: GameEngine

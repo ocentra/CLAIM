@@ -1,15 +1,19 @@
-import { PeerConnection, ConnectionStatus, NetworkMessage, NetworkStats } from '../types'
+import { ConnectionStatus } from '@/network/types'
+import type { PeerConnection, PeerMessage } from '@/network/types'
 
 export class WebRTCHandler {
   private peers: Map<string, PeerConnection> = new Map()
   private localId: string
-  private onMessageCallback?: (message: NetworkMessage) => void
+  private localStream: MediaStream | null = null
+  private onMessageCallback?: (peerId: string, message: PeerMessage) => void
   private onConnectionChangeCallback?: (peerId: string, status: ConnectionStatus) => void
+  private onRemoteStreamCallback?: (peerId: string, stream: MediaStream) => void
+  private onIceCandidateCallback?: (peerId: string, candidate: RTCIceCandidate) => void
   private configuration: RTCConfiguration
 
-  constructor(localId: string) {
+  constructor(localId: string, config?: RTCConfiguration) {
     this.localId = localId
-    this.configuration = {
+    this.configuration = config ?? {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
@@ -18,59 +22,180 @@ export class WebRTCHandler {
     }
   }
 
-  /**
-   * Create a new peer connection
-   */
+  setLocalStream(stream: MediaStream): void {
+    this.localStream = stream
+    this.peers.forEach((peer) => {
+      stream.getTracks().forEach((track) => {
+        peer.connection.addTrack(track, stream)
+      })
+    })
+  }
+
+  clearLocalStream(): void {
+    this.localStream = null
+  }
+
   async createPeerConnection(peerId: string): Promise<RTCPeerConnection> {
     const connection = new RTCPeerConnection(this.configuration)
-    
+
     const peerConnection: PeerConnection = {
       id: peerId,
       connection,
       dataChannel: null,
       status: ConnectionStatus.CONNECTING,
-      lastPing: Date.now(),
-      latency: 0,
-      quality: 'good',
+      remoteStream: null,
     }
 
-    // Set up connection event handlers
+    this.attachLocalMedia(peerConnection)
     this.setupConnectionHandlers(peerConnection)
-    
+
     this.peers.set(peerId, peerConnection)
     return connection
   }
 
-  /**
-   * Create data channel for peer-to-peer communication
-   */
-  createDataChannel(peerId: string, channelName = 'gameData'): RTCDataChannel | null {
+  createDataChannel(peerId: string, channelName = 'chat'): RTCDataChannel | null {
     const peer = this.peers.get(peerId)
     if (!peer) return null
 
     const dataChannel = peer.connection.createDataChannel(channelName, {
       ordered: true,
-      maxRetransmits: 3,
     })
 
     peer.dataChannel = dataChannel
     this.setupDataChannelHandlers(peer, dataChannel)
-    
+
     return dataChannel
   }
 
-  /**
-   * Handle incoming data channel
-   */
-  private handleIncomingDataChannel(peer: PeerConnection, event: RTCDataChannelEvent): void {
-    const dataChannel = event.channel
-    peer.dataChannel = dataChannel
-    this.setupDataChannelHandlers(peer, dataChannel)
+  async createOffer(peerId: string): Promise<RTCSessionDescriptionInit> {
+    const peer = this.peers.get(peerId)
+    if (!peer) {
+      throw new Error(`Peer ${peerId} not found`)
+    }
+
+    const offer = await peer.connection.createOffer()
+    await peer.connection.setLocalDescription(offer)
+    return offer
   }
 
-  /**
-   * Set up connection event handlers
-   */
+  async createAnswer(peerId: string): Promise<RTCSessionDescriptionInit> {
+    const peer = this.peers.get(peerId)
+    if (!peer) {
+      throw new Error(`Peer ${peerId} not found`)
+    }
+
+    const answer = await peer.connection.createAnswer()
+    await peer.connection.setLocalDescription(answer)
+    return answer
+  }
+
+  async setRemoteDescription(peerId: string, description: RTCSessionDescriptionInit): Promise<void> {
+    const peer = this.peers.get(peerId)
+    if (!peer) {
+      throw new Error(`Peer ${peerId} not found`)
+    }
+
+    // Wrap setRemoteDescription with timeout to prevent hanging
+    // WebRTC setRemoteDescription can hang in test environments without STUN/TURN
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error(`setRemoteDescription timeout for peer ${peerId}`)), 3000)
+    })
+
+    try {
+      await Promise.race([
+        peer.connection.setRemoteDescription(description),
+        timeoutPromise,
+      ])
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      console.error(`Failed to set remote description for peer ${peerId}:`, errorMessage)
+      throw error
+    }
+  }
+
+  async addIceCandidate(peerId: string, candidate: RTCIceCandidateInit): Promise<void> {
+    const peer = this.peers.get(peerId)
+    if (!peer) {
+      throw new Error(`Peer ${peerId} not found`)
+    }
+
+    await peer.connection.addIceCandidate(new RTCIceCandidate(candidate))
+  }
+
+  sendMessage(peerId: string, message: PeerMessage): boolean {
+    const peer = this.peers.get(peerId)
+    if (!peer?.dataChannel || peer.dataChannel.readyState !== 'open') {
+      return false
+    }
+
+    try {
+      peer.dataChannel.send(JSON.stringify(message))
+      return true
+    } catch (error) {
+      console.error(`Failed to send message to peer ${peerId}:`, error)
+      return false
+    }
+  }
+
+  broadcastMessage(message: PeerMessage): void {
+    this.peers.forEach((_, peerId) => {
+      this.sendMessage(peerId, message)
+    })
+  }
+
+  closePeerConnection(peerId: string): void {
+    const peer = this.peers.get(peerId)
+    if (!peer) return
+
+    peer.dataChannel?.close()
+    peer.connection.close()
+    this.peers.delete(peerId)
+  }
+
+  closeAllConnections(): void {
+    this.peers.forEach((_, peerId) => {
+      this.closePeerConnection(peerId)
+    })
+  }
+
+  getConnectionStatus(peerId: string): ConnectionStatus | null {
+    return this.peers.get(peerId)?.status ?? null
+  }
+
+  getConnectedPeers(): string[] {
+    return Array.from(this.peers.entries())
+      .filter(([, peer]) => peer.status === ConnectionStatus.CONNECTED)
+      .map(([peerId]) => peerId)
+  }
+
+  getRemoteStream(peerId: string): MediaStream | null {
+    return this.peers.get(peerId)?.remoteStream ?? null
+  }
+
+  onMessage(callback: (peerId: string, message: PeerMessage) => void): void {
+    this.onMessageCallback = callback
+  }
+
+  onConnectionChange(callback: (peerId: string, status: ConnectionStatus) => void): void {
+    this.onConnectionChangeCallback = callback
+  }
+
+  onRemoteStream(callback: (peerId: string, stream: MediaStream) => void): void {
+    this.onRemoteStreamCallback = callback
+  }
+
+  onIceCandidate(callback: (peerId: string, candidate: RTCIceCandidate) => void): void {
+    this.onIceCandidateCallback = callback
+  }
+
+  private attachLocalMedia(peer: PeerConnection): void {
+    if (!this.localStream) return
+
+    this.localStream.getTracks().forEach((track) => {
+      peer.connection.addTrack(track, this.localStream as MediaStream)
+    })
+  }
+
   private setupConnectionHandlers(peer: PeerConnection): void {
     const { connection } = peer
 
@@ -84,15 +209,25 @@ export class WebRTCHandler {
 
     connection.onicecandidate = (event) => {
       if (event.candidate) {
-        // ICE candidate should be sent through signaling server
-        this.handleIceCandidate(peer.id, event.candidate)
+        this.onIceCandidateCallback?.(peer.id, event.candidate)
+      }
+    }
+
+    connection.ontrack = (event) => {
+      const [stream] = event.streams
+      if (stream) {
+        peer.remoteStream = stream
+        this.onRemoteStreamCallback?.(peer.id, stream)
       }
     }
   }
 
-  /**
-   * Set up data channel event handlers
-   */
+  private handleIncomingDataChannel(peer: PeerConnection, event: RTCDataChannelEvent): void {
+    const dataChannel = event.channel
+    peer.dataChannel = dataChannel
+    this.setupDataChannelHandlers(peer, dataChannel)
+  }
+
   private setupDataChannelHandlers(peer: PeerConnection, dataChannel: RTCDataChannel): void {
     dataChannel.onopen = () => {
       peer.status = ConnectionStatus.CONNECTED
@@ -115,12 +250,9 @@ export class WebRTCHandler {
     }
   }
 
-  /**
-   * Handle connection state changes
-   */
   private handleConnectionStateChange(peer: PeerConnection): void {
     const state = peer.connection.iceConnectionState
-    
+
     switch (state) {
       case 'connected':
       case 'completed':
@@ -132,7 +264,7 @@ export class WebRTCHandler {
       case 'failed':
         peer.status = ConnectionStatus.FAILED
         break
-      case 'connecting':
+      default:
         peer.status = ConnectionStatus.CONNECTING
         break
     }
@@ -140,185 +272,24 @@ export class WebRTCHandler {
     this.onConnectionChangeCallback?.(peer.id, peer.status)
   }
 
-  /**
-   * Handle ICE candidates (to be sent through signaling)
-   */
-  private handleIceCandidate(peerId: string, candidate: RTCIceCandidate): void {
-    // This should be implemented to send ICE candidates through signaling server
-    console.log(`ICE candidate for peer ${peerId}:`, candidate)
-  }
-
-  /**
-   * Handle incoming messages
-   */
   private handleIncomingMessage(peer: PeerConnection, data: string): void {
     try {
-      const message: NetworkMessage = JSON.parse(data)
-      
-      // Update latency for ping/pong messages
-      if (message.type === 'pong') {
-        peer.latency = Date.now() - peer.lastPing
-        this.updateNetworkQuality(peer)
+      const message: PeerMessage = JSON.parse(data)
+
+      if (message.type === 'ping') {
+        const pong: PeerMessage = {
+          id: `pong_${Date.now()}`,
+          type: 'pong',
+          senderId: this.localId,
+          timestamp: Date.now(),
+        }
+        this.sendMessage(peer.id, pong)
         return
       }
 
-      this.onMessageCallback?.(message)
+      this.onMessageCallback?.(peer.id, message)
     } catch (error) {
       console.error('Failed to parse incoming message:', error)
     }
-  }
-
-  /**
-   * Send message to specific peer
-   */
-  sendMessage(peerId: string, message: NetworkMessage): boolean {
-    const peer = this.peers.get(peerId)
-    if (!peer?.dataChannel || peer.dataChannel.readyState !== 'open') {
-      return false
-    }
-
-    try {
-      peer.dataChannel.send(JSON.stringify(message))
-      return true
-    } catch (error) {
-      console.error(`Failed to send message to peer ${peerId}:`, error)
-      return false
-    }
-  }
-
-  /**
-   * Broadcast message to all connected peers
-   */
-  broadcastMessage(message: NetworkMessage): void {
-    this.peers.forEach((peer, peerId) => {
-      this.sendMessage(peerId, message)
-    })
-  }
-
-  /**
-   * Send ping to measure latency
-   */
-  sendPing(peerId: string): void {
-    const peer = this.peers.get(peerId)
-    if (!peer) return
-
-    peer.lastPing = Date.now()
-    const pingMessage: NetworkMessage = {
-      type: 'ping',
-      senderId: this.localId,
-      timestamp: peer.lastPing,
-      data: null,
-      messageId: `ping_${Date.now()}`,
-    }
-
-    this.sendMessage(peerId, pingMessage)
-  }
-
-  /**
-   * Update network quality based on latency
-   */
-  private updateNetworkQuality(peer: PeerConnection): void {
-    const latency = peer.latency
-    
-    if (latency < 50) {
-      peer.quality = 'excellent'
-    } else if (latency < 100) {
-      peer.quality = 'good'
-    } else if (latency < 200) {
-      peer.quality = 'fair'
-    } else {
-      peer.quality = 'poor'
-    }
-  }
-
-  /**
-   * Get network statistics for a peer
-   */
-  async getNetworkStats(peerId: string): Promise<NetworkStats | null> {
-    const peer = this.peers.get(peerId)
-    if (!peer) return null
-
-    try {
-      const stats = await peer.connection.getStats()
-      let latency = peer.latency
-      let packetLoss = 0
-      let bandwidth = 0
-      let jitter = 0
-
-      stats.forEach((report) => {
-        if (report.type === 'candidate-pair' && report.state === 'succeeded') {
-          latency = report.currentRoundTripTime * 1000 || latency
-        }
-        if (report.type === 'inbound-rtp') {
-          packetLoss = report.packetsLost || 0
-          jitter = report.jitter || 0
-        }
-        if (report.type === 'outbound-rtp') {
-          bandwidth = report.bytesSent || 0
-        }
-      })
-
-      return {
-        latency,
-        packetLoss,
-        bandwidth,
-        jitter,
-        lastUpdated: Date.now(),
-      }
-    } catch (error) {
-      console.error('Failed to get network stats:', error)
-      return null
-    }
-  }
-
-  /**
-   * Close connection to specific peer
-   */
-  closePeerConnection(peerId: string): void {
-    const peer = this.peers.get(peerId)
-    if (!peer) return
-
-    peer.dataChannel?.close()
-    peer.connection.close()
-    this.peers.delete(peerId)
-  }
-
-  /**
-   * Close all connections
-   */
-  closeAllConnections(): void {
-    this.peers.forEach((peer, peerId) => {
-      this.closePeerConnection(peerId)
-    })
-  }
-
-  /**
-   * Get connection status for a peer
-   */
-  getConnectionStatus(peerId: string): ConnectionStatus | null {
-    return this.peers.get(peerId)?.status || null
-  }
-
-  /**
-   * Get all connected peer IDs
-   */
-  getConnectedPeers(): string[] {
-    return Array.from(this.peers.entries())
-      .filter(([, peer]) => peer.status === ConnectionStatus.CONNECTED)
-      .map(([peerId]) => peerId)
-  }
-
-  /**
-   * Set message callback
-   */
-  onMessage(callback: (message: NetworkMessage) => void): void {
-    this.onMessageCallback = callback
-  }
-
-  /**
-   * Set connection change callback
-   */
-  onConnectionChange(callback: (peerId: string, status: ConnectionStatus) => void): void {
-    this.onConnectionChangeCallback = callback
   }
 }

@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { RequestModelListEvent, ModelAvailableEvent } from '@/lib/eventing/events/model';
+import { EventBus } from '@/lib/eventing/EventBus';
 import './GameModeSelector.css';
 
 interface GameModeSelectorProps {
@@ -6,17 +8,91 @@ interface GameModeSelectorProps {
   onPlayMultiplayer?: (config: { humans: number; ai: number; aiModel: string }) => void;
 }
 
+interface AvailableModel {
+  modelId: string;
+  quants: Array<{
+    path: string;
+    dtype: string;
+    status: 'available' | 'downloaded' | 'failed';
+  }>;
+}
+
 export function GameModeSelector({ onPlaySinglePlayer, onPlayMultiplayer }: GameModeSelectorProps) {
   const [aiCount, setAiCount] = useState(3);
-  const [aiModels, setAiModels] = useState(['GPT-5', 'Claude 4', 'Phi 3.5']);
+  const [aiModels, setAiModels] = useState<string[]>([]);
   const [multiplayerHumans, setMultiplayerHumans] = useState(2);
   const [multiplayerAI, setMultiplayerAI] = useState(2);
-  const [multiplayerAiModels, setMultiplayerAiModels] = useState(['GPT-5', 'Claude 4']);
+  const [multiplayerAiModels, setMultiplayerAiModels] = useState<string[]>([]);
+  const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
+  const [isLoadingModels, setIsLoadingModels] = useState(true);
+
+  // Load available models on mount
+  useEffect(() => {
+    loadAvailableModels();
+    
+    // Subscribe to model available events
+    EventBus.instance.subscribe(ModelAvailableEvent, (event) => {
+      loadAvailableModels();
+    });
+
+    return () => {
+      // Cleanup if needed
+    };
+  }, []);
+
+  const loadAvailableModels = async () => {
+    try {
+      setIsLoadingModels(true);
+      const event = new RequestModelListEvent();
+      EventBus.instance.publish(event);
+      const models = await event.deferred.promise;
+      
+      // Extract model IDs and quants for dropdown
+      const modelOptions: string[] = [];
+      models.forEach((model: AvailableModel) => {
+        // Add model with each available quant
+        model.quants.forEach((quant) => {
+          if (quant.status === 'downloaded' || quant.status === 'available') {
+            const displayName = `${model.modelId} (${quant.dtype})`;
+            modelOptions.push(displayName);
+          }
+        });
+      });
+
+      // If no models found, use default options
+      if (modelOptions.length === 0) {
+        modelOptions.push('onnx-community/Phi-3.5-mini-instruct-onnx-web (q4f16)');
+        modelOptions.push('onnx-community/Phi-3.5-mini-instruct-onnx-web (q4)');
+      }
+
+      setAvailableModels(models);
+      
+      // Initialize with first model
+      if (modelOptions.length > 0) {
+        setAiModels(Array(aiCount).fill(modelOptions[0]));
+        setMultiplayerAiModels(Array(multiplayerAI).fill(modelOptions[0]));
+      }
+    } catch (error) {
+      console.error('Failed to load models:', error);
+      // Fallback to default models
+      const defaults = [
+        'onnx-community/Phi-3.5-mini-instruct-onnx-web (q4f16)',
+        'onnx-community/Phi-3.5-mini-instruct-onnx-web (q4)',
+      ];
+      setAiModels(Array(aiCount).fill(defaults[0]));
+      setMultiplayerAiModels(Array(multiplayerAI).fill(defaults[0]));
+    } finally {
+      setIsLoadingModels(false);
+    }
+  };
 
   const handleAiCountChange = (count: number) => {
     setAiCount(count);
-    // Initialize with default models
-    setAiModels(Array(count).fill(0).map((_, i) => ['GPT-5', 'Claude 4', 'Phi 3.5'][i % 3]));
+    // Keep existing models or use first available
+    const currentModels = aiModels.length > 0 ? aiModels : availableModels.length > 0 
+      ? [availableModels[0].modelId] 
+      : ['onnx-community/Phi-3.5-mini-instruct-onnx-web (q4f16)'];
+    setAiModels(Array(count).fill(0).map((_, i) => currentModels[i % currentModels.length]));
   };
 
   const handleAiModelChange = (index: number, model: string) => {
@@ -29,7 +105,10 @@ export function GameModeSelector({ onPlaySinglePlayer, onPlayMultiplayer }: Game
     setMultiplayerHumans(count);
     const aiCount = 4 - count;
     setMultiplayerAI(aiCount);
-    setMultiplayerAiModels(Array(aiCount).fill(0).map((_, i) => ['GPT-5', 'Claude 4'][i % 2]));
+    const currentModels = multiplayerAiModels.length > 0 ? multiplayerAiModels : availableModels.length > 0 
+      ? [availableModels[0].modelId] 
+      : ['onnx-community/Phi-3.5-mini-instruct-onnx-web (q4f16)'];
+    setMultiplayerAiModels(Array(aiCount).fill(0).map((_, i) => currentModels[i % currentModels.length]));
   };
 
   const handleMultiplayerAiModelChange = (index: number, model: string) => {
@@ -40,13 +119,38 @@ export function GameModeSelector({ onPlaySinglePlayer, onPlayMultiplayer }: Game
 
   const handlePlaySinglePlayer = () => {
     console.log('Starting single player game...', { aiCount, aiModels });
-    onPlaySinglePlayer?.({ aiCount, aiModel: aiModels[0] });
+    // Extract model ID from display string (format: "modelId (quant)")
+    const modelId = aiModels[0]?.split(' (')[0] || 'onnx-community/Phi-3.5-mini-instruct-onnx-web';
+    onPlaySinglePlayer?.({ aiCount, aiModel: modelId });
   };
 
   const handlePlayMultiplayer = () => {
     console.log('Starting multiplayer game...', { humans: multiplayerHumans, ai: multiplayerAI, aiModels: multiplayerAiModels });
-    onPlayMultiplayer?.({ humans: multiplayerHumans, ai: multiplayerAI, aiModel: multiplayerAiModels[0] });
+    const modelId = multiplayerAiModels[0]?.split(' (')[0] || 'onnx-community/Phi-3.5-mini-instruct-onnx-web';
+    onPlayMultiplayer?.({ humans: multiplayerHumans, ai: multiplayerAI, aiModel: modelId });
   };
+
+  // Get model options for dropdown
+  const getModelOptions = (): string[] => {
+    const options: string[] = [];
+    availableModels.forEach((model) => {
+      model.quants.forEach((quant) => {
+        if (quant.status === 'downloaded' || quant.status === 'available') {
+          options.push(`${model.modelId} (${quant.dtype})`);
+        }
+      });
+    });
+    
+    // Add defaults if no models available
+    if (options.length === 0) {
+      options.push('onnx-community/Phi-3.5-mini-instruct-onnx-web (q4f16)');
+      options.push('onnx-community/Phi-3.5-mini-instruct-onnx-web (q4)');
+    }
+    
+    return options;
+  };
+
+  const modelOptions = getModelOptions();
 
   return (
     <div className="game-modes">
@@ -57,40 +161,41 @@ export function GameModeSelector({ onPlaySinglePlayer, onPlayMultiplayer }: Game
           <h3 className="mode-title">Single Player</h3>
         </div>
         
-            <div className="mode-config">
-              <div className="config-buttons">
-                {[1, 2, 3].map(count => (
-                  <button
-                    key={count}
-                    className={`config-option ${aiCount === count ? 'active' : ''}`}
-                    onClick={() => handleAiCountChange(count)}
-                  >
-                    {count}
-                  </button>
+        <div className="mode-config">
+          <div className="config-buttons">
+            {[1, 2, 3].map(count => (
+              <button
+                key={count}
+                className={`config-option ${aiCount === count ? 'active' : ''}`}
+                onClick={() => handleAiCountChange(count)}
+              >
+                {count}
+              </button>
+            ))}
+          </div>
+          
+          <div className="ai-models-grid">
+            {aiModels.slice(0, aiCount).map((model, index) => (
+              <select 
+                key={index}
+                className="config-select"
+                value={model}
+                onChange={(e) => handleAiModelChange(index, e.target.value)}
+                aria-label={`Select AI ${index + 1} Model`}
+                disabled={isLoadingModels}
+              >
+                {modelOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
                 ))}
-              </div>
-              
-              <div className="ai-models-grid">
-                {aiModels.slice(0, aiCount).map((model, index) => (
-                  <select 
-                    key={index}
-                    className="config-select"
-                    value={model}
-                    onChange={(e) => handleAiModelChange(index, e.target.value)}
-                    aria-label={`Select AI ${index + 1} Model`}
-                  >
-                    <option value="GPT-5">GPT-5</option>
-                    <option value="Claude 4">Claude 4</option>
-                    <option value="Phi 3.5">Phi 3.5</option>
-                    <option value="Gemini Pro">Gemini Pro</option>
-                    <option value="LLaMA 3">LLaMA 3</option>
-                  </select>
-                ))}
-              </div>
-            </div>
+              </select>
+            ))}
+          </div>
+        </div>
         
-        <button className="mode-button" onClick={handlePlaySinglePlayer}>
-          Player VS {aiModels.slice(0, aiCount).join(' | ')}
+        <button className="mode-button" onClick={handlePlaySinglePlayer} disabled={isLoadingModels}>
+          {isLoadingModels ? 'Loading Models...' : `Player VS ${aiModels.slice(0, aiCount).map(m => m.split(' (')[0]).join(' | ')}`}
         </button>
       </div>
 
@@ -101,45 +206,47 @@ export function GameModeSelector({ onPlaySinglePlayer, onPlayMultiplayer }: Game
           <h3 className="mode-title">Multiplayer</h3>
         </div>
         
-            <div className="mode-config">
-              <div className="config-buttons">
-                {[2, 3, 4].map(count => (
-                  <button
-                    key={count}
-                    className={`config-option ${multiplayerHumans === count ? 'active' : ''}`}
-                    onClick={() => handleMultiplayerHumansChange(count)}
-                  >
-                    {count}
-                  </button>
-                ))}
-              </div>
-              
-              {multiplayerAI > 0 && (
-                <div className="ai-models-grid">
-                  {multiplayerAiModels.slice(0, multiplayerAI).map((model, index) => (
-                    <select 
-                      key={index}
-                      className="config-select"
-                      value={model}
-                      onChange={(e) => handleMultiplayerAiModelChange(index, e.target.value)}
-                      aria-label={`Select AI ${index + 1} Model for multiplayer`}
-                    >
-                      <option value="GPT-5">GPT-5</option>
-                      <option value="Claude 4">Claude 4</option>
-                      <option value="Phi 3.5">Phi 3.5</option>
-                      <option value="Gemini Pro">Gemini Pro</option>
-                      <option value="LLaMA 3">LLaMA 3</option>
-                    </select>
+        <div className="mode-config">
+          <div className="config-buttons">
+            {[2, 3, 4].map(count => (
+              <button
+                key={count}
+                className={`config-option ${multiplayerHumans === count ? 'active' : ''}`}
+                onClick={() => handleMultiplayerHumansChange(count)}
+              >
+                {count}
+              </button>
+            ))}
+          </div>
+          
+          {multiplayerAI > 0 && (
+            <div className="ai-models-grid">
+              {multiplayerAiModels.slice(0, multiplayerAI).map((model, index) => (
+                <select 
+                  key={index}
+                  className="config-select"
+                  value={model}
+                  onChange={(e) => handleMultiplayerAiModelChange(index, e.target.value)}
+                  aria-label={`Select AI ${index + 1} Model for multiplayer`}
+                  disabled={isLoadingModels}
+                >
+                  {modelOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
                   ))}
-                </div>
-              )}
+                </select>
+              ))}
             </div>
+          )}
+        </div>
         
-        <button className="mode-button" onClick={handlePlayMultiplayer}>
-          {multiplayerHumans} Player{multiplayerHumans > 1 ? 's' : ''} VS {multiplayerAiModels.slice(0, multiplayerAI).join(' | ')}
+        <button className="mode-button" onClick={handlePlayMultiplayer} disabled={isLoadingModels}>
+          {isLoadingModels 
+            ? 'Loading Models...' 
+            : `${multiplayerHumans} Player${multiplayerHumans > 1 ? 's' : ''} VS ${multiplayerAiModels.slice(0, multiplayerAI).map(m => m.split(' (')[0]).join(' | ')}`}
         </button>
       </div>
     </div>
   );
 }
-

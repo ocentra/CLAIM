@@ -1,235 +1,332 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { P2PManager } from '../P2PManager'
-import { ConnectionStatus } from '../types'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { P2PManager } from '@/network/P2PManager'
+import { ConnectionStatus } from '@/network/types'
 
-// Mock the WebRTC components
-vi.mock('../connection/WebRTCHandler', () => ({
-  WebRTCHandler: vi.fn().mockImplementation(() => ({
-    onConnectionChange: vi.fn(),
-    getConnectedPeers: vi.fn().mockReturnValue([]),
-    getConnectionStatus: vi.fn().mockReturnValue(null),
-    getNetworkStats: vi.fn().mockResolvedValue(null),
-    closeAllConnections: vi.fn(),
-  }))
-}))
+type TestMessage = {
+  payload: { text: string }
+  [key: string]: unknown
+}
 
-vi.mock('../connection/ConnectionRecovery', () => ({
-  ConnectionRecovery: vi.fn().mockImplementation(() => ({
-    onReconnectionStatus: vi.fn(),
-    stopAllReconnections: vi.fn(),
-    reconnectAllDisconnected: vi.fn().mockResolvedValue(undefined),
-  }))
-}))
+type HandlerInstance = {
+  setLocalStream: ReturnType<typeof vi.fn>
+  clearLocalStream: ReturnType<typeof vi.fn>
+  createPeerConnection: ReturnType<typeof vi.fn>
+  createDataChannel: ReturnType<typeof vi.fn>
+  createOffer: ReturnType<typeof vi.fn>
+  createAnswer: ReturnType<typeof vi.fn>
+  setRemoteDescription: ReturnType<typeof vi.fn>
+  addIceCandidate: ReturnType<typeof vi.fn>
+  sendMessage: ReturnType<typeof vi.fn>
+  broadcastMessage: ReturnType<typeof vi.fn>
+  closePeerConnection: ReturnType<typeof vi.fn>
+  closeAllConnections: ReturnType<typeof vi.fn>
+  getConnectedPeers: ReturnType<typeof vi.fn>
+  getConnectionStatus: ReturnType<typeof vi.fn>
+  getRemoteStream: ReturnType<typeof vi.fn>
+  emitMessage(peerId: string, message: TestMessage): void
+  emitConnectionStatus(peerId: string, status: ConnectionStatus): void
+  emitRemoteStream(peerId: string, stream: MediaStream): void
+  emitIceCandidate(peerId: string, candidate: RTCIceCandidate): void
+}
 
-vi.mock('../connection/NetworkMonitor', () => ({
-  NetworkMonitor: vi.fn().mockImplementation(() => ({
-    onQualityChange: vi.fn(),
-    onAdaptiveChange: vi.fn(),
-    startMonitoring: vi.fn(),
-    stopMonitoring: vi.fn(),
-    getNetworkSummary: vi.fn().mockReturnValue({}),
-    isNetworkSuitableForGameplay: vi.fn().mockReturnValue(true),
-  }))
-}))
+interface HandlerState {
+  instances: HandlerInstance[]
+  getLatest(): HandlerInstance
+  reset(): void
+}
 
-vi.mock('../connection/StateSync', () => ({
-  StateSync: vi.fn().mockImplementation(() => ({
-    onStateSync: vi.fn(),
-    onAction: vi.fn(),
-    onConflict: vi.fn(),
-    startSync: vi.fn(),
-    stopSync: vi.fn(),
-    broadcastAction: vi.fn(),
-    updateGameState: vi.fn(),
-    forceSyncState: vi.fn(),
-  }))
-}))
+function ensureHandlerState(): HandlerState {
+  const key = '__p2pHandlerState__'
+  const globalAny = globalThis as Record<string, unknown>
+
+  if (!globalAny[key]) {
+    const state: HandlerState = {
+      instances: [],
+      getLatest() {
+        const instance = this.instances[this.instances.length - 1]
+        if (!instance) {
+          throw new Error('No handler instance available')
+        }
+        return instance
+      },
+      reset() {
+        this.instances.length = 0
+      },
+    }
+    globalAny[key] = state
+  }
+
+  return globalAny[key] as HandlerState
+}
+
+vi.mock('../connection/WebRTCHandler', () => {
+  const state = ensureHandlerState()
+
+  class MockWebRTCHandler {
+    public setLocalStream!: ReturnType<typeof vi.fn>
+    public clearLocalStream!: ReturnType<typeof vi.fn>
+    public createPeerConnection!: ReturnType<typeof vi.fn>
+    public createDataChannel!: ReturnType<typeof vi.fn>
+    public createOffer!: ReturnType<typeof vi.fn>
+    public createAnswer!: ReturnType<typeof vi.fn>
+    public setRemoteDescription!: ReturnType<typeof vi.fn>
+    public addIceCandidate!: ReturnType<typeof vi.fn>
+    public sendMessage!: ReturnType<typeof vi.fn>
+    public broadcastMessage!: ReturnType<typeof vi.fn>
+    public closePeerConnection!: ReturnType<typeof vi.fn>
+    public closeAllConnections!: ReturnType<typeof vi.fn>
+    public getConnectedPeers!: ReturnType<typeof vi.fn>
+    public getConnectionStatus!: ReturnType<typeof vi.fn>
+    public getRemoteStream!: ReturnType<typeof vi.fn>
+
+    private localStream: unknown = null
+    private readonly connectedPeers = new Set<string>()
+    private readonly remoteStreams = new Map<string, MediaStream>()
+    private messageCallback?: (peerId: string, message: TestMessage) => void
+    private connectionCallback?: (peerId: string, status: ConnectionStatus) => void
+    private remoteStreamCallback?: (peerId: string, stream: MediaStream) => void
+    private iceCandidateCallback?: (peerId: string, candidate: RTCIceCandidate) => void
+
+    constructor() {
+      this.setLocalStream = vi.fn((stream: unknown) => {
+        this.localStream = stream
+      })
+
+      this.clearLocalStream = vi.fn(() => {
+        this.localStream = null
+      })
+
+      this.createPeerConnection = vi.fn(async (peerId: string) => {
+        this.connectedPeers.add(peerId)
+      })
+
+      this.createDataChannel = vi.fn(() => undefined)
+
+      this.createOffer = vi.fn(async (peerId: string) => ({ type: 'offer', sdp: `offer-${peerId}` }))
+
+      this.createAnswer = vi.fn(async (peerId: string) => ({ type: 'answer', sdp: `answer-${peerId}` }))
+
+      this.setRemoteDescription = vi.fn(async () => undefined)
+
+      this.addIceCandidate = vi.fn(async () => undefined)
+
+      this.sendMessage = vi.fn(() => true)
+
+      this.broadcastMessage = vi.fn(() => undefined)
+
+      this.closePeerConnection = vi.fn((peerId: string) => {
+        this.connectedPeers.delete(peerId)
+      })
+
+      this.closeAllConnections = vi.fn(() => {
+        this.connectedPeers.clear()
+      })
+
+      this.getConnectedPeers = vi.fn(() => Array.from(this.connectedPeers))
+
+      this.getConnectionStatus = vi.fn((peerId: string) =>
+        this.connectedPeers.has(peerId) ? ConnectionStatus.CONNECTED : ConnectionStatus.DISCONNECTED,
+      )
+
+      this.getRemoteStream = vi.fn((peerId: string) => this.remoteStreams.get(peerId) ?? null)
+
+      this.onMessage = vi.fn((callback: (peerId: string, message: TestMessage) => void) => {
+        this.messageCallback = callback
+      })
+
+      this.onConnectionChange = vi.fn((callback: (peerId: string, status: ConnectionStatus) => void) => {
+        this.connectionCallback = callback
+      })
+
+      this.onRemoteStream = vi.fn((callback: (peerId: string, stream: MediaStream) => void) => {
+        this.remoteStreamCallback = callback
+      })
+
+      this.onIceCandidate = vi.fn((callback: (peerId: string, candidate: RTCIceCandidate) => void) => {
+        this.iceCandidateCallback = callback
+      })
+
+      state.instances.push(this as unknown as HandlerInstance)
+    }
+
+    onMessage!: ReturnType<typeof vi.fn>
+    onConnectionChange!: ReturnType<typeof vi.fn>
+    onRemoteStream!: ReturnType<typeof vi.fn>
+    onIceCandidate!: ReturnType<typeof vi.fn>
+
+    emitMessage(peerId: string, message: TestMessage): void {
+      this.messageCallback?.(peerId, message)
+    }
+
+    emitConnectionStatus(peerId: string, status: ConnectionStatus): void {
+      if (status === ConnectionStatus.CONNECTED) {
+        this.connectedPeers.add(peerId)
+      } else {
+        this.connectedPeers.delete(peerId)
+      }
+      this.connectionCallback?.(peerId, status)
+    }
+
+    emitRemoteStream(peerId: string, stream: MediaStream): void {
+      this.remoteStreams.set(peerId, stream)
+      this.remoteStreamCallback?.(peerId, stream)
+    }
+
+    emitIceCandidate(peerId: string, candidate: RTCIceCandidate): void {
+      this.iceCandidateCallback?.(peerId, candidate)
+    }
+  }
+
+  return { WebRTCHandler: MockWebRTCHandler }
+})
+
+function latestHandler(): HandlerInstance {
+  return ensureHandlerState().getLatest()
+}
 
 describe('P2PManager', () => {
-  let p2pManager: P2PManager
-  const localPlayerId = 'local-player-id'
+  const localPeerId = 'local-peer'
+  let manager: P2PManager
 
   beforeEach(() => {
-    p2pManager = new P2PManager({
-      localPlayerId,
-      maxPeers: 4,
-      enableNetworkMonitoring: true,
-      enableAutoReconnect: true,
-    })
+    vi.clearAllMocks()
+    ensureHandlerState().reset()
+    manager = new P2PManager({ localPeerId })
   })
 
-  describe('createRoom', () => {
-    it('should create a new room and return room ID', async () => {
-      const roomConfig = {
-        maxPlayers: 4,
-        isPrivate: false,
-        gameSettings: { allowSpectators: true },
-      }
+  it('sets and clears the local media stream', () => {
+    const handler = latestHandler()
+    const stream = { id: 'stream' } as unknown as MediaStream
+    manager.setLocalStream(stream)
+    expect(handler.setLocalStream).toHaveBeenCalledWith(stream)
 
-      const roomId = await p2pManager.createRoom(roomConfig)
-
-      expect(roomId).toBeDefined()
-      expect(typeof roomId).toBe('string')
-      expect(roomId.length).toBe(6) // Generated room ID length
-      
-      const currentRoom = p2pManager.getCurrentRoom()
-      expect(currentRoom).toBeDefined()
-      expect(currentRoom?.id).toBe(roomId)
-      expect(currentRoom?.hostId).toBe(localPlayerId)
-      expect(currentRoom?.config).toEqual(roomConfig)
-    })
-
-    it('should set host status when creating room', async () => {
-      const roomConfig = {
-        maxPlayers: 4,
-        isPrivate: false,
-        gameSettings: { allowSpectators: true },
-      }
-
-      await p2pManager.createRoom(roomConfig)
-
-      const currentRoom = p2pManager.getCurrentRoom()
-      expect(currentRoom?.hostId).toBe(localPlayerId)
-    })
+    manager.clearLocalStream()
+    expect(handler.clearLocalStream).toHaveBeenCalled()
   })
 
-  describe('joinRoom', () => {
-    it('should join an existing room', async () => {
-      const roomId = 'TEST123'
+  it('creates an offer when initiating a connection', async () => {
+    const handler = latestHandler()
+    handler.createOffer.mockResolvedValueOnce({ type: 'offer', sdp: 'custom-offer' })
 
-      await p2pManager.joinRoom(roomId)
+    const offer = await manager.createOffer('peer-1')
 
-      const currentRoom = p2pManager.getCurrentRoom()
-      expect(currentRoom).toBeDefined()
-      expect(currentRoom?.id).toBe(roomId)
-      expect(currentRoom?.playerIds).toContain(localPlayerId)
-    })
-
-    it('should not be host when joining room', async () => {
-      const roomId = 'TEST123'
-
-      await p2pManager.joinRoom(roomId)
-
-      const currentRoom = p2pManager.getCurrentRoom()
-      expect(currentRoom?.hostId).not.toBe(localPlayerId)
-    })
+    expect(handler.createPeerConnection).toHaveBeenCalledWith('peer-1')
+    expect(handler.createDataChannel).toHaveBeenCalledWith('peer-1')
+    expect(handler.createOffer).toHaveBeenCalledWith('peer-1')
+    expect(offer).toEqual({ type: 'offer', sdp: 'custom-offer' })
   })
 
-  describe('leaveRoom', () => {
-    it('should leave current room and clean up', async () => {
-      // First create a room
-      const roomConfig = {
-        maxPlayers: 4,
-        isPrivate: false,
-        gameSettings: { allowSpectators: true },
-      }
-      await p2pManager.createRoom(roomConfig)
+  it('handles an incoming offer and returns an answer', async () => {
+    const handler = latestHandler()
+    handler.createAnswer.mockResolvedValueOnce({ type: 'answer', sdp: 'custom-answer' })
 
-      // Verify room exists
-      expect(p2pManager.getCurrentRoom()).toBeDefined()
+    const answer = await manager.handleOffer('peer-2', { type: 'offer', sdp: 'incoming' })
 
-      // Leave room
-      p2pManager.leaveRoom()
-
-      // Verify cleanup
-      expect(p2pManager.getCurrentRoom()).toBeNull()
-    })
+    expect(handler.createPeerConnection).toHaveBeenCalledWith('peer-2')
+    expect(handler.setRemoteDescription).toHaveBeenCalledWith('peer-2', { type: 'offer', sdp: 'incoming' })
+    expect(handler.createAnswer).toHaveBeenCalledWith('peer-2')
+    expect(answer).toEqual({ type: 'answer', sdp: 'custom-answer' })
   })
 
-  describe('event callbacks', () => {
-    it('should call room joined callback when room is created', async () => {
-      const callback = vi.fn()
-      p2pManager.onRoomJoined(callback)
-
-      const roomConfig = {
-        maxPlayers: 4,
-        isPrivate: false,
-        gameSettings: { allowSpectators: true },
-      }
-
-      await p2pManager.createRoom(roomConfig)
-
-      expect(callback).toHaveBeenCalled()
-      const callArgs = callback.mock.calls[0][0]
-      expect(callArgs.hostId).toBe(localPlayerId)
-    })
-
-    it('should call error callback when error occurs', () => {
-      const errorCallback = vi.fn()
-      p2pManager.onError(errorCallback)
-
-      // Trigger an error by trying to connect without a room
-      expect(() => {
-        p2pManager.sendGameAction({
-          type: 'declare_intent',
-          playerId: localPlayerId,
-          timestamp: new Date(),
-        })
-      }).not.toThrow() // Should handle gracefully
-
-      // Error callback should be called
-      expect(errorCallback).toHaveBeenCalled()
-    })
+  it('handles an incoming answer', async () => {
+    const handler = latestHandler()
+    await manager.handleAnswer('peer-3', { type: 'answer', sdp: 'remote' })
+    expect(handler.setRemoteDescription).toHaveBeenCalledWith('peer-3', { type: 'answer', sdp: 'remote' })
   })
 
-  describe('game actions', () => {
-    it('should handle game actions when room is active', async () => {
-      // Create room first
-      const roomConfig = {
-        maxPlayers: 4,
-        isPrivate: false,
-        gameSettings: { allowSpectators: true },
-      }
-      await p2pManager.createRoom(roomConfig)
-
-      const testAction = {
-        type: 'declare_intent' as const,
-        playerId: localPlayerId,
-        data: { suit: 'spades' },
-        timestamp: new Date(),
-      }
-
-      // Should not throw when sending action
-      expect(() => {
-        p2pManager.sendGameAction(testAction)
-      }).not.toThrow()
-    })
+  it('adds an ICE candidate', async () => {
+    const handler = latestHandler()
+    await manager.addIceCandidate('peer-4', { candidate: 'test', sdpMid: '0', sdpMLineIndex: 0 })
+    expect(handler.addIceCandidate).toHaveBeenCalled()
   })
 
-  describe('utility methods', () => {
-    it('should return empty array for connected peers initially', () => {
-      const connectedPeers = p2pManager.getConnectedPeers()
-      expect(connectedPeers).toEqual([])
-    })
+  it('sends a broadcast chat message', () => {
+    const handler = latestHandler()
+    const listener = vi.fn()
+    manager.onChatMessage(listener)
 
-    it('should return null for connection status of non-existent peer', () => {
-      const status = p2pManager.getConnectionStatus('non-existent-peer')
-      expect(status).toBeNull()
-    })
+    manager.sendChatMessage('hello world')
 
-    it('should check network suitability', () => {
-      const suitable = p2pManager.isNetworkSuitableForGameplay()
-      expect(typeof suitable).toBe('boolean')
-    })
+    expect(handler.broadcastMessage).toHaveBeenCalled()
+    expect(listener).toHaveBeenCalled()
+    expect((listener.mock.calls[0][0] as TestMessage).payload.text).toBe('hello world')
   })
 
-  describe('cleanup', () => {
-    it('should clean up resources when destroyed', async () => {
-      // Create room first
-      const roomConfig = {
-        maxPlayers: 4,
-        isPrivate: false,
-        gameSettings: { allowSpectators: true },
-      }
-      await p2pManager.createRoom(roomConfig)
+  it('sends a direct chat message to a peer', () => {
+    const handler = latestHandler()
+    manager.sendChatMessage('hi', 'peer-5')
+    expect(handler.sendMessage).toHaveBeenCalledWith('peer-5', expect.objectContaining({ payload: { text: 'hi' } }))
+  })
 
-      // Destroy should not throw
-      expect(() => {
-        p2pManager.destroy()
-      }).not.toThrow()
+  it('disconnects from a peer', () => {
+    const handler = latestHandler()
+    manager.disconnectPeer('peer-6')
+    expect(handler.closePeerConnection).toHaveBeenCalledWith('peer-6')
+  })
 
-      // Room should be null after destroy
-      expect(p2pManager.getCurrentRoom()).toBeNull()
+  it('disconnects from all peers', () => {
+    const handler = latestHandler()
+    manager.disconnectAll()
+    expect(handler.closeAllConnections).toHaveBeenCalled()
+  })
+
+  it('emits peer connection events', () => {
+    const handler = latestHandler()
+    const connected = vi.fn()
+    const disconnected = vi.fn()
+    manager.onPeerConnected(connected)
+    manager.onPeerDisconnected(disconnected)
+
+    handler.emitConnectionStatus('peer-7', ConnectionStatus.CONNECTED)
+    expect(connected).toHaveBeenCalledWith('peer-7')
+
+    handler.emitConnectionStatus('peer-7', ConnectionStatus.DISCONNECTED)
+    expect(disconnected).toHaveBeenCalledWith('peer-7')
+  })
+
+  it('emits chat messages received over the data channel', () => {
+    const handler = latestHandler()
+    const listener = vi.fn()
+    manager.onChatMessage(listener)
+
+    handler.emitMessage('peer-8', {
+      id: 'chat-1',
+      type: 'chat',
+      senderId: 'peer-8',
+      timestamp: Date.now(),
+      payload: { text: 'incoming' },
     })
+
+    expect(listener).toHaveBeenCalled()
+    expect((listener.mock.calls[0][0] as TestMessage).payload.text).toBe('incoming')
+  })
+
+  it('emits remote media streams', () => {
+    const handler = latestHandler()
+    const listener = vi.fn()
+    manager.onRemoteStream(listener)
+    const stream = { id: 'stream' } as unknown as MediaStream
+
+    handler.emitRemoteStream('peer-9', stream)
+
+    expect(listener).toHaveBeenCalledWith('peer-9', stream)
+  })
+
+  it('forwards ICE candidates to listeners', () => {
+    const handler = latestHandler()
+    const listener = vi.fn()
+    manager.onIceCandidate(listener)
+    const candidate = { candidate: 'test', sdpMid: '0', sdpMLineIndex: 0 } as RTCIceCandidate
+
+    handler.emitIceCandidate('peer-10', candidate)
+
+    expect(listener).toHaveBeenCalledWith('peer-10', candidate)
+  })
+
+  it('cleans up resources on destroy', () => {
+    const handler = latestHandler()
+    expect(() => manager.destroy()).not.toThrow()
+    expect(handler.closeAllConnections).toHaveBeenCalled()
   })
 })
+

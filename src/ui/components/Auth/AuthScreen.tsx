@@ -1,6 +1,10 @@
+import { useState, useEffect } from 'react'
 import type { UserProfile } from '@services';
+import { EventBus } from '@/lib/eventing/EventBus'
+import { ShowScreenEvent } from '@/lib/eventing/events/lobby'
 import LoginDialog from './LoginDialog';
 import { WelcomeScreen } from '@ui/components/Welcome/WelcomeScreen';
+import { SettingsPage } from '@/ui/pages/Settings/SettingsPage'
 
 interface AuthScreenProps {
   isAuthenticated: boolean;
@@ -31,7 +35,27 @@ export function AuthScreen({
   onLogoutClick,
   onTabSwitch,
 }: AuthScreenProps) {
+  const [currentScreen, setCurrentScreen] = useState<'welcome' | 'settings'>('welcome')
+
+  useEffect(() => {
+    const handleShowScreen = (event: ShowScreenEvent) => {
+      if (event.screen === 'settings' || event.screen === 'welcome') {
+        setCurrentScreen(event.screen)
+      }
+    }
+
+    EventBus.instance.subscribe(ShowScreenEvent, handleShowScreen)
+
+    return () => {
+      EventBus.instance.unsubscribe(ShowScreenEvent, handleShowScreen as any)
+    }
+  }, [])
+
   if (isAuthenticated) {
+    if (currentScreen === 'settings') {
+      return <SettingsPage />
+    }
+    
     return (
       <WelcomeScreen
         user={user}

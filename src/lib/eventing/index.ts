@@ -1,3 +1,8 @@
+import { globalServiceContainer } from '@lib/core';
+import { registerEventingServices } from './serviceKeys';
+
+registerEventingServices(globalServiceContainer);
+
 export * from './EventBus';
 export * from './EventRegistrar';
 export * from './OperationResult';
@@ -17,4 +22,5 @@ export {
   type Deferred,
   type OperationDeferred,
 } from './internal';
+export * from './serviceKeys';
 

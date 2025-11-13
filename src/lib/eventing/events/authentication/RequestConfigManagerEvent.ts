@@ -1,6 +1,6 @@
 import { EventArgsBase } from '@lib/eventing/base/EventArgsBase'
 import { createOperationDeferred, type OperationDeferred } from '@lib/eventing'
-import type { ConfigManager, ManagerReference } from '@types/auth'
+import type { ConfigManager, ManagerReference } from '@types'
 
 export class RequestConfigManagerEvent<TManager = ConfigManager> extends EventArgsBase {
   static readonly eventType = 'Authentication/RequestConfigManager'

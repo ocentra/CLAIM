@@ -1,4 +1,4 @@
-import { type GameState, type Player, type PlayerAction, GamePhase } from '@/types'
+import { type GameState, type PlayerAction, GamePhase, Suit } from '@/types'
 
 export interface TurnState {
   currentPlayer: number
@@ -99,7 +99,7 @@ export class TurnManager {
 
   private processDeclineAction(
     gameState: GameState, 
-    action: PlayerAction, 
+    _action: PlayerAction, 
     updates: Partial<GameState>
   ): Partial<GameState> {
     // Move floor card to discard pile
@@ -124,12 +124,12 @@ export class TurnManager {
     action: PlayerAction, 
     updates: Partial<GameState>
   ): Partial<GameState> {
-    const { suit } = action.data as { suit: string }
+    const { suit } = action.data as { suit: Suit }
     
     // Update player's declared suit
     const updatedPlayers = gameState.players.map(p => 
       p.id === action.playerId 
-        ? { ...p, declaredSuit: suit as any }
+        ? { ...p, declaredSuit: suit }
         : p
     )
 

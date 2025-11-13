@@ -1,297 +1,173 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { GameState, PlayerAction } from '@types/game'
 import {
   P2PManager,
   type P2PManagerConfig,
-  type RoomInfo,
+  type ChatMessage,
   type ConnectionStatus,
-  type NetworkQuality,
-  type RoomConfig,
 } from '@/network'
 
 export interface UseP2PNetworkingOptions {
-  localPlayerId: string
-  enableNetworkMonitoring?: boolean
-  enableAutoReconnect?: boolean
-  maxPeers?: number
+  localPeerId: string
+  rtcConfiguration?: RTCConfiguration
 }
 
 export interface P2PNetworkingState {
-  isConnected: boolean
-  currentRoom: RoomInfo | null
   connectedPeers: string[]
   connectionStatuses: Record<string, ConnectionStatus>
-  networkQualities: Record<string, NetworkQuality>
-  isHost: boolean
+  remoteStreams: Record<string, MediaStream>
+  messages: ChatMessage[]
   error: Error | null
 }
 
 export function useP2PNetworking(options: UseP2PNetworkingOptions) {
   const [state, setState] = useState<P2PNetworkingState>({
-    isConnected: false,
-    currentRoom: null,
     connectedPeers: [],
     connectionStatuses: {},
-    networkQualities: {},
-    isHost: false,
+    remoteStreams: {},
+    messages: [],
     error: null,
   })
 
-  const p2pManagerRef = useRef<P2PManager | null>(null)
+  const managerRef = useRef<P2PManager | null>(null)
 
-  // Initialize P2P Manager
   useEffect(() => {
     const config: P2PManagerConfig = {
-      localPlayerId: options.localPlayerId,
-      maxPeers: options.maxPeers || 4,
-      enableNetworkMonitoring: options.enableNetworkMonitoring ?? true,
-      enableAutoReconnect: options.enableAutoReconnect ?? true,
+      localPeerId: options.localPeerId,
+      rtcConfiguration: options.rtcConfiguration,
     }
 
-    const p2pManager = new P2PManager(config)
-    p2pManagerRef.current = p2pManager
+    const manager = new P2PManager(config)
+    managerRef.current = manager
 
-    // Set up event handlers
-    p2pManager.onRoomJoined((roomInfo) => {
+    manager.onPeerConnected((peerId) => {
       setState(prev => ({
         ...prev,
-        currentRoom: roomInfo,
-        isHost: roomInfo.hostId === options.localPlayerId,
-        isConnected: true,
-        error: null,
+        connectedPeers: [...new Set([...prev.connectedPeers, peerId])],
       }))
     })
 
-    p2pManager.onPlayerJoined((playerId) => {
+    manager.onPeerDisconnected((peerId) => {
+      setState(prev => {
+        const restStatus = { ...prev.connectionStatuses }
+        delete restStatus[peerId]
+
+        const restStreams = { ...prev.remoteStreams }
+        delete restStreams[peerId]
+
+        return {
+          ...prev,
+          connectedPeers: prev.connectedPeers.filter(id => id !== peerId),
+          connectionStatuses: restStatus,
+          remoteStreams: restStreams,
+        }
+      })
+    })
+
+    manager.onChatMessage((message) => {
       setState(prev => ({
         ...prev,
-        connectedPeers: [...prev.connectedPeers.filter(id => id !== playerId), playerId],
+        messages: [...prev.messages, message],
       }))
     })
 
-    p2pManager.onPlayerLeft((playerId) => {
+    manager.onRemoteStream((peerId, stream) => {
       setState(prev => ({
         ...prev,
-        connectedPeers: prev.connectedPeers.filter(id => id !== playerId),
-        connectionStatuses: Object.fromEntries(
-          Object.entries(prev.connectionStatuses).filter(([id]) => id !== playerId)
-        ),
-        networkQualities: Object.fromEntries(
-          Object.entries(prev.networkQualities).filter(([id]) => id !== playerId)
-        ),
-      }))
-    })
-
-    p2pManager.onConnectionStatus((peerId, status) => {
-      setState(prev => ({
-        ...prev,
-        connectionStatuses: {
-          ...prev.connectionStatuses,
-          [peerId]: status,
+        remoteStreams: {
+          ...prev.remoteStreams,
+          [peerId]: stream,
         },
       }))
     })
 
-    p2pManager.onNetworkQuality((peerId, quality) => {
-      setState(prev => ({
-        ...prev,
-        networkQualities: {
-          ...prev.networkQualities,
-          [peerId]: quality,
-        },
-      }))
-    })
-
-    p2pManager.onError((error) => {
+    manager.onError((error) => {
       setState(prev => ({
         ...prev,
         error,
       }))
     })
 
-    // Cleanup on unmount
     return () => {
-      p2pManager.destroy()
+      manager.destroy()
+      managerRef.current = null
     }
-  }, [options.localPlayerId, options.maxPeers, options.enableNetworkMonitoring, options.enableAutoReconnect])
+  }, [options.localPeerId, options.rtcConfiguration])
 
-  // Create room
-  const createRoom = useCallback(async (roomConfig: RoomConfig): Promise<string> => {
-    if (!p2pManagerRef.current) {
+  const withManager = useCallback(<T,>(fn: (manager: P2PManager) => T): T => {
+    const manager = managerRef.current
+    if (!manager) {
       throw new Error('P2P Manager not initialized')
     }
-    
-    try {
-      const roomId = await p2pManagerRef.current.createRoom(roomConfig)
-      return roomId
-    } catch (error) {
-      setState(prev => ({ ...prev, error: error as Error }))
-      throw error
-    }
+    return fn(manager)
   }, [])
 
-  // Join room
-  const joinRoom = useCallback(async (roomId: string): Promise<void> => {
-    if (!p2pManagerRef.current) {
-      throw new Error('P2P Manager not initialized')
-    }
-    
-    try {
-      await p2pManagerRef.current.joinRoom(roomId)
-    } catch (error) {
-      setState(prev => ({ ...prev, error: error as Error }))
-      throw error
-    }
-  }, [])
+  const setLocalStream = useCallback((stream: MediaStream) => {
+    withManager(manager => manager.setLocalStream(stream))
+  }, [withManager])
 
-  // Leave room
-  const leaveRoom = useCallback(() => {
-    if (!p2pManagerRef.current) return
-    
-    p2pManagerRef.current.leaveRoom()
+  const clearLocalStream = useCallback(() => {
+    withManager(manager => manager.clearLocalStream())
+  }, [withManager])
+
+  const createOffer = useCallback(async (peerId: string) => {
+    return await withManager(manager => manager.createOffer(peerId))
+  }, [withManager])
+
+  const handleOffer = useCallback(async (peerId: string, offer: RTCSessionDescriptionInit) => {
+    return await withManager(manager => manager.handleOffer(peerId, offer))
+  }, [withManager])
+
+  const handleAnswer = useCallback(async (peerId: string, answer: RTCSessionDescriptionInit) => {
+    await withManager(manager => manager.handleAnswer(peerId, answer))
+  }, [withManager])
+
+  const addIceCandidate = useCallback(async (peerId: string, candidate: RTCIceCandidateInit) => {
+    await withManager(manager => manager.addIceCandidate(peerId, candidate))
+  }, [withManager])
+
+  const sendChatMessage = useCallback((text: string, peerId?: string) => {
+    withManager(manager => manager.sendChatMessage(text, peerId))
+  }, [withManager])
+
+  const disconnectPeer = useCallback((peerId: string) => {
+    withManager(manager => manager.disconnectPeer(peerId))
+  }, [withManager])
+
+  const disconnectAll = useCallback(() => {
+    withManager(manager => manager.disconnectAll())
     setState(prev => ({
       ...prev,
-      isConnected: false,
-      currentRoom: null,
       connectedPeers: [],
       connectionStatuses: {},
-      networkQualities: {},
-      isHost: false,
-      error: null,
+      remoteStreams: {},
     }))
-  }, [])
+  }, [withManager])
 
-  // Connect to peer
-  const connectToPeer = useCallback(async (peerId: string): Promise<void> => {
-    if (!p2pManagerRef.current) {
-      throw new Error('P2P Manager not initialized')
-    }
-    
-    try {
-      await p2pManagerRef.current.connectToPeer(peerId)
-    } catch (error) {
-      setState(prev => ({ ...prev, error: error as Error }))
-      throw error
-    }
-  }, [])
+  const getConnectionStatus = useCallback((peerId: string) => {
+    return withManager(manager => manager.getConnectionStatus(peerId))
+  }, [withManager])
 
-  // Disconnect from peer
-  const disconnectFromPeer = useCallback((peerId: string) => {
-    if (!p2pManagerRef.current) return
-    
-    p2pManagerRef.current.disconnectFromPeer(peerId)
-  }, [])
+  const getRemoteStream = useCallback((peerId: string) => {
+    return withManager(manager => manager.getRemoteStream(peerId))
+  }, [withManager])
 
-  // Send game action
-  const sendGameAction = useCallback((action: PlayerAction) => {
-    if (!p2pManagerRef.current) {
-      throw new Error('P2P Manager not initialized')
-    }
-    
-    p2pManagerRef.current.sendGameAction(action)
-  }, [])
-
-  // Start game
-  const startGame = useCallback((initialGameState: GameState) => {
-    if (!p2pManagerRef.current) {
-      throw new Error('P2P Manager not initialized')
-    }
-    
-    p2pManagerRef.current.startGame(initialGameState)
-  }, [])
-
-  // End game
-  const endGame = useCallback(() => {
-    if (!p2pManagerRef.current) return
-    
-    p2pManagerRef.current.endGame()
-  }, [])
-
-  // Update game state
-  const updateGameState = useCallback((gameState: GameState) => {
-    if (!p2pManagerRef.current) return
-    
-    p2pManagerRef.current.updateGameState(gameState)
-  }, [])
-
-  // Force state sync
-  const forceSyncState = useCallback(() => {
-    if (!p2pManagerRef.current) return
-    
-    p2pManagerRef.current.forceSyncState()
-  }, [])
-
-  // Reconnect all
-  const reconnectAll = useCallback(async () => {
-    if (!p2pManagerRef.current) return
-    
-    try {
-      await p2pManagerRef.current.reconnectAll()
-    } catch (error) {
-      setState(prev => ({ ...prev, error: error as Error }))
-    }
-  }, [])
-
-  // Get network stats
-  const getNetworkStats = useCallback(async (peerId: string) => {
-    if (!p2pManagerRef.current) return null
-    
-    return await p2pManagerRef.current.getNetworkStats(peerId)
-  }, [])
-
-  // Check network suitability
-  const isNetworkSuitableForGameplay = useCallback((): boolean => {
-    if (!p2pManagerRef.current) return false
-    
-    return p2pManagerRef.current.isNetworkSuitableForGameplay()
-  }, [])
-
-  // Clear error
-  const clearError = useCallback(() => {
-    setState(prev => ({ ...prev, error: null }))
-  }, [])
-
-  // Set up game action listener
-  const onGameAction = useCallback((callback: (action: PlayerAction) => void) => {
-    if (!p2pManagerRef.current) return
-    
-    p2pManagerRef.current.onGameAction(callback)
-  }, [])
-
-  // Set up game state update listener
-  const onGameStateUpdate = useCallback((callback: (gameState: GameState) => void) => {
-    if (!p2pManagerRef.current) return
-    
-    p2pManagerRef.current.onGameStateUpdate(callback)
-  }, [])
+  const onIceCandidate = useCallback((callback: (peerId: string, candidate: RTCIceCandidate) => void) => {
+    withManager(manager => manager.onIceCandidate(callback))
+  }, [withManager])
 
   return {
-    // State
-    ...state,
-    
-    // Actions
-    createRoom,
-    joinRoom,
-    leaveRoom,
-    connectToPeer,
-    disconnectFromPeer,
-    sendGameAction,
-    startGame,
-    endGame,
-    updateGameState,
-    forceSyncState,
-    reconnectAll,
-    
-    // Utilities
-    getNetworkStats,
-    isNetworkSuitableForGameplay,
-    clearError,
-    
-    // Event listeners
-    onGameAction,
-    onGameStateUpdate,
-    
-    // Direct access to manager (for advanced usage)
-    p2pManager: p2pManagerRef.current,
+    state,
+    setLocalStream,
+    clearLocalStream,
+    createOffer,
+    handleOffer,
+    handleAnswer,
+    addIceCandidate,
+    sendChatMessage,
+    disconnectPeer,
+    disconnectAll,
+    getConnectionStatus,
+    getRemoteStream,
+    onIceCandidate,
   }
 }

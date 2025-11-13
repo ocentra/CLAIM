@@ -1,2 +1,5 @@
 export * from './game'
 export * from './ui'
+export * from './auth'
+export * from './lobby'
+export * from './game-events'

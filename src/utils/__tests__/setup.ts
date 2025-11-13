@@ -1,87 +1,70 @@
 import { vi } from 'vitest'
 
-// Mock IndexedDB
-const mockIDBRequest = {
-  result: null,
-  error: null,
-  onsuccess: null,
-  onerror: null,
-  readyState: 'done',
-}
+type MockOpenRequest = Partial<IDBOpenDBRequest> & { readyState: IDBRequestReadyState }
 
-const mockIDBDatabase = {
-  createObjectStore: vi.fn(),
-  transaction: vi.fn(),
-  close: vi.fn(),
-  objectStoreNames: {
-    contains: vi.fn(() => false),
-  },
-}
-
-const mockIDBTransaction = {
-  objectStore: vi.fn(),
-  oncomplete: null,
-  onerror: null,
-  onabort: null,
-}
-
-const mockIDBObjectStore = {
-  add: vi.fn(() => mockIDBRequest),
-  put: vi.fn(() => mockIDBRequest),
-  get: vi.fn(() => mockIDBRequest),
-  delete: vi.fn(() => mockIDBRequest),
-  clear: vi.fn(() => mockIDBRequest),
-  count: vi.fn(() => mockIDBRequest),
-  getAll: vi.fn(() => mockIDBRequest),
-  createIndex: vi.fn(),
-  index: vi.fn(),
-}
-
-global.indexedDB = {
-  open: vi.fn(() => ({
-    ...mockIDBRequest,
+const createMockRequest = (): IDBOpenDBRequest => {
+  const request: MockOpenRequest = {
+    result: null as unknown as IDBDatabase,
+    error: null,
+    onsuccess: null,
+    onerror: null,
+    onblocked: null,
     onupgradeneeded: null,
-  })),
-  deleteDatabase: vi.fn(() => mockIDBRequest),
-} as any
+    readyState: 'done',
+  }
 
-// Mock fetch
-global.fetch = vi.fn().mockResolvedValue({
-  ok: true,
-  status: 200,
-  blob: () => Promise.resolve(new Blob(['mock-data'], { type: 'image/png' })),
-  text: () => Promise.resolve('mock text'),
-  json: () => Promise.resolve({}),
+  return request as IDBOpenDBRequest
+}
+
+const indexedDBMock: IDBFactory = {
+  open: vi.fn((name: string, version?: number) => {
+    void name
+    void version
+    return createMockRequest()
+  }),
+  deleteDatabase: vi.fn((name: string) => {
+    void name
+    return createMockRequest()
+  }),
+  cmp: vi.fn((first: unknown, second: unknown) => {
+    if (first === second) return 0
+    return (first as number) > (second as number) ? 1 : -1
+  }),
+} as unknown as IDBFactory
+
+globalThis.indexedDB = indexedDBMock
+
+// Mock fetch with a simple successful response
+globalThis.fetch = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
+  void input
+  void init
+  const body = new Blob(['mock-data'], { type: 'application/octet-stream' })
+  return new Response(body, {
+    status: 200,
+    statusText: 'OK',
+  })
 })
 
-// Mock URL
-Object.defineProperty(global, 'URL', {
-  value: class MockURL {
-    static createObjectURL = vi.fn(() => 'blob:mock-url')
-    static revokeObjectURL = vi.fn()
-    
-    constructor(url: string) {
-      // Mock URL constructor
-    }
-  },
-  writable: true,
-})
+// Ensure URL.createObjectURL / revokeObjectURL exist
+const urlConstructor = globalThis.URL as typeof URL & {
+  createObjectURL?: (obj: unknown) => string
+  revokeObjectURL?: (url: string) => void
+}
 
-// Mock Blob
-global.Blob = class MockBlob {
-  size: number
-  type: string
-  
-  constructor(parts: any[], options: any = {}) {
-    this.size = parts.reduce((size, part) => size + (part?.length || 0), 0)
-    this.type = options.type || ''
-  }
-  
-  text() {
-    return Promise.resolve('mock text')
-  }
-  
-  arrayBuffer() {
-    return Promise.resolve(new ArrayBuffer(this.size))
-  }
-} as any
+if (!urlConstructor.createObjectURL) {
+  Object.defineProperty(urlConstructor, 'createObjectURL', {
+    value: vi.fn(() => 'blob:mock-url'),
+    writable: true,
+  })
+} else {
+  vi.spyOn(urlConstructor, 'createObjectURL').mockReturnValue('blob:mock-url')
+}
+
+if (!urlConstructor.revokeObjectURL) {
+  Object.defineProperty(urlConstructor, 'revokeObjectURL', {
+    value: vi.fn(),
+    writable: true,
+  })
+} else {
+  vi.spyOn(urlConstructor, 'revokeObjectURL').mockImplementation(() => {})
+}
