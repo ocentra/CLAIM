@@ -10,8 +10,12 @@ import { Wallet } from '@coral-xyz/anchor';
 /**
  * Integration tests for verification workflow.
  * Per critique: real tests, not mocks.
+ * 
+ * Note: These tests require Solana IDL file and will be skipped if SKIP_SOLANA_TESTS is set.
  */
-describe('Verification Workflow Integration', () => {
+const SKIP_SOLANA_TESTS = process.env.SKIP_SOLANA_TESTS === 'true';
+
+describe.skipIf(SKIP_SOLANA_TESTS)('Verification Workflow Integration', () => {
   it('should verify a complete match record', async () => {
     // Setup real services (will use devnet in actual tests)
     const connection = new Connection('https://api.devnet.solana.com');

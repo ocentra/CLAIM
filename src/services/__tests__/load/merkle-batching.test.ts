@@ -6,8 +6,12 @@ import { MerkleBatching } from '@services/solana/MerkleBatching';
 /**
  * Load tests for Merkle batching per spec Section 23.3.
  * Per critique: real load tests, not mocks.
+ * 
+ * Note: These tests require Solana IDL file and will be skipped if SKIP_SOLANA_TESTS is set.
  */
-describe('Merkle Batching Load Tests', () => {
+const SKIP_SOLANA_TESTS = process.env.SKIP_SOLANA_TESTS === 'true';
+
+describe.skipIf(SKIP_SOLANA_TESTS)('Merkle Batching Load Tests', () => {
   it('should handle 1000 match hashes in a batch', async () => {
     // Generate 1000 match hashes
     const matchHashes: string[] = [];

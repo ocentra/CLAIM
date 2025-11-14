@@ -1,24 +1,24 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
-// Define mock classes outside the mock factory so they can be used in type annotations
-class MockTexture {
-  wrapS = 1000
-  wrapT = 1000
-  magFilter = 1006
-  minFilter = 1006
-  flipY = true
-  generateMipmaps = true
-  needsUpdate = false
-  dispose(): void {
-    // no-op
+// Mock Three.js before importing - define classes inside factory to avoid hoisting issues
+vi.mock('three', () => {
+  class MockTexture {
+    wrapS = 1000
+    wrapT = 1000
+    magFilter = 1006
+    minFilter = 1006
+    flipY = true
+    generateMipmaps = true
+    needsUpdate = false
+    dispose(): void {
+      // no-op
+    }
   }
-}
 
-// Mock Three.js before importing
-vi.mock('three', () => ({
-  Texture: MockTexture,
-  TextureLoader: class MockTextureLoader {
-    load(url: string, onLoad?: (texture: MockTexture) => void): MockTexture {
+  return {
+    Texture: MockTexture,
+    TextureLoader: class MockTextureLoader {
+      load(url: string, onLoad?: (texture: MockTexture) => void): MockTexture {
       void url
       const texture = new MockTexture()
       if (onLoad) {
@@ -27,15 +27,16 @@ vi.mock('three', () => ({
       return texture
     }
   },
-  LoadingManager: class MockLoadingManager {
-    onProgress: ((item: string, loaded: number, total: number) => void) | null = null
-    onError: ((item: string) => void) | null = null
-  },
-  RepeatWrapping: 1000,
-  ClampToEdgeWrapping: 1001,
-  LinearFilter: 1006,
-  NearestFilter: 1003,
-}))
+    LoadingManager: class MockLoadingManager {
+      onProgress: ((item: string, loaded: number, total: number) => void) | null = null
+      onError: ((item: string) => void) | null = null
+    },
+    RepeatWrapping: 1000,
+    ClampToEdgeWrapping: 1001,
+    LinearFilter: 1006,
+    NearestFilter: 1003,
+  }
+})
 
 import { AssetManager } from '../assetManager'
 import { IndexedDBCache } from '../indexedDBCache'
