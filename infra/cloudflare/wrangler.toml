@@ -20,9 +20,9 @@ new_sqlite_classes = ["MatchCoordinatorDO"]
 
 [env.development.vars]
 ENVIRONMENT = "development"
-# Per critique Issue #12: CORS configuration - MUST be specific origin in production
-# Development allows * for local testing, production MUST use specific origin
-CORS_ORIGIN = "*"  # TODO: Set to specific origin in production (e.g., "https://claim.game")
+# Development: Allow all origins (*) for local testing (localhost, etc.)
+# Production: Must use specific origin (https://game.ocentra.ca)
+CORS_ORIGIN = "*"  # Allows localhost:5173, localhost:3000, etc. for local dev
 
 [env.production]
 name = "claim-storage"
