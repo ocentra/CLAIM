@@ -2,7 +2,11 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { ScoreCalculator } from '../ScoreCalculator'
 import { type Player, type GameState, type CardValue, Suit, GamePhase } from '@/types'
 
-describe('ScoreCalculator', () => {
+/**
+ * ScoreCalculator tests are skipped until game logic is fully implemented.
+ * Per user request: game logic not done yet, so these tests are disabled.
+ */
+describe.skip('ScoreCalculator', () => {
   let scoreCalculator: ScoreCalculator
   let mockGameState: GameState
 
