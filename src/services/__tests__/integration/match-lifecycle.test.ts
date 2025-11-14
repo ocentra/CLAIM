@@ -12,8 +12,12 @@ import { Wallet } from '@coral-xyz/anchor';
 /**
  * Integration tests for match lifecycle.
  * Per critique: REAL tests, no mocks. These tests verify actual functionality.
+ * 
+ * Note: These tests require Solana IDL file and will be skipped if SKIP_SOLANA_TESTS is set.
  */
-describe('Match Lifecycle Integration', () => {
+const SKIP_SOLANA_TESTS = process.env.SKIP_SOLANA_TESTS === 'true';
+
+describe.skipIf(SKIP_SOLANA_TESTS)('Match Lifecycle Integration', () => {
   let coordinator: MatchCoordinator;
   let gameClient: GameClient;
   let r2Service: R2Service;
