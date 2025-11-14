@@ -43,10 +43,6 @@ new_sqlite_classes = ["MatchCoordinatorDO"]
 [env.production.vars]
 ENVIRONMENT = "production"
 # Per critique Issue #12: Reject * in production for security
-# Set to your actual production domain
-# Options:
-# - https://game.ocentra.ca (recommended - subdomain)
-# - https://claim.ocentra.ca (alternative subdomain)
-# - https://ocentra.ca (if using root domain)
-CORS_ORIGIN = "https://game.ocentra.ca"  # Update to your chosen subdomain
+# Production domain: https://game.ocentra.ca
+CORS_ORIGIN = "https://game.ocentra.ca"
 
