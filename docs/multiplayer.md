@@ -6095,131 +6095,243 @@ For 1,000 matches:
 
 ## 30. API Surface: Endpoints & Schemas
 
-### 28.1 Cloudflare Worker API Endpoints
+### 30.1 Cloudflare Worker API Endpoints
 
-**Base URL:** `https://claim-storage.<your-subdomain>.workers.dev`
+**Base URL:** 
+* Development: `https://claim-storage-dev.ocentraai.workers.dev`
+* Production: `https://claim-storage.ocentraai.workers.dev`
 
-#### POST /matches
+**API Documentation:**
+* Swagger UI: `https://claim-storage-dev.ocentraai.workers.dev/api/docs`
+* OpenAPI JSON: `https://claim-storage-dev.ocentraai.workers.dev/openapi.json`
 
-**Create/Upload Match Record**
+**Authentication:**
+* Production endpoints require Firebase JWT token in `Authorization: Bearer <token>` header
+* Development endpoints allow unauthenticated access for testing
+* Rate limiting: 100 matches/hour per IP/wallet (production), 1000/hour (development)
 
-**Request:**
-```json
-{
-  "match_id": "550e8400-e29b-41d4-a716-446655440000",
-  "record": {
-    "version": "1.0.0",
-    "match_id": "550e8400-e29b-41d4-a716-446655440000",
-    "game_name": "CLAIM",
-    "created_at": "2025-01-15T10:30:00.000Z",
-    "players": [...],
-    "events": [...],
-    "outcome": {...}
-  },
-  "signature": "base64-signature"
-}
-```
+#### PUT /api/matches/:matchId
+
+**Upload/Update Match Record**
+
+**Request Body:** Raw JSON match record (see Section 4 for canonical format)
+
+**Validation Rules:**
+* `match_id` field must match URL parameter
+* Record must be valid JSON
+* Size limit: 10MB
+* Required fields: `match_id`, `version`, `players`, `events`
+* `match_id` must be valid UUID v4 format
 
 **Response:**
 ```json
 {
   "success": true,
-  "match_id": "550e8400-e29b-41d4-a716-446655440000",
-  "hot_url": "https://r2.example.com/matches/550e8400-e29b-41d4-a716-446655440000.json",
-  "signed_url": "https://r2.example.com/matches/550e8400-e29b-41d4-a716-446655440000.json?signature=...&expires=...",
-  "expires_at": "2025-01-16T10:30:00.000Z"
+  "matchId": "550e8400-e29b-41d4-a716-446655440000",
+  "url": "https://r2.example.com/matches/550e8400-e29b-41d4-a716-446655440000.json"
 }
 ```
 
 **Error Codes:**
-* `400 BAD_REQUEST` - Invalid JSON or missing fields
-* `401 UNAUTHORIZED` - Invalid signature
-* `409 CONFLICT` - Match ID already exists
+* `400 BAD_REQUEST` - Invalid JSON, missing fields, or validation failed
+* `401 UNAUTHORIZED` - Authentication required (production only)
 * `413 PAYLOAD_TOO_LARGE` - Record exceeds 10MB limit
-* `429 TOO_MANY_REQUESTS` - Rate limit exceeded
+* `429 TOO_MANY_REQUESTS` - Rate limit exceeded (see `X-RateLimit-Remaining` header)
 * `500 INTERNAL_SERVER_ERROR` - Storage error
 
-#### GET /matches/:match_id
+**Rate Limit Headers:**
+* `X-RateLimit-Remaining`: Number of requests remaining
+* `X-RateLimit-Reset`: Unix timestamp when limit resets
+
+#### GET /api/matches/:matchId
 
 **Retrieve Match Record**
 
-**Response:**
-```json
-{
-  "match_id": "550e8400-e29b-41d4-a716-446655440000",
-  "record": {...},
-  "hot_url": "https://r2.example.com/matches/550e8400-e29b-41d4-a716-446655440000.json",
-  "created_at": "2025-01-15T10:30:00.000Z",
-  "size_bytes": 52480
-}
-```
+**Query Parameters:**
+* `token` (optional): Signed URL token for private access
+
+**Response:** Raw JSON match record
 
 **Error Codes:**
 * `404 NOT_FOUND` - Match not found
 * `410 GONE` - Match record expired/deleted
 
-#### POST /disputes
+#### DELETE /api/matches/:matchId
 
-**Flag Match for Dispute**
+**Delete Match Record**
+
+**Authentication:** Required in production
+
+**Response:**
+```json
+{
+  "success": true,
+  "matchId": "550e8400-e29b-41d4-a716-446655440000",
+  "deleted_at": "2025-01-15T10:35:00.000Z"
+}
+```
+
+**Error Codes:**
+* `401 UNAUTHORIZED` - Authentication required
+* `404 NOT_FOUND` - Match not found
+
+#### GET /api/signed-url/:matchId
+
+**Generate Signed URL for Private Access**
+
+**Query Parameters:**
+* `expires` (optional): Expiration time in seconds (default: 3600, max: 86400)
+
+**Response:**
+```json
+{
+  "matchId": "550e8400-e29b-41d4-a716-446655440000",
+  "signedUrl": "https://claim-storage-dev.ocentraai.workers.dev/api/matches/550e8400-e29b-41d4-a716-446655440000?token=...",
+  "expiresIn": 3600,
+  "expiresAt": "2025-01-16T10:30:00.000Z"
+}
+```
+
+**Error Codes:**
+* `400 BAD_REQUEST` - Invalid expiration time
+* `404 NOT_FOUND` - Match not found
+* `500 INTERNAL_SERVER_ERROR` - Signed URL secret not configured
+
+#### POST /api/disputes
+
+**Create Dispute**
 
 **Request:**
 ```json
 {
   "match_id": "550e8400-e29b-41d4-a716-446655440000",
   "reason": "invalid_move",
-  "evidence": {
-    "description": "Player submitted invalid move",
-    "evidence_hash": "sha256:abc123...",
-    "evidence_url": "https://r2.example.com/evidence/dispute-001.zip"
-  },
-  "flagger": "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
-  "signature": "base64-signature"
+  "reason_hash": "sha256:abc123...",
+  "created_by": "player-1",
+  "timestamp": "2025-01-15T12:00:00.000Z"
 }
 ```
+
+**Validation Rules:**
+* `match_id` must exist
+* `reason` is required
+* `created_by` must be a player in the match
 
 **Response:**
 ```json
 {
   "success": true,
-  "dispute_id": "dispute-001",
-  "match_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "pending",
-  "created_at": "2025-01-15T12:00:00.000Z",
-  "estimated_resolution": "2025-01-17T12:00:00.000Z"
+  "disputeId": "dispute-001",
+  "dispute": {
+    "dispute_id": "dispute-001",
+    "match_id": "550e8400-e29b-41d4-a716-446655440000",
+    "status": "pending",
+    "created_at": "2025-01-15T12:00:00.000Z"
+  }
 }
 ```
 
 **Error Codes:**
 * `400 BAD_REQUEST` - Invalid dispute data
+* `401 UNAUTHORIZED` - Authentication required (production)
 * `404 NOT_FOUND` - Match not found
-* `409 CONFLICT` - Dispute already exists
 * `429 TOO_MANY_REQUESTS` - Rate limit exceeded
 
-#### GET /disputes/:dispute_id
+#### GET /api/disputes/:disputeId
 
-**Get Dispute Status**
+**Get Dispute Details**
 
 **Response:**
 ```json
 {
   "dispute_id": "dispute-001",
   "match_id": "550e8400-e29b-41d4-a716-446655440000",
-  "status": "resolved",
-  "resolution": "resolved_in_favor_of_flagger",
-  "resolved_at": "2025-01-16T10:00:00.000Z",
-  "validator_votes": [...]
+  "status": "pending",
+  "reason": "invalid_move",
+  "created_by": "player-1",
+  "created_at": "2025-01-15T12:00:00.000Z",
+  "evidence": [...]
 }
 ```
 
-#### POST /archive
+**Error Codes:**
+* `404 NOT_FOUND` - Dispute not found
 
-**Archive Match to R2** (Note: R2 is already the primary storage, this endpoint is for explicit archival requests)
+#### POST /api/disputes/:disputeId/evidence
+
+**Upload Dispute Evidence**
+
+**Content-Type:** `multipart/form-data`
+
+**Form Fields:**
+* `evidence` (file): Evidence file (max 100MB per file)
+* `match_id` (optional): Match ID
+* `reason` (optional): Dispute reason
+* `description` (optional): Evidence description
+
+**Validation Rules:**
+* File size: max 100MB per file
+* File types: All types allowed (images, videos, documents, archives)
+* SHA-256 hash computed automatically
+
+**Response:**
+```json
+{
+  "success": true,
+  "dispute_id": "dispute-001",
+  "evidence_package_hash": "sha256:package-hash...",
+  "evidence_files": 2,
+  "evidence": [
+    {
+      "filename": "screenshot.png",
+      "type": "image/png",
+      "size_bytes": 245760,
+      "hash": "sha256:abc123...",
+      "url": "disputes/evidence/dispute-001/screenshot.png",
+      "uploaded_at": "2025-01-15T12:00:00.000Z"
+    }
+  ],
+  "uploaded_at": "2025-01-15T12:00:00.000Z"
+}
+```
+
+**Error Codes:**
+* `400 BAD_REQUEST` - File too large or invalid
+* `401 UNAUTHORIZED` - Authentication required (production)
+* `404 NOT_FOUND` - Dispute not found
+
+#### POST /api/archive/:matchId
+
+**Archive Match Record**
+
+**Response:**
+```json
+{
+  "success": true,
+  "matchId": "550e8400-e29b-41d4-a716-446655440000",
+  "archivedAt": "2025-01-15T10:35:00.000Z"
+}
+```
+
+**Error Codes:**
+* `404 NOT_FOUND` - Match not found
+
+#### POST /api/ai/on_event
+
+**Handle AI Decision Event**
+
+**Authentication:** Required (Firebase JWT)
 
 **Request:**
 ```json
 {
   "match_id": "550e8400-e29b-41d4-a716-446655440000",
-  "priority": "high" | "normal" | "low"
+  "event_type": "move",
+  "current_state": {"phase": "playing", "turn": 1},
+  "player_hand": [{"suit": "hearts", "value": "king"}],
+  "available_actions": ["play_card", "pass"],
+  "event_data": {"move_index": 1},
+  "match_history": []
 }
 ```
 
@@ -6227,95 +6339,194 @@ For 1,000 matches:
 ```json
 {
   "success": true,
-  "match_id": "550e8400-e29b-41d4-a716-446655440000",
-  "hot_url": "https://r2.example.com/matches/550e8400-e29b-41d4-a716-446655440000.json",
-  "uploaded_at": "2025-01-15T10:35:00.000Z"
+  "event_id": "event-001",
+  "stored_at": "2025-01-15T10:35:00.000Z"
 }
 ```
 
-### 28.2 OpenAPI Specification
+**Error Codes:**
+* `400 BAD_REQUEST` - Invalid event data
+* `401 UNAUTHORIZED` - Authentication required
+* `503 SERVICE_UNAVAILABLE` - AI service not configured
 
-**File: `api/openapi.yaml`**
+#### GET /api/data-export/:userId
 
-```yaml
-openapi: 3.0.0
-info:
-  title: CLAIM Game Storage API
-  version: 1.0.0
-  description: API for storing and retrieving match records
+**Export User Data (GDPR)**
 
-paths:
-  /matches:
-    post:
-      summary: Upload match record
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/MatchUploadRequest'
-      responses:
-        '200':
-          description: Match uploaded successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MatchUploadResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '429':
-          $ref: '#/components/responses/RateLimitExceeded'
+**Authentication:** Required (Firebase JWT)
 
-  /matches/{match_id}:
-    get:
-      summary: Get match record
-      parameters:
-        - name: match_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: Match record retrieved
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MatchRecord'
-
-components:
-  schemas:
-    MatchUploadRequest:
-      type: object
-      required:
-        - match_id
-        - record
-        - signature
-      properties:
-        match_id:
-          type: string
-          format: uuid
-        record:
-          $ref: '#/components/schemas/MatchRecord'
-        signature:
-          type: string
-          format: base64
-
-  responses:
-    BadRequest:
-      description: Invalid request
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
-    RateLimitExceeded:
-      description: Rate limit exceeded
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/Error'
+**Response:**
+```json
+{
+  "user_id": "user-123",
+  "matches": [...],
+  "disputes": [...],
+  "exported_at": "2025-01-15T10:35:00.000Z"
+}
 ```
+
+**Error Codes:**
+* `400 BAD_REQUEST` - User ID required
+* `401 UNAUTHORIZED` - Authentication required
+* `404 NOT_FOUND` - User not found
+
+#### DELETE /api/data/:userId
+
+**Delete User Data (GDPR Right to be Forgotten)**
+
+**Authentication:** Required (Firebase JWT)
+
+**Query Parameters:**
+* `confirm=true` (required): Confirmation flag
+
+**Response:**
+```json
+{
+  "success": true,
+  "user_id": "user-123",
+  "deleted_matches": 5,
+  "deleted_disputes": 2,
+  "deleted_at": "2025-01-15T10:35:00.000Z"
+}
+```
+
+**Error Codes:**
+* `400 BAD_REQUEST` - Confirmation required or invalid request
+* `401 UNAUTHORIZED` - Authentication required
+* `404 NOT_FOUND` - User not found
+
+#### POST /api/matches/:matchId/anonymize
+
+**Anonymize Match Record (GDPR)**
+
+**Authentication:** Required (Firebase JWT)
+
+**Response:**
+```json
+{
+  "success": true,
+  "match_id": "550e8400-e29b-41d4-a716-446655440000",
+  "anonymized_at": "2025-01-15T10:00:00.000Z",
+  "anonymized_url": "https://r2.example.com/matches/anonymized/550e8400-e29b-41d4-a716-446655440000.json"
+}
+```
+
+**Error Codes:**
+* `400 BAD_REQUEST` - Invalid request
+* `401 UNAUTHORIZED` - Authentication required
+* `404 NOT_FOUND` - Match not found
+
+#### GET /health
+
+**Health Check**
+
+**Response:**
+```json
+{
+  "status": "ok"
+}
+```
+
+#### GET /api/metrics
+
+**Get System Metrics**
+
+**Response:**
+```json
+{
+  "metrics": {
+    "total_matches": 1234,
+    "total_disputes": 5,
+    "storage_used_bytes": 52428800
+  },
+  "alerts": []
+}
+```
+
+### 30.2 Validation Rules
+
+**Match Record Validation:**
+
+1. **Structure Validation:**
+   * Must be valid JSON
+   * Must have `match_id` field matching URL parameter
+   * Required fields: `match_id`, `version`, `players`, `events`
+   * `match_id` must be valid UUID v4
+
+2. **Size Validation:**
+   * Maximum size: 10MB (10,485,760 bytes)
+   * Rejected with `413 PAYLOAD_TOO_LARGE` if exceeded
+
+3. **Content Validation:**
+   * `players` must be non-empty array
+   * `events` must be array (can be empty)
+   * `version` must be semantic version string (e.g., "1.0.0")
+
+4. **Authentication Validation (Production):**
+   * Firebase JWT token required in `Authorization` header
+   * Token must be valid and not expired
+   * User must be authenticated
+
+**Dispute Validation:**
+
+1. **Match Existence:**
+   * `match_id` must reference existing match
+
+2. **Player Validation:**
+   * `created_by` must be a player in the referenced match
+
+3. **Evidence Validation:**
+   * File size: max 100MB per file
+   * File type: All types allowed
+   * SHA-256 hash computed automatically
+
+### 30.3 Viewing and Listing Records
+
+**Current Implementation:**
+
+* **Direct Access:** Use `GET /api/matches/:matchId` to retrieve individual records
+* **Signed URLs:** Use `GET /api/signed-url/:matchId` for private access
+* **Public Access:** Match records are publicly readable by default (unless using signed URLs)
+
+**Future Enhancements (Not Yet Implemented):**
+
+* **List Matches:** `GET /api/matches?limit=100&offset=0&game_type=CLAIM`
+* **Search Matches:** `GET /api/matches/search?player_id=user-123&status=completed`
+* **Filter by Date:** `GET /api/matches?start_date=2025-01-01&end_date=2025-01-31`
+* **Match Statistics:** `GET /api/matches/:matchId/stats`
+
+**Note:** List/search endpoints are planned but not yet implemented. Use direct match ID access for now.
+
+### 30.4 OpenAPI/Swagger Documentation
+
+**Implementation:** The API includes full OpenAPI 3.0 specification and Swagger UI for interactive testing.
+
+**Access Points:**
+* **Swagger UI:** `https://claim-storage-dev.ocentraai.workers.dev/api/docs`
+* **OpenAPI JSON:** `https://claim-storage-dev.ocentraai.workers.dev/openapi.json`
+* **Alternative paths:** `/docs`, `/swagger`, `/api/openapi.json`, `/swagger.json`
+
+**Features:**
+* Interactive API testing (try endpoints directly from browser)
+* Complete endpoint documentation with request/response schemas
+* Authentication support (Bearer token)
+* Export OpenAPI spec for Postman, Insomnia, or other API clients
+
+**Usage:**
+1. Open Swagger UI in browser
+2. Click "Authorize" button to add Firebase JWT token (for production endpoints)
+3. Try any endpoint with example requests
+4. View request/response schemas and error codes
+
+**Integration with API Clients:**
+* **Postman:** Import from `/openapi.json` URL
+* **Insomnia:** Import OpenAPI 3.0 spec
+* **cURL:** Use examples from Swagger UI
+* **Code Generation:** Use OpenAPI Generator to create client SDKs
+
+**Implementation Location:**
+* OpenAPI spec: `infra/cloudflare/src/openapi.ts`
+* Served by: Cloudflare Worker (`infra/cloudflare/src/index.ts`)
 
 ---
 

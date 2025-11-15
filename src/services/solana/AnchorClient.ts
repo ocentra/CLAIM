@@ -1,6 +1,6 @@
 import { Program, AnchorProvider, Wallet } from '@coral-xyz/anchor';
 import type { Idl } from '@coral-xyz/anchor';
-import { Connection, PublicKey } from '@solana/web3.js';
+import { PublicKey, Connection } from '@solana/web3.js'; // Anchor requires web3.js types
 import type { Commitment } from '@solana/web3.js';
 
 const PROGRAM_ID = new PublicKey('Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS');

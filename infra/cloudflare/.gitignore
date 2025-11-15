@@ -1,5 +1,18 @@
-.dev.vars
-.wrangler/
+# Build outputs
+*.js
+*.js.map
 dist/
+.wrangler/
+node_modules/
+
+# TypeScript
+*.tsbuildinfo
+
+# Environment
+.dev.vars
+.env
+.env.local
+
+# Logs
 *.log
 

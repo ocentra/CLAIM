@@ -41,22 +41,93 @@ export class R2Service {
         });
 
         if (!response.ok) {
-          throw new Error(`Failed to upload match record: ${response.status} ${response.statusText}`);
+          // Check for rate limiting (429)
+          const isRateLimit = response.status === 429;
+          
+          // Try to get error message from response
+          let errorMsg = `${response.status} ${response.statusText}`;
+          try {
+            const errorText = await response.text();
+            if (errorText && errorText !== '[object Blob]') {
+              errorMsg = errorText;
+            }
+          } catch {
+            // Ignore error reading response
+          }
+          
+          // Include rate limit indicator in error message
+          if (isRateLimit) {
+            errorMsg = `Rate limit exceeded: ${errorMsg}`;
+          }
+          
+          throw new Error(`Failed to upload match record: ${errorMsg}`);
         }
 
-        const result = await response.json();
+        // Handle response - Worker should return application/json
+        // CRITICAL FIX: Always use .text() first, then parse JSON
+        // This avoids the "[object Blob]" issue in Node.js/Vitest environments
+        let result: { success?: boolean; matchId?: string; url?: string };
+        
+        try {
+          // Get raw text first
+          const text = await response.text();
+          
+          // Debug logging
+          if (text === '[object Blob]' || text.includes('[object')) {
+            throw new Error(
+              `Worker returned invalid response: "${text}". ` +
+              `Worker must return proper JSON with Content-Type: application/json. ` +
+              `Check Worker implementation.`
+            );
+          }
+          
+          // Check if response is empty
+          if (!text || text.trim().length === 0) {
+            throw new Error(
+              `Worker returned empty response. ` +
+              `Expected JSON with {success, matchId, url}. ` +
+              `Check Worker implementation.`
+            );
+          }
+          
+          // Parse JSON
+          result = JSON.parse(text);
+          
+          // Validate response structure
+          if (typeof result !== 'object' || result === null) {
+            throw new Error(
+              `Worker returned invalid JSON structure. ` +
+              `Expected object with {success, matchId, url}, got: ${typeof result}`
+            );
+          }
+          
+        } catch (error) {
+          const errMsg = error instanceof Error ? error.message : String(error);
+          throw new Error(`Failed to parse Worker response: ${errMsg}`);
+        }
+        
         return result.url || url;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
         
-        // Don't retry on client errors (4xx)
-        if (error instanceof Error && error.message.includes('40')) {
+        // Check if it's a rate limit error (429)
+        const isRateLimit = error instanceof Error && (
+          error.message.includes('Rate limit') ||
+          error.message.includes('429') ||
+          error.message.includes('Too Many Requests')
+        );
+        
+        // Don't retry on client errors (4xx) except rate limits
+        if (error instanceof Error && error.message.includes('40') && !isRateLimit) {
           throw error;
         }
 
         if (attempt < this.MAX_RETRIES - 1) {
-          // Exponential backoff
-          await new Promise(resolve => setTimeout(resolve, this.RETRY_DELAY_MS * (attempt + 1)));
+          // For rate limits, use longer exponential backoff
+          const backoffDelay = isRateLimit 
+            ? this.RETRY_DELAY_MS * Math.pow(2, attempt + 1) * 2 // Longer backoff for rate limits
+            : this.RETRY_DELAY_MS * (attempt + 1);
+          await new Promise(resolve => setTimeout(resolve, backoffDelay));
         }
       }
     }
