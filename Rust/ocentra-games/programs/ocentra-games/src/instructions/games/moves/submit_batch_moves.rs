@@ -143,8 +143,8 @@ pub fn handler(
     if let Some(last_move) = moves.last() {
         if last_move.action_type == 0 || last_move.action_type == 1 {
             // Pick up or decline: advance to next player
-            let max_players = match_account.get_max_players(&registry)? as usize;
-            let next_player = ((player_index + 1) % max_players) as u8;
+            // Use player_count (actual players in match) not max_players (max allowed)
+            let next_player = ((player_index + 1) % match_account.player_count as usize) as u8;
             match_account.current_player = next_player;
         }
         // For other moves (declare intent, rebuttal, call showdown), turn doesn't advance

@@ -34,11 +34,42 @@ class BatchMovesSamePlayerTest extends BaseTest {
       submitBatchMovesManual,
     } = await import('@/helpers');
 
+    // Import CLAIM-specific helpers for floor card
+    const { revealFloorCard, generateMockFloorCardHash } = await import("@/claim");
+
     const testMatchId = generateUniqueMatchId("batch-test");
     const [testMatchPDA, registryPDA] = await createStartedMatch(testMatchId, 2);
 
     const userId = getTestUserId(0);
     const baseNonce = Date.now();
+
+    // Reveal floor card before pick_up action (required by validation)
+    const floorCardHash = generateMockFloorCardHash(0);
+    const revealNonce = new anchor.BN(baseNonce - 10000);
+    try {
+      await revealFloorCard(
+        testMatchId,
+        userId,
+        testMatchPDA,
+        registryPDA,
+        floorCardHash,
+        revealNonce,
+        player1
+      );
+    } catch (err: unknown) {
+      // If floor card already revealed, that's fine
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      if (errorMsg !== 'skipped') {
+        throw err;
+      }
+    }
+
+    // Wait for state to sync
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Check moveCount before batch submission (floor card reveal counts as a move)
+    const matchAccountBefore = await program.account.match.fetch(testMatchPDA);
+    const moveCountBefore = matchAccountBefore.moveCount;
 
     const moves = [
       {
@@ -47,8 +78,8 @@ class BatchMovesSamePlayerTest extends BaseTest {
         nonce: new anchor.BN(baseNonce),
       },
       {
-        actionType: 0, // pick_up
-        payload: Buffer.alloc(0),
+        actionType: 0, // pick_up (requires floor card to be revealed)
+        payload: floorCardHash, // Floor card hash (32 bytes)
         nonce: new anchor.BN(baseNonce + 1),
       },
     ];
@@ -81,7 +112,8 @@ class BatchMovesSamePlayerTest extends BaseTest {
     );
 
     const matchAccount = await program.account.match.fetch(testMatchPDA);
-    this.assertEqual(matchAccount.moveCount, 2);
+    // Batch submission adds 2 moves (declare_intent + pick_up)
+    this.assertEqual(matchAccount.moveCount, moveCountBefore + 2);
   }
 }
 

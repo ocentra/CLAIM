@@ -33,7 +33,6 @@ class FailBatchNotPlayerTurnTest extends BaseTest {
       getBatchMovePDA,
       createStartedMatch,
       submitBatchMovesManual,
-      AnchorError: AnchorErrorType,
     } = await import('@/helpers');
 
     const testMatchId = generateUniqueMatchId("batch-test");
@@ -50,14 +49,19 @@ class FailBatchNotPlayerTurnTest extends BaseTest {
       },
     ];
 
-    const [movePDA0] = await getBatchMovePDA(testMatchId, player2.publicKey, 0);
+    // For wrong player test, we need valid unique PDAs to pass Anchor's constraint validation
+    // so that Rust validation can run and throw NotPlayerTurn
+    // Use different indices to ensure unique PDAs (Anchor validates all 5 accounts even if we only have 1 move)
+    const movePDAs = await Promise.all(
+      Array.from({ length: 5 }, (_, i) => getBatchMovePDA(testMatchId, player2.publicKey, i))
+    );
 
     const moveAccountPDAs: [PublicKey, PublicKey, PublicKey, PublicKey, PublicKey] = [
-      movePDA0,
-      movePDA0,
-      movePDA0,
-      movePDA0,
-      movePDA0,
+      movePDAs[0][0],
+      movePDAs[1][0],
+      movePDAs[2][0],
+      movePDAs[3][0],
+      movePDAs[4][0],
     ];
 
     try {

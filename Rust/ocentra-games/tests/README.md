@@ -2,47 +2,146 @@
 
 This directory contains a comprehensive, organized test suite for the Ocentra Games Solana program.
 
+## Directory Structure
+
+Tests are organized into a clear hierarchical structure:
+
+```
+tests/
+├── core/                    # Test infrastructure and framework
+│   ├── base.ts             # Base test class (BaseTest)
+│   ├── types.ts            # Type definitions (ITest, TestMetadata)
+│   ├── registry.ts         # Test registry system
+│   ├── loader.ts           # Test loader and discovery
+│   ├── test-decorator.ts   # Mocha integration
+│   └── README.md           # Core infrastructure documentation
+│
+├── common/                  # Common tests (shared across all games)
+│   ├── setup/              # Setup and initialization tests
+│   │   ├── program-loaded.test.ts
+│   │   ├── authority-has-sol.test.ts
+│   │   ├── check-registry-exists.test.ts
+│   │   └── ...
+│   │
+│   ├── registry/            # Game registry tests
+│   │   ├── register-first-game.test.ts
+│   │   ├── register-new-game.test.ts
+│   │   ├── update-game.test.ts
+│   │   └── ...
+│   │
+│   ├── lifecycle/          # Match lifecycle tests
+│   │   ├── create-claim-match.test.ts
+│   │   ├── players-join-match.test.ts
+│   │   ├── start-match-minimum.test.ts
+│   │   ├── end-match.test.ts
+│   │   └── ...
+│   │
+│   ├── errors/             # Error handling tests
+│   │   ├── fail-move-player-not-in-match.test.ts
+│   │   ├── fail-move-invalid-action-type.test.ts
+│   │   ├── fail-create-invalid-match-id-formats.test.ts
+│   │   └── ...
+│   │
+│   ├── stress/             # Stress and performance tests
+│   │   ├── batch-moves-sequence.test.ts
+│   │   ├── multiple-matches-simultaneous.test.ts
+│   │   └── rapid-sequential-creation.test.ts
+│   │
+│   ├── setup.ts            # Setup utilities
+│   ├── cluster.ts          # Cluster detection utilities
+│   ├── pda.ts              # PDA derivation helpers
+│   ├── test-context.ts     # TestContext for better error messages
+│   ├── test-data.ts        # Test data access
+│   ├── match-helpers.ts    # Match creation helpers
+│   ├── errors.ts           # Error handling utilities
+│   ├── assertions.ts       # Custom assertion helpers
+│   └── index.ts            # Common utilities re-exports
+│
+├── games/                   # Game-specific tests
+│   └── claim/              # CLAIM game tests
+│       ├── helpers.ts      # CLAIM-specific helpers
+│       └── moves/         # CLAIM move tests
+│           ├── declare-intent.test.ts
+│           ├── call-showdown.test.ts
+│           ├── commit-hand-hash.test.ts
+│           ├── batch-moves-same-player.test.ts
+│           └── ...
+│
+├── helpers.ts              # Main helpers (re-exports from common/)
+├── root-hooks.ts           # Mocha root hooks for test reporting
+├── mocha-hooks.ts          # Mocha integration hooks
+├── report-generator.ts     # Test report generation
+├── test-data-loader.ts     # Test data loading utilities
+├── ocentra-games.ts        # Program client setup
+└── README.md               # This file
+```
+
 ## Test Organization
 
-Tests are organized by functional area into separate files for better maintainability:
+### Core Infrastructure (`core/`)
 
-### Core Test Files
+The core test infrastructure provides:
+- **Base Test Class**: `BaseTest` abstract class that all tests extend
+- **Test Registry**: Auto-discovery and registration system
+- **Type Definitions**: `ITest` interface, `TestMetadata`, test categories
+- **Mocha Integration**: Adapts test system to Mocha framework
 
-- **`helpers.ts`** - Shared utilities, setup functions, and test fixtures
-  - Provider and program setup
-  - Test account generation
-  - PDA derivation helpers
-  - Common setup functions (GameRegistry initialization, match creation)
+See `core/README.md` for detailed documentation.
 
-- **`game-registry.test.ts`** - Game registry functionality
-  - Register new games
-  - Update existing games
-  - Authority validation
-  - Invalid parameter handling
+### Common Tests (`common/`)
 
-- **`match-lifecycle.test.ts`** - Match creation and lifecycle
-  - Create match (with proper UUID validation)
-  - Join match (including capacity limits)
-  - Start match (minimum player requirements)
-  - Phase transitions
+Tests that apply to all games, organized by category:
 
-- **`moves.test.ts`** - Move submission and game actions
-  - Submit individual moves
-  - Submit batch moves (deadlock prevention)
-  - Commit hand hashes
-  - Turn order validation
-  - Nonce replay protection
+#### Setup Tests (`common/setup/`)
+- Verify program is loaded
+- Check accounts have SOL
+- Verify registry exists
+- Derive PDAs correctly
 
-- **`match-end.test.ts`** - Match completion
-  - End match
-  - Anchor match records
-  - State validation
+#### Registry Tests (`common/registry/`)
+- Register first game
+- Register additional games
+- Update game configuration
+- Fetch registry data
+- Handle invalid parameters
 
-- **`error-cases.test.ts`** - Error handling and edge cases
-  - Unauthorized access attempts
-  - Invalid payloads
-  - Player not in match
-  - Match state validation errors
+#### Lifecycle Tests (`common/lifecycle/`)
+- Create matches with proper UUIDs
+- Players join matches
+- Start matches with minimum players
+- End matches and anchor records
+- Handle invalid phases and states
+
+#### Error Tests (`common/errors/`)
+- Invalid match IDs
+- Invalid action types
+- Player not in match
+- Wrong phase for operation
+- Payload too large
+- Unauthorized access
+
+#### Stress Tests (`common/stress/`)
+- Batch move sequences
+- Multiple simultaneous matches
+- Rapid sequential creation
+- High transaction volume
+
+### Game-Specific Tests (`games/`)
+
+Tests specific to individual games:
+
+#### CLAIM Game (`games/claim/`)
+- CLAIM-specific moves (declare intent, call showdown)
+- Hand commitment
+- Batch moves for same player
+- CLAIM action validation
+
+### Helper Files
+
+- **`helpers.ts`**: Main entry point, re-exports from `common/` and `games/claim/`
+- **`root-hooks.ts`**: Mocha root hooks for automatic test result capture
+- **`report-generator.ts`**: Generates markdown test reports
+- **`test-data-loader.ts`**: Loads canonical test data from `test-data/` directory
 
 ## Running Tests
 

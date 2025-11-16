@@ -201,13 +201,18 @@ export const submitClaimBatchMovesManual = async (
       .rpc();
   } catch (err: unknown) {
     // Check if this is a ConstraintSeeds error (from AnchorError or SendTransactionError)
+    // Also check if error message or logs contain "ConstraintSeeds"
+    const errorLogs = err instanceof SendTransactionError ? (err.logs || []) : [];
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    const hasConstraintSeedsInLogs = errorLogs.some((log: string) => log.includes('ConstraintSeeds'));
+    const hasConstraintSeedsInMessage = errorMessage.includes('ConstraintSeeds');
     const isConstraintSeeds = 
       (err instanceof AnchorError && err.error?.errorCode?.code === "ConstraintSeeds") ||
-      (err instanceof SendTransactionError && 
-       err.logs?.some(log => log.includes('ConstraintSeeds')));
+      (err instanceof SendTransactionError && hasConstraintSeedsInLogs) ||
+      hasConstraintSeedsInMessage;
     
     if (isConstraintSeeds) {
-      console.log(`[submitClaimBatchMovesManual] ConstraintSeeds error, using manual encoding`);
+      console.log(`[submitClaimBatchMovesManual] ConstraintSeeds error detected, using manual encoding`);
       try {
         return await submitClaimBatchMovesManualRaw(matchId, userId, moves, matchPDA, registryPDA, moveAccountPDAs, player);
       } catch (rawErr: unknown) {
@@ -259,8 +264,13 @@ async function submitClaimBatchMovesManualRaw(
   if (!provider) {
     throw new Error("Provider not initialized");
   }
-  const signature = await provider.sendAndConfirm(transaction, [player]);
   
-  return signature;
+  try {
+    const signature = await provider.sendAndConfirm(transaction, [player]);
+    return signature;
+  } catch (err: unknown) {
+    // sendAndConfirm throws SendTransactionError, which needs to be normalized
+    normalizeAndRethrowAnchorError(err, "submitClaimBatchMovesManualRaw");
+  }
 }
 

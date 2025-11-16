@@ -214,6 +214,22 @@ class ReportGenerator {
       fs.mkdirSync(outputDir, { recursive: true });
     }
 
+    // Delete old reports before creating new one
+    try {
+      const files = fs.readdirSync(outputDir);
+      const oldReports = files.filter((file) => file.startsWith('test-report-') && file.endsWith('.md'));
+      for (const oldReport of oldReports) {
+        const oldPath = path.join(outputDir, oldReport);
+        fs.unlinkSync(oldPath);
+      }
+      if (oldReports.length > 0) {
+        console.log(`🗑️  Deleted ${oldReports.length} old test report(s)`);
+      }
+    } catch (err) {
+      // Ignore errors when deleting old reports (e.g., permission issues)
+      console.warn('Warning: Could not delete old reports:', err);
+    }
+
     // Generate filename with timestamp
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
     const filename = `test-report-${timestamp}.md`;

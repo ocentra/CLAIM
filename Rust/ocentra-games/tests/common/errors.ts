@@ -143,8 +143,77 @@ export function normalizeAndRethrowAnchorError(err: unknown, context: string): n
     throw anchorError;
   }
   
-  // Unknown error type - rethrow as Error
-  const errorMsg = err instanceof Error ? err.message : String(err);
-  throw new Error(`[${context}] ${errorMsg}`);
+  // Unknown error type - try to extract information from error object
+  let errorMsg: string;
+  let errorLogs: string[] = [];
+  
+  if (err instanceof Error) {
+    errorMsg = err.message;
+    // Check if error has logs property (SendTransactionError)
+    if ('logs' in err && Array.isArray((err as { logs?: unknown }).logs)) {
+      errorLogs = (err as { logs: string[] }).logs;
+      // Try one more time to parse from logs if we have them
+      if (errorLogs.length > 0) {
+        const logs = errorLogs.join('\n');
+        const errorCodeMatch = logs.match(/Error Code: (\w+)/);
+        if (errorCodeMatch) {
+          const errorCode = errorCodeMatch[1];
+          const syntheticError = {
+            error: {
+              errorCode: {
+                code: errorCode,
+              },
+            },
+            errorCode: {
+              code: errorCode,
+            },
+          } as unknown as AnchorError;
+          (syntheticError as unknown as { logs?: string[] }).logs = errorLogs;
+          throw syntheticError;
+        }
+        // Try custom program error one more time
+        const programErrorMatch = logs.match(/custom program error: 0x([0-9a-f]+)/i);
+        if (programErrorMatch) {
+          const errorCode = Number.parseInt(programErrorMatch[1], 16);
+          const errorCodeMap: Record<number, string> = {
+            0x1771: "InvalidPhase",
+            0x1773: "NotPlayerTurn",
+            0x1775: "InvalidPayload",
+            0x1776: "MatchAlreadyEnded",
+            0x1777: "InsufficientPlayers",
+            0x1778: "InvalidNonce",
+            0x1779: "InvalidTimestamp",
+          };
+          const errorName = errorCodeMap[errorCode] || `UnknownError(${errorCode})`;
+          const syntheticError = {
+            error: {
+              errorCode: {
+                code: errorName,
+              },
+            },
+            errorCode: {
+              code: errorName,
+            },
+          } as unknown as AnchorError;
+          (syntheticError as unknown as { logs?: string[] }).logs = errorLogs;
+          throw syntheticError;
+        }
+      }
+    }
+  } else {
+    // For non-Error objects, try to serialize intelligently
+    try {
+      errorMsg = JSON.stringify(err, Object.getOwnPropertyNames(err));
+    } catch {
+      errorMsg = String(err);
+    }
+  }
+  
+  // Last resort: create a generic Error but include context and logs if available
+  const fullMsg = errorLogs.length > 0
+    ? `[${context}] ${errorMsg}\nLogs:\n${errorLogs.join('\n')}`
+    : `[${context}] ${errorMsg}`;
+  
+  throw new Error(fullMsg);
 }
 
