@@ -8,6 +8,7 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
+    "noEmit": true, // Wrangler handles compilation, we don't need tsc to emit files
     "baseUrl": "../..",
     "paths": {
       "@/*": ["src/*"],
@@ -15,6 +16,8 @@
       "@services/*": ["src/services/*"],
       "@types": ["src/types/index.ts"]
     }
-  }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", ".wrangler", "**/*.js"]
 }
 

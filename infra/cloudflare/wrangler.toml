@@ -20,9 +20,14 @@ new_sqlite_classes = ["MatchCoordinatorDO"]
 
 [env.development.vars]
 ENVIRONMENT = "development"
-# Per critique Issue #12: CORS configuration - MUST be specific origin in production
-# Development allows * for local testing, production MUST use specific origin
-CORS_ORIGIN = "*"  # TODO: Set to specific origin in production (e.g., "https://claim.game")
+BUCKET_NAME = "claim-matches-test"  # Test bucket name for safety checks
+# Development: Allow all origins (*) for local testing (localhost, etc.)
+# Production: Must use specific origin (https://game.ocentra.ca)
+CORS_ORIGIN = "*"  # Allows localhost:5173, localhost:3000, etc. for local dev
+# Rate limiting: Higher limit for testing (1000/hour to avoid test failures)
+RATE_LIMIT_MATCHES_PER_HOUR = "1000"
+# Signed URL secret for testing (required for signed URL tests)
+SIGNED_URL_SECRET = "test-secret-key-for-development-only-change-in-production"
 
 [env.production]
 name = "claim-storage"
@@ -43,10 +48,9 @@ new_sqlite_classes = ["MatchCoordinatorDO"]
 [env.production.vars]
 ENVIRONMENT = "production"
 # Per critique Issue #12: Reject * in production for security
-# Set to your actual production domain
-# Options:
-# - https://game.ocentra.ca (recommended - subdomain)
-# - https://claim.ocentra.ca (alternative subdomain)
-# - https://ocentra.ca (if using root domain)
-CORS_ORIGIN = "https://game.ocentra.ca"  # Update to your chosen subdomain
+# Production domain: https://game.ocentra.ca
+CORS_ORIGIN = "https://game.ocentra.ca"
+# Rate limiting: 100 matches per hour per IP/wallet (production-friendly)
+# Can be increased if needed: RATE_LIMIT_MATCHES_PER_HOUR = "500"
+# RATE_LIMIT_MATCHES_PER_HOUR = "100"
 

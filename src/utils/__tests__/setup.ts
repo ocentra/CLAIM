@@ -1,4 +1,15 @@
 import { vi } from 'vitest'
+import { config } from 'dotenv'
+import { resolve } from 'path'
+
+// Load .env file for tests (if it exists)
+// This allows tests to use environment variables from .env without manual setup
+const envResult = config({ path: resolve(process.cwd(), '.env') })
+if (envResult.error) {
+  console.warn('[SETUP] Could not load .env file:', envResult.error.message)
+} else {
+  console.log('[SETUP] Loaded .env file, VITE_R2_WORKER_URL:', process.env.VITE_R2_WORKER_URL || 'NOT SET')
+}
 
 type MockOpenRequest = Partial<IDBOpenDBRequest> & { readyState: IDBRequestReadyState }
 
@@ -34,16 +45,11 @@ const indexedDBMock: IDBFactory = {
 
 globalThis.indexedDB = indexedDBMock
 
-// Mock fetch with a simple successful response
-globalThis.fetch = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
-  void input
-  void init
-  const body = new Blob(['mock-data'], { type: 'application/octet-stream' })
-  return new Response(body, {
-    status: 200,
-    statusText: 'OK',
-  })
-})
+// NOTE: We do NOT mock fetch here because:
+// 1. Unit tests (R2Service.test.ts, assetManager.test.ts) mock fetch themselves in beforeEach
+// 2. E2E tests (R2Service.hello.test.ts, R2Service.e2e.test.ts) need real fetch to hit the Worker
+// 3. This setup file is primarily for IndexedDB mocking
+// If you need fetch mocked, do it in the specific test file's beforeEach hook
 
 // Ensure URL.createObjectURL / revokeObjectURL exist
 const urlConstructor = globalThis.URL as typeof URL & {

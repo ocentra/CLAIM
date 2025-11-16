@@ -1,10 +1,12 @@
 export interface Env {
   MATCHES_BUCKET: R2Bucket;
   ENVIRONMENT: string;
+  BUCKET_NAME?: string;  // Bucket name for safety checks (claim-matches-test in dev, claim-matches in prod)
   CORS_ORIGIN?: string;  // Allowed CORS origin (required in production, can be * in dev)
   CORS_ALLOWED_ORIGINS?: string;  // Comma-separated list of allowed origins (for dev whitelist)
   COORDINATOR_PUBLIC_KEY?: string;  // Coordinator public key for signature verification
   RATE_LIMIT_KV?: KVNamespace;  // KV namespace for rate limiting
+  RATE_LIMIT_MATCHES_PER_HOUR?: string;  // Rate limit for match uploads per hour (default: 100 prod, 10 dev)
   AI_SERVICE_URL?: string;  // Optional external AI service URL
   AI_API_KEY?: string;  // Optional API key for AI service
   MATCH_COORDINATOR: DurableObjectNamespace;  // Durable Object for match coordination
@@ -20,6 +22,8 @@ export interface Env {
 import { MetricsCollector } from '@services/monitoring/MetricsCollector';
 import { emitMetrics, checkAlertThresholds } from './monitoring';
 import { verifyAuth } from './auth';  // Per critique Issue #13: Firebase token verification
+import { generateOpenApiJson, generateSwaggerHtml } from './openapi';
+import { templates } from './templates/loader';
 
 // Global metrics collector instance
 const metricsCollector = new MetricsCollector();
@@ -120,16 +124,179 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
+    // Root endpoint - show API info and links to docs
+    if (path === '/' || path === '') {
+      const baseUrl = url.origin;
+      const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Claim Storage API</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 2rem;
+      background: #1a1a1a;
+      color: #e0e0e0;
+      line-height: 1.6;
+    }
+    h1 { color: #4a9eff; }
+    .endpoint {
+      background: #2a2a2a;
+      padding: 1rem;
+      margin: 1rem 0;
+      border-radius: 8px;
+      border-left: 3px solid #4a9eff;
+    }
+    .endpoint code {
+      background: #1a1a1a;
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+      color: #4a9eff;
+    }
+    a {
+      color: #4a9eff;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .status {
+      display: inline-block;
+      padding: 0.25rem 0.5rem;
+      background: #2a7a2a;
+      color: #90ee90;
+      border-radius: 4px;
+      font-size: 0.9rem;
+      margin-left: 0.5rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎮 Claim Storage API</h1>
+  <p>API for storing and managing game match records, disputes, and AI decisions.</p>
+  
+  <div class="endpoint">
+    <h2>📚 API Documentation</h2>
+    <p>
+      <a href="${baseUrl}/api/docs" target="_blank">Swagger UI</a> <span class="status">Interactive</span><br>
+      <a href="${baseUrl}/openapi.json" target="_blank">OpenAPI JSON</a> <span class="status">Import to Postman</span>
+    </p>
+  </div>
+
+  <div class="endpoint">
+    <h2>🔍 Quick Links</h2>
+    <ul>
+      <li><a href="${baseUrl}/health">Health Check</a> - <code>GET /health</code></li>
+      <li><a href="${baseUrl}/api/metrics">Metrics</a> - <code>GET /api/metrics</code></li>
+      <li><a href="${baseUrl}/api/docs">API Docs</a> - <code>GET /api/docs</code></li>
+    </ul>
+  </div>
+
+  <div class="endpoint">
+    <h2>📡 Available Endpoints</h2>
+    <ul>
+      <li><code>PUT /api/matches/:matchId</code> - Upload match record</li>
+      <li><code>GET /api/matches/:matchId</code> - Get match record</li>
+      <li><code>DELETE /api/matches/:matchId</code> - Delete match record</li>
+      <li><code>GET /api/signed-url/:matchId</code> - Generate signed URL</li>
+      <li><code>POST /api/disputes</code> - Create dispute</li>
+      <li><code>GET /api/disputes/:disputeId</code> - Get dispute</li>
+      <li><code>POST /api/disputes/:disputeId/evidence</code> - Upload evidence</li>
+      <li><code>POST /api/archive/:matchId</code> - Archive match</li>
+      <li><code>POST /api/ai/on_event</code> - Handle AI event</li>
+      <li><code>GET /api/data-export/:userId</code> - Export user data (GDPR)</li>
+      <li><code>DELETE /api/data/:userId</code> - Delete user data (GDPR)</li>
+      <li><code>POST /api/matches/:matchId/anonymize</code> - Anonymize match (GDPR)</li>
+      <li><code>GET /api/leaderboard/:game_type</code> - Get leaderboard (requires indexer)</li>
+      <li><code>GET /api/leaderboard/:game_type/user/:user_id</code> - Get user rank (requires indexer)</li>
+      <li><code>GET /api/leaderboard/:game_type/tier</code> - Filter by tier (requires indexer)</li>
+      <li><code>GET /api/leaderboard/:game_type/nearby/:user_id</code> - Nearby players (requires indexer)</li>
+    </ul>
+  </div>
+
+  <div class="endpoint" style="border-left-color: #ff6b6b;">
+    <h2>🧪 Test Endpoints (Development Only)</h2>
+    <p style="color: #ff6b6b; font-weight: bold;">⚠️  WARNING: These endpoints are DANGEROUS and only available in development!</p>
+    <ul>
+      <li><code>DELETE /api/test/clear-all?confirm=true</code> - Clear ALL records from R2 (IRREVERSIBLE!)</li>
+    </ul>
+    <p style="color: #ff6b6b; font-size: 0.9rem;">These endpoints are automatically disabled in production.</p>
+  </div>
+
+  <div class="endpoint">
+    <h2>🌐 Environment</h2>
+    <p><strong>Environment:</strong> ${env.ENVIRONMENT || 'development'}</p>
+    <p><strong>Base URL:</strong> <code>${baseUrl}</code></p>
+  </div>
+
+  <div class="endpoint">
+    <h2>📖 Documentation</h2>
+    <p>For complete API documentation, validation rules, and examples, see:</p>
+    <ul>
+      <li><a href="${baseUrl}/api/docs" target="_blank">Interactive Swagger UI</a></li>
+      <li><a href="${baseUrl}/openapi.json" target="_blank">OpenAPI 3.0 Specification</a></li>
+      <li><a href="${baseUrl}/explore" target="_blank">🎮 Match Explorer</a> - Browse and explore match records</li>
+    </ul>
+  </div>
+</body>
+</html>`;
+      return new Response(html, {
+        headers: {
+          'Content-Type': 'text/html',
+          ...getCorsHeaders(env),
+        },
+      });
+    }
+
+    // Exploration pages - browse matches, leaderboard, benchmarks
+    if (path === '/explore') {
+      return new Response(templates.matchExplorer(url.origin), {
+        headers: { 'Content-Type': 'text/html', ...getCorsHeaders(env) },
+      });
+    }
+    if (path === '/explore/leaderboard') {
+      return new Response(templates.leaderboardExplorer(url.origin), {
+        headers: { 'Content-Type': 'text/html', ...getCorsHeaders(env) },
+      });
+    }
+    if (path === '/explore/benchmark') {
+      return new Response(templates.benchmarkExplorer(url.origin), {
+        headers: { 'Content-Type': 'text/html', ...getCorsHeaders(env) },
+      });
+    }
+
+    // API endpoints for exploration
+    if (path === '/api/explore/matches') {
+      return handleListMatches(request, env);
+    }
+    if (path === '/api/explore/benchmarks') {
+      return handleListBenchmarks(request, env);
+    }
+
+    // Check for anonymize BEFORE general matches route (order matters!)
+    if (path.startsWith('/api/matches/') && path.includes('/anonymize')) {
+      return handleAnonymizeRequest(request, env, path);
+    }
+
     if (path.startsWith('/api/matches/')) {
       return handleMatchRequest(request, env, path);
     }
 
-    if (path.startsWith('/api/signed-url/')) {
-      return handleSignedUrlRequest(request, env, path);
+    // Handle /api/disputes (no trailing slash) for POST requests
+    if (path === '/api/disputes' && request.method === 'POST') {
+      return handleDisputeRequest(request, env, path);
     }
 
     if (path.startsWith('/api/disputes/')) {
       return handleDisputeRequest(request, env, path);
+    }
+
+    if (path.startsWith('/api/signed-url/')) {
+      return handleSignedUrlRequest(request, env, path);
     }
 
     if (path.startsWith('/api/archive/')) {
@@ -143,10 +310,6 @@ export default {
 
     if (path.startsWith('/api/data/')) {
       return handleDataDeletionRequest(request, env, path);
-    }
-
-    if (path.startsWith('/api/matches/') && path.includes('/anonymize')) {
-      return handleAnonymizeRequest(request, env, path);
     }
 
     if (path.startsWith('/api/ai/')) {
@@ -164,6 +327,54 @@ export default {
         }
       }
       return handleAIRequest(request, env, path);
+    }
+
+    // Leaderboard endpoints (per spec Section 20.1.6)
+    // Note: These require an off-chain indexer or Solana RPC queries
+    // Currently returns placeholder responses - implement with indexer or Solana client
+    if (path.startsWith('/api/leaderboard/')) {
+      return handleLeaderboardRequest(request, env, path);
+    }
+
+    // TEST-ONLY endpoints (development environment only)
+    // WARNING: These endpoints are DANGEROUS and should NEVER be enabled in production
+    if (path.startsWith('/api/test/')) {
+      // Only allow in development environment
+      if (env.ENVIRONMENT !== 'development') {
+        return new Response(JSON.stringify({ 
+          error: 'Forbidden',
+          message: 'Test endpoints are only available in development environment'
+        }), {
+          status: 403,
+          headers: {
+            'Content-Type': 'application/json',
+            ...getCorsHeaders(env),
+          },
+        });
+      }
+      return handleTestRequest(request, env, path);
+    }
+
+    // OpenAPI/Swagger documentation endpoints
+    if (path === '/api/docs' || path === '/docs' || path === '/swagger') {
+      const baseUrl = new URL(request.url).origin;
+      const html = generateSwaggerHtml(baseUrl);
+      return new Response(html, {
+        headers: {
+          'Content-Type': 'text/html',
+          ...getCorsHeaders(env),
+        },
+      });
+    }
+
+    if (path === '/openapi.json' || path === '/api/openapi.json' || path === '/swagger.json') {
+      const spec = generateOpenApiJson();
+      return new Response(spec, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCorsHeaders(env),
+        },
+      });
     }
 
     if (path === '/health') {
@@ -502,10 +713,15 @@ function validateMatchRecord(data: unknown): { valid: boolean; error?: string } 
 
 async function uploadMatch(request: Request, env: Env, matchId: string): Promise<Response> {
   try {
-    // Rate limiting: 10 matches per hour per wallet
+    // Rate limiting: Configurable via environment variables
+    // Default: 100 matches per hour per IP/wallet (production-friendly)
+    // Development: 10 per hour (stricter for testing)
     // Per critique Phase 6.2: Add IP-based rate limiting
     const identifier = await getRateLimitIdentifier(request);
-    const rateLimit = await checkRateLimit(env, identifier, 10, 3600000); // 10 per hour
+    const rateLimitPerHour = env.RATE_LIMIT_MATCHES_PER_HOUR 
+      ? parseInt(env.RATE_LIMIT_MATCHES_PER_HOUR, 10) 
+      : (env.ENVIRONMENT === 'production' ? 100 : 10); // Production: 100/hour, Dev: 10/hour
+    const rateLimit = await checkRateLimit(env, identifier, rateLimitPerHour, 3600000);
     
     if (!rateLimit.allowed) {
       const headers = getCorsHeaders(env);
@@ -1265,6 +1481,175 @@ async function handleAIEvent(
 }
 
 /**
+ * Handles listing matches for exploration
+ */
+async function handleListMatches(request: Request, env: Env): Promise<Response> {
+  try {
+    const matches: unknown[] = [];
+    let cursor: string | undefined;
+    let hasMore = true;
+    const maxMatches = 1000;
+    
+    while (hasMore && matches.length < maxMatches) {
+      const listResult = await env.MATCHES_BUCKET.list({
+        prefix: 'matches/',
+        limit: 100,
+        ...(cursor ? { cursor } : {}),
+      });
+      
+      for (const object of listResult.objects) {
+        if (object.key.endsWith('.json') && !object.key.includes('/anonymized/')) {
+          try {
+            const matchObject = await env.MATCHES_BUCKET.get(object.key);
+            if (matchObject) {
+              const matchData = JSON.parse(await matchObject.text());
+              matches.push(matchData);
+            }
+          } catch (error) {
+            console.error('Error parsing match ' + object.key + ':', error);
+          }
+        }
+      }
+      
+      hasMore = listResult.truncated;
+      if (hasMore && 'cursor' in listResult) {
+        cursor = listResult.cursor;
+      } else {
+        hasMore = false;
+      }
+    }
+    
+    matches.sort((a, b) => {
+      const aRecord = a as Record<string, unknown>;
+      const bRecord = b as Record<string, unknown>;
+      const timeA = aRecord.start_time || aRecord.createdAt || 0;
+      const timeB = bRecord.start_time || bRecord.createdAt || 0;
+      return new Date(timeB as string | number).getTime() - new Date(timeA as string | number).getTime();
+    });
+    
+    return new Response(
+      JSON.stringify({
+        success: true,
+        matches,
+        count: matches.length,
+        total_fetched: matches.length,
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCorsHeaders(env),
+        },
+      }
+    );
+  } catch (error) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: String(error),
+        matches: [],
+        count: 0,
+      }),
+      {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCorsHeaders(env),
+        },
+      }
+    );
+  }
+}
+
+/**
+ * Handles listing benchmark matches (AI vs AI with model metadata)
+ */
+async function handleListBenchmarks(request: Request, env: Env): Promise<Response> {
+  try {
+    const benchmarks: unknown[] = [];
+    let cursor: string | undefined;
+    let hasMore = true;
+    const maxMatches = 1000;
+    
+    while (hasMore && benchmarks.length < maxMatches) {
+      const listResult = await env.MATCHES_BUCKET.list({
+        prefix: 'matches/',
+        limit: 100,
+        ...(cursor ? { cursor } : {}),
+      });
+      
+      for (const object of listResult.objects) {
+        if (object.key.endsWith('.json') && !object.key.includes('/anonymized/')) {
+          try {
+            const matchObject = await env.MATCHES_BUCKET.get(object.key);
+            if (matchObject) {
+              const matchData = JSON.parse(await matchObject.text());
+              const players = matchData.players || [];
+              
+              // Filter for AI vs AI matches with model metadata (benchmark matches)
+              const aiPlayers = players.filter((p: Record<string, unknown>) => 
+                (p.type === 'ai' || p.player_type === 'ai') && 
+                ((p.metadata as Record<string, unknown>)?.model_name || (p.metadata as Record<string, unknown>)?.model_id || matchData.chain_of_thought)
+              );
+              
+              if (aiPlayers.length >= 2) {
+                benchmarks.push(matchData);
+              }
+            }
+          } catch (error) {
+            console.error(`Error parsing match ${object.key}:`, error);
+          }
+        }
+      }
+      
+      hasMore = listResult.truncated;
+      if (hasMore && 'cursor' in listResult) {
+        cursor = listResult.cursor;
+      } else {
+        hasMore = false;
+      }
+    }
+    
+    benchmarks.sort((a, b) => {
+      const aRecord = a as Record<string, unknown>;
+      const bRecord = b as Record<string, unknown>;
+      const timeA = aRecord.start_time || aRecord.createdAt || 0;
+      const timeB = bRecord.start_time || bRecord.createdAt || 0;
+      return new Date(timeB as string | number).getTime() - new Date(timeA as string | number).getTime();
+    });
+    
+    return new Response(
+      JSON.stringify({
+        success: true,
+        benchmarks,
+        count: benchmarks.length,
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCorsHeaders(env),
+        },
+      }
+    );
+  } catch (error) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: String(error),
+        benchmarks: [],
+        count: 0,
+      }),
+      {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCorsHeaders(env),
+        },
+      }
+    );
+  }
+}
+
+/**
  * Handles archive requests.
  * Per spec Section 8.2: archive match records for long-term storage.
  */
@@ -1437,6 +1822,357 @@ async function handleDataExportRequest(
     );
   } catch (error) {
     return new Response(JSON.stringify({ error: String(error) }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCorsHeaders(env),
+      },
+    });
+  }
+}
+
+/**
+ * Handles leaderboard requests.
+ * Per spec Section 20.1.6: Leaderboard system (per game type + per season).
+ * 
+ * NOTE: These endpoints require an off-chain indexer (PostgreSQL + Redis) or
+ * direct Solana RPC queries to GameLeaderboard accounts.
+ * 
+ * Current implementation: Returns placeholder responses.
+ * To implement:
+ * 1. Add Solana RPC client to query GameLeaderboard PDAs
+ * 2. Or integrate with off-chain indexer service
+ * 3. Cache results in R2 or KV for performance
+ */
+async function handleLeaderboardRequest(
+  request: Request,
+  env: Env,
+  path: string
+): Promise<Response> {
+  try {
+    // Parse path: /api/leaderboard/:game_type/...
+    const pathParts = path.replace('/api/leaderboard/', '').split('/');
+    const gameType = pathParts[0];
+    const action = pathParts[1];
+    const userId = pathParts[2];
+
+    // Validate game type (0=CLAIM, 1=Poker, 2=WordSearch, etc.)
+    const gameTypeNum = parseInt(gameType, 10);
+    if (isNaN(gameTypeNum) || gameTypeNum < 0) {
+      return new Response(JSON.stringify({ 
+        error: 'Invalid game type',
+        message: 'Game type must be a number (0=CLAIM, 1=Poker, 2=WordSearch, etc.)',
+        available_game_types: {
+          0: 'CLAIM',
+          1: 'Poker',
+          2: 'WordSearch',
+        }
+      }), {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCorsHeaders(env),
+        },
+      });
+    }
+
+    // Get query parameters
+    const url = new URL(request.url);
+    const seasonId = url.searchParams.get('season_id');
+    const limit = parseInt(url.searchParams.get('limit') || '100', 10);
+    const tier = url.searchParams.get('tier');
+    const range = parseInt(url.searchParams.get('range') || '5', 10);
+
+    // Route to appropriate handler
+    if (action === 'tier' && tier) {
+      // GET /api/leaderboard/:game_type/tier?tier=X&season_id=Y
+      return new Response(JSON.stringify({
+        message: 'Leaderboard tier endpoint not yet implemented',
+        note: 'This endpoint requires an off-chain indexer to compute tiers from lifetime_gp_earned',
+        implementation_required: [
+          'Off-chain indexer (PostgreSQL + Redis)',
+          'Tier calculation: Bronze (0-999 GP), Silver (1000-4999), Gold (5000-19999), Platinum (20000-49999), Diamond (50000-99999), Master (100000+)',
+          'Query: SELECT * FROM leaderboard_entries WHERE game_type = ? AND tier = ? AND season_id = ? ORDER BY score DESC LIMIT ?'
+        ],
+        request_params: {
+          game_type: gameTypeNum,
+          tier,
+          season_id: seasonId,
+        }
+      }), {
+        status: 501, // Not Implemented
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCorsHeaders(env),
+        },
+      });
+    } else if (action === 'user' && userId) {
+      // GET /api/leaderboard/:game_type/user/:user_id?season_id=Y
+      return new Response(JSON.stringify({
+        message: 'User leaderboard rank endpoint not yet implemented',
+        note: 'This endpoint requires querying UserAccount on Solana or off-chain indexer',
+        implementation_required: [
+          'Query Solana UserAccount PDA for user_id',
+          'Or query off-chain indexer: SELECT rank, tier, score FROM leaderboard_entries WHERE game_type = ? AND user_id = ? AND season_id = ?',
+          'Return: { user_id, rank, tier, score, wins, games_played, season_id }'
+        ],
+        request_params: {
+          game_type: gameTypeNum,
+          user_id: userId,
+          season_id: seasonId,
+        }
+      }), {
+        status: 501,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCorsHeaders(env),
+        },
+      });
+    } else if (action === 'nearby' && userId) {
+      // GET /api/leaderboard/:game_type/nearby/:user_id?range=5&season_id=Y
+      return new Response(JSON.stringify({
+        message: 'Nearby players endpoint not yet implemented',
+        note: 'This endpoint requires off-chain indexer to find players above/below user rank',
+        implementation_required: [
+          'Query user rank from indexer',
+          'SELECT * FROM leaderboard_entries WHERE game_type = ? AND season_id = ? AND rank BETWEEN ? AND ? ORDER BY rank',
+          'Return: { above: [...], user: {...}, below: [...] }'
+        ],
+        request_params: {
+          game_type: gameTypeNum,
+          user_id: userId,
+          range,
+          season_id: seasonId,
+        }
+      }), {
+        status: 501,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCorsHeaders(env),
+        },
+      });
+    } else {
+      // GET /api/leaderboard/:game_type?season_id=Y&limit=N
+      // This could query Solana GameLeaderboard PDA directly (top 100 on-chain)
+      return new Response(JSON.stringify({
+        message: 'Leaderboard endpoint not yet implemented',
+        note: 'Top 100 is stored on-chain in Solana GameLeaderboard PDA. Full rankings require off-chain indexer.',
+        implementation_options: [
+          {
+            method: 'Query Solana directly',
+            description: 'Query GameLeaderboard PDA using Solana RPC',
+            pda_seeds: ['leaderboard', gameTypeNum, seasonId || 'current'],
+            returns: 'Top 100 entries (on-chain only)',
+            limitation: 'Only top 100, no tier filtering, no full rankings'
+          },
+          {
+            method: 'Query off-chain indexer',
+            description: 'Query PostgreSQL/Redis indexer for full rankings',
+            returns: 'Full rankings, tier filtering, nearby players',
+            recommended: true
+          }
+        ],
+        spec_reference: 'Section 20.1.6: Leaderboard System (Per Game Type + Per Season)',
+        request_params: {
+          game_type: gameTypeNum,
+          season_id: seasonId || 'current',
+          limit: Math.min(limit, 1000),
+        },
+        expected_response_format: {
+          game_type: gameTypeNum,
+          season_id: 'number',
+          entries: [
+            {
+              rank: 1,
+              user_id: 'string',
+              score: 'number',
+              wins: 'number',
+              games_played: 'number',
+              tier: 'Bronze|Silver|Gold|Platinum|Diamond|Master',
+              timestamp: 'ISO8601'
+            }
+          ],
+          total_entries: 'number',
+          last_updated: 'ISO8601'
+        }
+      }), {
+        status: 501,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCorsHeaders(env),
+        },
+      });
+    }
+  } catch (error) {
+    return new Response(JSON.stringify({ error: String(error) }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCorsHeaders(env),
+      },
+    });
+  }
+}
+
+/**
+ * Handles test-only requests (DEVELOPMENT ONLY).
+ * WARNING: These endpoints are DANGEROUS and should NEVER be enabled in production.
+ * 
+ * Available endpoints:
+ * - DELETE /api/test/clear-all?confirm=true - Clears ALL records from R2 (matches, disputes, evidence, archive)
+ */
+async function handleTestRequest(
+  request: Request,
+  env: Env,
+  path: string
+): Promise<Response> {
+  // CRITICAL SAFETY CHECKS:
+  // 1. Must be development environment
+  // 2. Must be test bucket (claim-matches-test)
+  if (env.ENVIRONMENT !== 'development') {
+    return new Response(JSON.stringify({ 
+      error: 'Forbidden',
+      message: 'Test endpoints are only available in development environment'
+    }), {
+      status: 403,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCorsHeaders(env),
+      },
+    });
+  }
+
+  // Check bucket name - ONLY allow clearing test bucket
+  const bucketName = env.BUCKET_NAME || 'unknown';
+  if (bucketName !== 'claim-matches-test') {
+    return new Response(JSON.stringify({ 
+      error: 'Forbidden',
+      message: 'Clear operation is only allowed on test bucket (claim-matches-test)',
+      current_bucket: bucketName,
+      required_bucket: 'claim-matches-test',
+      warning: 'This safety check prevents accidental deletion of production data'
+    }), {
+      status: 403,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCorsHeaders(env),
+      },
+    });
+  }
+
+  try {
+    if (path === '/api/test/clear-all' && request.method === 'DELETE') {
+      // Require confirmation via query parameter
+      const url = new URL(request.url);
+      const confirm = url.searchParams.get('confirm');
+      
+      if (confirm !== 'true') {
+        return new Response(JSON.stringify({
+          error: 'Confirmation required',
+          message: 'This will DELETE ALL records from R2. Add ?confirm=true to proceed.',
+          warning: '⚠️  THIS IS IRREVERSIBLE! All matches, disputes, evidence, and archived records will be deleted.',
+          bucket_name: bucketName,
+          endpoint: '/api/test/clear-all?confirm=true',
+          method: 'DELETE',
+        }), {
+          status: 400,
+          headers: {
+            'Content-Type': 'application/json',
+            ...getCorsHeaders(env),
+          },
+        });
+      }
+
+      console.warn(`[TEST] Clearing all records from R2 bucket: ${bucketName}`);
+      console.warn(`[TEST] Safety checks passed: ENVIRONMENT=${env.ENVIRONMENT}, BUCKET_NAME=${bucketName}`);
+      
+      let deletedCount = 0;
+      let errorCount = 0;
+      const prefixes = ['matches/', 'disputes/', 'archive/', 'matches/anonymized/'];
+
+      // Delete all objects with each prefix
+      for (const prefix of prefixes) {
+        try {
+          let cursor: string | undefined;
+          let hasMore = true;
+          
+          while (hasMore) {
+            const listResult = await env.MATCHES_BUCKET.list({
+              prefix,
+              ...(cursor ? { cursor } : {}),
+            });
+
+            // Delete in batches
+            const deletePromises = listResult.objects.map(async (obj) => {
+              try {
+                await env.MATCHES_BUCKET.delete(obj.key);
+                deletedCount++;
+                return true;
+              } catch (error) {
+                console.error(`Failed to delete ${obj.key}:`, error);
+                errorCount++;
+                return false;
+              }
+            });
+
+            await Promise.all(deletePromises);
+            
+            // Check if there are more results
+            hasMore = listResult.truncated;
+            if (hasMore && 'cursor' in listResult) {
+              cursor = listResult.cursor;
+            } else {
+              hasMore = false;
+            }
+          }
+        } catch (error) {
+          console.error(`Error listing/deleting prefix ${prefix}:`, error);
+          errorCount++;
+        }
+      }
+
+      console.warn(`[TEST] Cleared ${deletedCount} records, ${errorCount} errors`);
+
+      return new Response(JSON.stringify({
+        success: true,
+        message: 'All records cleared from R2',
+        bucket_name: bucketName,
+        deleted_count: deletedCount,
+        error_count: errorCount,
+        cleared_at: new Date().toISOString(),
+        warning: 'This operation is irreversible. All data has been deleted.',
+        safety_checks: {
+          environment: env.ENVIRONMENT,
+          bucket_name: bucketName,
+          allowed: bucketName === 'claim-matches-test',
+        },
+      }), {
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCorsHeaders(env),
+        },
+      });
+    }
+
+    // Unknown test endpoint
+    return new Response(JSON.stringify({
+      error: 'Not Found',
+      message: 'Unknown test endpoint',
+      available_endpoints: [
+        'DELETE /api/test/clear-all?confirm=true - Clear all records from R2'
+      ],
+    }), {
+      status: 404,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCorsHeaders(env),
+      },
+    });
+  } catch (error) {
+    return new Response(JSON.stringify({ 
+      error: 'Internal Server Error',
+      message: String(error)
+    }), {
       status: 500,
       headers: {
         'Content-Type': 'application/json',

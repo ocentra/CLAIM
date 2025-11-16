@@ -4,10 +4,22 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 import jsxA11y from 'eslint-plugin-jsx-a11y'
 import tseslint from 'typescript-eslint'
-import { defineConfig, globalIgnores } from 'eslint/config'
+import { defineConfig } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist', 'infra/cloudflare/src/**/*.js']),
+  {
+    ignores: [
+      'dist/**',
+      'infra/cloudflare/.wrangler/**',
+      'infra/cloudflare/src/**/*.js',
+      'node_modules/**',
+      'build/**',
+      '*.min.js',
+      'coverage/**',
+      '*.log',
+      '*.tsbuildinfo',
+    ],
+  },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
