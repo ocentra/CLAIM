@@ -7,13 +7,14 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { program, isLocalnet, isDevnet, isMainnet } from './helpers';
+import { program, isLocalnet, isDevnet, isMainnet } from '@/helpers';
 
 export interface TestReportData {
   suite: string;
   test: string;
   status: 'passed' | 'failed' | 'skipped';
   duration?: number;
+  logs?: string[];
   error?: {
     message: string;
     stack?: string;
@@ -140,6 +141,28 @@ class ReportGenerator {
         }
         
         md += `\n**Suite Summary:** ${suite.summary.passed} passed, ${suite.summary.failed} failed, ${suite.summary.skipped} skipped\n\n`;
+
+        // Suite logs (per-test) - embedded in markdown
+        if (suite.tests.some(t => t.logs && t.logs.length > 0)) {
+          md += `#### Execution Logs\n\n`;
+          for (const test of suite.tests) {
+            const testName = test.test.replace(/\|/g, '\\|');
+            md += `**${testName}**\n\n`;
+            if (test.logs && test.logs.length > 0) {
+              md += `\`\`\`\n`;
+              // Trim extremely long logs per test to keep report size manageable
+              const maxLines = 300;
+              const lines = test.logs.slice(0, maxLines);
+              md += `${lines.join('\n')}\n`;
+              if (test.logs.length > maxLines) {
+                md += `... (${test.logs.length - maxLines} more lines truncated)\n`;
+              }
+              md += `\`\`\`\n\n`;
+            } else {
+              md += `_no logs_\n\n`;
+            }
+          }
+        }
       }
       
       // Failed Tests Details

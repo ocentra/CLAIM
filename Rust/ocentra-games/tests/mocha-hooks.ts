@@ -11,6 +11,47 @@ import { reportGenerator, type TestReportData } from './report-generator';
 
 // Track test start times
 const testStartTimes = new Map<string, number>();
+// Track per-test logs
+const testLogs = new Map<string, string[]>();
+// Original console methods (to restore after each)
+const originalConsole = {
+  log: console.log,
+  info: console.info,
+  warn: console.warn,
+  error: console.error,
+};
+
+function attachConsoleCapture(key: string) {
+  testLogs.set(key, []);
+  const sink = testLogs.get(key)!;
+  const toLine = (args: unknown[]): string => args.map((a) => {
+    if (typeof a === 'string') return a;
+    try { return JSON.stringify(a); } catch { return String(a); }
+  }).join(' ');
+  console.log = (...args: unknown[]) => {
+    sink.push(toLine(args));
+    originalConsole.log.apply(console, args);
+  };
+  console.info = (...args: unknown[]) => {
+    sink.push(toLine(args));
+    originalConsole.info.apply(console, args);
+  };
+  console.warn = (...args: unknown[]) => {
+    sink.push(toLine(args));
+    originalConsole.warn.apply(console, args);
+  };
+  console.error = (...args: unknown[]) => {
+    sink.push(toLine(args));
+    originalConsole.error.apply(console, args);
+  };
+}
+
+function detachConsoleCapture() {
+  console.log = originalConsole.log;
+  console.info = originalConsole.info;
+  console.warn = originalConsole.warn;
+  console.error = originalConsole.error;
+}
 
 // Get suite name from test's parent chain
 function getSuiteName(test: Mocha.Test): string {
@@ -33,13 +74,16 @@ function getSuiteName(test: Mocha.Test): string {
 
 try {
   // Access Mocha's root hooks via global
-  const mocha = (global as any).mocha || (global as any).Mocha;
+  const g = global as unknown as Record<string, unknown>;
+  type Hookable = { beforeEach?: (fn: (this: Mocha.Context) => void) => void; afterEach?: (fn: (this: Mocha.Context) => void) => void };
+  const mocha = (g.mocha as Hookable | undefined) || (g.Mocha as Hookable | undefined);
   
   if (mocha && typeof mocha.beforeEach === 'function') {
     mocha.beforeEach(function(this: Mocha.Context) {
       const test = this.currentTest;
       if (test) {
         testStartTimes.set(test.fullTitle(), Date.now());
+        attachConsoleCapture(test.fullTitle());
       }
     });
   }
@@ -53,6 +97,9 @@ try {
       const startTime = testStartTimes.get(testKey) || Date.now();
       const duration = Date.now() - startTime;
       testStartTimes.delete(testKey);
+      const logs = testLogs.get(testKey) || [];
+      testLogs.delete(testKey);
+      detachConsoleCapture();
 
       // Determine status
       let status: 'passed' | 'failed' | 'skipped' = 'skipped';
@@ -69,6 +116,7 @@ try {
         test: test.title || 'Unknown Test',
         status,
         duration,
+        logs,
         error: test.err ? {
           message: test.err.message || String(test.err),
           stack: test.err.stack,
@@ -76,6 +124,7 @@ try {
       };
 
       reportGenerator.addResult(result);
+      testLogs.delete(testKey);
     });
   }
 } catch (err) {
@@ -84,17 +133,19 @@ try {
 }
 
 // Also try to register hooks directly if they're available on global
-if (typeof (global as any).beforeEach === 'function') {
-  (global as any).beforeEach(function(this: Mocha.Context) {
+const g2 = global as unknown as Record<string, unknown>;
+if (typeof g2.beforeEach === 'function') {
+  (g2.beforeEach as (fn: (this: Mocha.Context) => void) => void)(function(this: Mocha.Context) {
     const test = this.currentTest;
     if (test) {
       testStartTimes.set(test.fullTitle(), Date.now());
+      attachConsoleCapture(test.fullTitle());
     }
   });
 }
 
-if (typeof (global as any).afterEach === 'function') {
-  (global as any).afterEach(function(this: Mocha.Context) {
+if (typeof g2.afterEach === 'function') {
+  (g2.afterEach as (fn: (this: Mocha.Context) => void) => void)(function(this: Mocha.Context) {
     const test = this.currentTest;
     if (!test) return;
 
@@ -102,6 +153,8 @@ if (typeof (global as any).afterEach === 'function') {
     const startTime = testStartTimes.get(testKey) || Date.now();
     const duration = Date.now() - startTime;
     testStartTimes.delete(testKey);
+    const logs = testLogs.get(testKey) || [];
+    detachConsoleCapture();
 
     // Determine status
     let status: 'passed' | 'failed' | 'skipped' = 'skipped';
@@ -118,6 +171,7 @@ if (typeof (global as any).afterEach === 'function') {
       test: test.title || 'Unknown Test',
       status,
       duration,
+      logs,
       error: test.err ? {
         message: test.err.message || String(test.err),
         stack: test.err.stack,
@@ -125,6 +179,7 @@ if (typeof (global as any).afterEach === 'function') {
     };
 
     reportGenerator.addResult(result);
+    testLogs.delete(testKey);
   });
 }
 
