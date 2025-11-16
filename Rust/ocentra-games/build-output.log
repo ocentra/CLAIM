@@ -1,0 +1,8 @@
+WARNING: Adding `solana-program` as a separate dependency might cause conflicts.
+To solve, remove the `solana-program` dependency and use the exported crate from `anchor-lang`.
+`use solana_program` becomes `use anchor_lang::solana_program`.
+Program name: `ocentra-games`
+
+    Finished `release` profile [optimized] target(s) in 3.57s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.84s
+     Running unittests src/lib.rs (/mnt/e/ocentra-games/Rust/ocentra-games/target/debug/deps/ocentra_games-454030a37ee105a6)

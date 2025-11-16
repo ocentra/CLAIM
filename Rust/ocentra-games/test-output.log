@@ -1,0 +1,6 @@
+
+Found a 'test' script in the Anchor.toml. Running it as a test suite!
+
+Running test suite: "/mnt/e/ocentra-games/Rust/ocentra-games/Anchor.toml"
+
+Error: Your configured rpc port: 8899 is already in use
