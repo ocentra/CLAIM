@@ -1,6 +1,6 @@
-use anchor_lang::prelude::*;
-use crate::state::UserAccount;
 use crate::error::GameError;
+use crate::state::UserAccount;
+use anchor_lang::prelude::*;
 
 /// Subscription tier constants (replaces SubscriptionTier enum to reduce program size)
 pub mod subscription_tier {
@@ -16,46 +16,46 @@ pub mod subscription_tier {
 pub fn handler(
     ctx: Context<PurchaseSubscription>,
     user_id: String,
-    tier: u8,  // SubscriptionTier as u8
-    duration_days: u8,  // Typically 30 days
+    tier: u8,          // SubscriptionTier as u8
+    duration_days: u8, // Typically 30 days
 ) -> Result<()> {
     // Convert String to fixed-size array immediately (optimization)
     let user_id_bytes = user_id.as_bytes();
-    require!(
-        user_id_bytes.len() <= 64,
-        GameError::InvalidPayload
-    );
-    
+    require!(user_id_bytes.len() <= 64, GameError::InvalidPayload);
+
     let user_account = &mut ctx.accounts.user_account;
     let clock = Clock::get()?;
-    
+
     // Validate tier (0=Free, 1=Pro, 2=ProPlus)
-    require!(
-        tier >= 1 && tier <= 2,
-        GameError::InvalidTier
-    );
-    
+    require!(tier >= 1 && tier <= 2, GameError::InvalidTier);
+
     // Payment processed via Stripe (off-chain)
     // In production: Call Stripe API to process payment
     // After successful payment, update subscription in database
-    
+
     // Extend subscription expiry
     let duration_seconds = duration_days as i64 * 86400;
     if user_account.subscription_expiry > clock.unix_timestamp {
         // Extend existing subscription
-        user_account.subscription_expiry = user_account.subscription_expiry
+        user_account.subscription_expiry = user_account
+            .subscription_expiry
             .checked_add(duration_seconds)
             .ok_or(GameError::Overflow)?;
     } else {
         // New subscription
-        user_account.subscription_expiry = clock.unix_timestamp
+        user_account.subscription_expiry = clock
+            .unix_timestamp
             .checked_add(duration_seconds)
             .ok_or(GameError::Overflow)?;
     }
-    
+
     user_account.subscription_tier = tier;
-    
-    msg!("Subscription purchased: tier={}, expiry={}", tier, user_account.subscription_expiry);
+
+    msg!(
+        "Subscription purchased: tier={}, expiry={}",
+        tier,
+        user_account.subscription_expiry
+    );
     Ok(())
 }
 
@@ -68,7 +68,6 @@ pub struct PurchaseSubscription<'info> {
         bump
     )]
     pub user_account: Account<'info, UserAccount>,
-    
+
     pub system_program: Program<'info, System>,
 }
-

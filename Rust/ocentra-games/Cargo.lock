@@ -987,7 +987,6 @@ dependencies = [
  "anchor-spl",
  "bytemuck",
  "getrandom 0.2.16",
- "solana-program",
  "uuid",
 ]
 

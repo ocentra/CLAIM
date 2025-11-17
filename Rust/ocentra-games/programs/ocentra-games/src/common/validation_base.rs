@@ -1,6 +1,6 @@
-use anchor_lang::prelude::*;
-use crate::state::Match;
 use crate::error::GameError;
+use crate::state::Match;
+use anchor_lang::prelude::*;
 
 /// Common validation logic that applies to all games
 pub struct CommonValidation;
@@ -17,10 +17,7 @@ impl CommonValidation {
 
     /// Validate match is not ended
     pub fn validate_not_ended(match_account: &Match) -> Result<()> {
-        require!(
-            !match_account.is_ended(),
-            GameError::MatchAlreadyEnded
-        );
+        require!(!match_account.is_ended(), GameError::MatchAlreadyEnded);
         Ok(())
     }
 
@@ -44,29 +41,19 @@ impl CommonValidation {
 
     /// Validate action type is within bounds
     pub fn validate_action_type(action_type: u8, max_action: u8) -> Result<()> {
-        require!(
-            action_type <= max_action,
-            GameError::InvalidAction
-        );
+        require!(action_type <= max_action, GameError::InvalidAction);
         Ok(())
     }
 
     /// Validate payload size
     pub fn validate_payload_size(payload: &[u8], max_size: usize) -> Result<()> {
-        require!(
-            payload.len() <= max_size,
-            GameError::InvalidPayload
-        );
+        require!(payload.len() <= max_size, GameError::InvalidPayload);
         Ok(())
     }
 
     /// Validate user_id length
     pub fn validate_user_id(user_id: &str) -> Result<()> {
-        require!(
-            user_id.as_bytes().len() <= 64,
-            GameError::InvalidPayload
-        );
+        require!(user_id.as_bytes().len() <= 64, GameError::InvalidPayload);
         Ok(())
     }
 }
-

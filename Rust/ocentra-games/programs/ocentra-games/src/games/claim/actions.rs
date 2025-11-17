@@ -1,8 +1,8 @@
-use anchor_lang::prelude::*;
-use crate::state::Match;
 use crate::card_games::floor_card::FloorCard;
 use crate::card_games::hand_management::HandManagement;
 use crate::card_games::suit_declarations::SuitDeclarations;
+use crate::state::Match;
+use anchor_lang::prelude::*;
 
 /// CLAIM-specific action state updates
 /// `advance_turn`: if true, advance turn after pick_up/decline (for single moves)
@@ -27,7 +27,8 @@ pub fn apply_claim_action(
             FloorCard::clear_floor_card(match_account);
             HandManagement::increment_hand_size(match_account, player_index);
             if advance_turn {
-                match_account.current_player = ((player_index + 1) % match_account.player_count as usize) as u8;
+                match_account.current_player =
+                    ((player_index + 1) % match_account.player_count as usize) as u8;
             }
         }
         1 => {
@@ -35,13 +36,14 @@ pub fn apply_claim_action(
             // Floor card remains visible for next player's turn
             // Only dealer/platform will remove/replace it if no one picks it up after a full round
             if advance_turn {
-                match_account.current_player = ((player_index + 1) % match_account.player_count as usize) as u8;
+                match_account.current_player =
+                    ((player_index + 1) % match_account.player_count as usize) as u8;
             }
         }
         3 => {
             // Call showdown: transition to ended phase
             match_account.phase = 2; // Ended
-            // ended_at will be set by instruction handler with clock
+                                     // ended_at will be set by instruction handler with clock
         }
         5 => {
             // Reveal floor card: set floor card hash and mark as revealed
@@ -57,4 +59,3 @@ pub fn apply_claim_action(
     }
     Ok(())
 }
-

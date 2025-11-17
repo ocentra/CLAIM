@@ -4,4 +4,3 @@ pub struct GameConfig {
     pub min_players: u8,
     pub max_players: u8,
 }
-

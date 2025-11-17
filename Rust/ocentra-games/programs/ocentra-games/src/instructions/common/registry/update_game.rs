@@ -1,6 +1,6 @@
-use anchor_lang::prelude::*;
-use crate::state::GameRegistry;
 use crate::error::GameError;
+use crate::state::GameRegistry;
+use anchor_lang::prelude::*;
 
 /// Updates an existing game in the registry.
 /// Per spec Section 16.5: Game registry system - versioning support.
@@ -17,20 +17,21 @@ pub fn handler(
 ) -> Result<()> {
     let mut registry = ctx.accounts.registry.load_mut()?;
     let clock = Clock::get()?;
-    
+
     // Validate authority
     require!(
         ctx.accounts.authority.key() == registry.authority,
         GameError::Unauthorized
     );
-    
+
     // Get existing game
-    let existing_game = registry.find_game(game_id)
+    let existing_game = registry
+        .find_game(game_id)
         .ok_or(GameError::InvalidPayload)?;
-    
+
     // Create updated game definition
     let mut updated_game = existing_game.clone();
-    
+
     // Update fields if provided
     if let Some(name_str) = name {
         require!(
@@ -45,7 +46,7 @@ pub fn handler(
             updated_game.name[i] = 0;
         }
     }
-    
+
     if let Some(min) = min_players {
         require!(
             min > 0 && min <= updated_game.max_players,
@@ -53,7 +54,7 @@ pub fn handler(
         );
         updated_game.min_players = min;
     }
-    
+
     if let Some(max) = max_players {
         require!(
             max >= updated_game.min_players && max <= 10,
@@ -61,7 +62,7 @@ pub fn handler(
         );
         updated_game.max_players = max;
     }
-    
+
     if let Some(url_str) = rule_engine_url {
         require!(
             !url_str.is_empty() && url_str.len() <= 200,
@@ -75,19 +76,19 @@ pub fn handler(
             updated_game.rule_engine_url[i] = 0;
         }
     }
-    
+
     if let Some(ver) = version {
         updated_game.version = ver;
     }
-    
+
     if let Some(en) = enabled {
         updated_game.enabled = if en { 1 } else { 0 }; // Convert bool to u8
     }
-    
+
     // Update in registry
     registry.update_game(game_id, updated_game)?;
     registry.last_updated = clock.unix_timestamp;
-    
+
     msg!("Game updated: game_id={}", game_id);
     Ok(())
 }
@@ -100,10 +101,9 @@ pub struct UpdateGame<'info> {
         bump
     )]
     pub registry: AccountLoader<'info, GameRegistry>,
-    
+
     #[account(mut)]
     pub authority: Signer<'info>,
-    
+
     pub system_program: Program<'info, System>,
 }
-

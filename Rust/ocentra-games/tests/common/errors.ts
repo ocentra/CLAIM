@@ -217,3 +217,47 @@ export function normalizeAndRethrowAnchorError(err: unknown, context: string): n
   throw new Error(fullMsg);
 }
 
+/**
+ * Retry helper for "Unsupported sysvar" errors (known localnet validator issue)
+ * This error occurs intermittently when the validator is under load, especially with parallel transactions.
+ * Uses exponential backoff for retries.
+ */
+export async function retryOnUnsupportedSysvar<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  initialDelayMs: number = 100
+): Promise<T> {
+  let lastError: unknown;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err: unknown) {
+      lastError = err;
+      
+      // Check if this is an "Unsupported sysvar" error
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      const errorLogs = err instanceof SendTransactionError ? (err.logs || []) : [];
+      const allLogs = errorLogs.join('\n');
+      
+      const isUnsupportedSysvar = 
+        errorMessage.includes('Unsupported sysvar') ||
+        allLogs.includes('Unsupported sysvar');
+      
+      if (isUnsupportedSysvar && attempt < maxRetries) {
+        // Exponential backoff: 100ms, 200ms, 400ms
+        const delayMs = initialDelayMs * Math.pow(2, attempt);
+        console.log(`[retryOnUnsupportedSysvar] Attempt ${attempt + 1}/${maxRetries + 1} failed with "Unsupported sysvar", retrying in ${delayMs}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        continue;
+      }
+      
+      // Not an unsupported sysvar error, or out of retries - throw
+      throw err;
+    }
+  }
+  
+  // Should never reach here, but TypeScript needs this
+  throw lastError;
+}
+

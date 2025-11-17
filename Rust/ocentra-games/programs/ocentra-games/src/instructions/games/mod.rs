@@ -8,4 +8,3 @@ pub mod moves;
 #[allow(ambiguous_glob_reexports)]
 pub use match_lifecycle::*;
 pub use moves::*;
-

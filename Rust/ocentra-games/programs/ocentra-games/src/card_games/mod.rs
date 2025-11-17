@@ -4,4 +4,3 @@ pub mod floor_card;
 pub mod hand_management;
 pub mod suit_declarations;
 pub mod validation;
-

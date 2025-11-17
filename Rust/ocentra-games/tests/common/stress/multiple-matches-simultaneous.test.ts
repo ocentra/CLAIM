@@ -6,6 +6,7 @@
 import { BaseTest, TestCategory, ClusterRequirement, registerMochaTest } from '@/core';
 import { SystemProgram } from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
+import { retryOnUnsupportedSysvar } from '@/common';
 
 class MultipleMatchesSimultaneousTest extends BaseTest {
   constructor() {
@@ -45,18 +46,20 @@ class MultipleMatchesSimultaneousTest extends BaseTest {
       matchIds.map(id => getMatchPDA(id))
     );
 
-    // Create all matches
+    // Create all matches with retry logic for "Unsupported sysvar" errors
     await Promise.all(
       matchIds.map((matchId, i) => 
-        program.methods
-          .createMatch(matchId, claimGame.game_id, new anchor.BN(seed + i))
-          .accounts({
-            matchAccount: matchPDAs[i][0],
-            registry: registryPDA,
-            authority: authority.publicKey,
-            systemProgram: SystemProgram.programId,
-          } as never)
-          .rpc()
+        retryOnUnsupportedSysvar(async () => {
+          return await program.methods
+            .createMatch(matchId, claimGame.game_id, new anchor.BN(seed + i))
+            .accounts({
+              matchAccount: matchPDAs[i][0],
+              registry: registryPDA,
+              authority: authority.publicKey,
+              systemProgram: SystemProgram.programId,
+            } as never)
+            .rpc();
+        })
       )
     );
 

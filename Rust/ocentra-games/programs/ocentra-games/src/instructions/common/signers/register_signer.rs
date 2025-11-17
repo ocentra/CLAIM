@@ -1,14 +1,10 @@
-use anchor_lang::prelude::*;
-use crate::state::SignerRegistry;
 use crate::error::GameError;
+use crate::state::SignerRegistry;
+use anchor_lang::prelude::*;
 
-pub fn handler(
-    ctx: Context<RegisterSigner>,
-    pubkey: Pubkey,
-    role: u8,
-) -> Result<()> {
+pub fn handler(ctx: Context<RegisterSigner>, pubkey: Pubkey, role: u8) -> Result<()> {
     let mut registry = ctx.accounts.registry.load_mut()?;
-    
+
     // Initialize registry if it doesn't exist (check if authority is default/unset)
     if registry.authority == Pubkey::default() {
         registry.authority = ctx.accounts.authority.key();
@@ -16,7 +12,7 @@ pub fn handler(
         registry.roles = [0u8; 100];
         registry.signer_count = 0;
     }
-    
+
     // Only authority can register signers
     require!(
         ctx.accounts.authority.key() == registry.authority,
@@ -24,10 +20,7 @@ pub fn handler(
     );
 
     // Validate role (0=Coordinator, 1=Validator, 2=Authority)
-    require!(
-        role <= 2,
-        GameError::InvalidAction
-    );
+    require!(role <= 2, GameError::InvalidAction);
 
     registry.add_signer(pubkey, role)?;
 
@@ -45,10 +38,9 @@ pub struct RegisterSigner<'info> {
         bump
     )]
     pub registry: AccountLoader<'info, SignerRegistry>,
-    
+
     #[account(mut)]
     pub authority: Signer<'info>,
-    
+
     pub system_program: Program<'info, System>,
 }
-

@@ -1,6 +1,6 @@
-use anchor_lang::prelude::*;
-use crate::state::BatchAnchor;
 use crate::error::GameError;
+use crate::state::BatchAnchor;
+use anchor_lang::prelude::*;
 
 pub fn handler(
     ctx: Context<AnchorBatch>,
@@ -14,10 +14,7 @@ pub fn handler(
     let clock = Clock::get()?;
 
     // Security: Validate authority is signer
-    require!(
-        ctx.accounts.authority.is_signer,
-        GameError::Unauthorized
-    );
+    require!(ctx.accounts.authority.is_signer, GameError::Unauthorized);
 
     // Security: Validate batch_id format and bounds
     require!(
@@ -26,10 +23,7 @@ pub fn handler(
     );
 
     // Security: Validate count bounds (u32 max)
-    require!(
-        count <= u32::MAX as u64,
-        GameError::InvalidPayload
-    );
+    require!(count <= u32::MAX as u64, GameError::InvalidPayload);
 
     // Security: Validate match IDs are valid UUIDs (36 bytes)
     require!(
@@ -60,8 +54,12 @@ pub fn handler(
     batch_anchor.timestamp = clock.unix_timestamp;
     batch_anchor.authority = ctx.accounts.authority.key();
 
-    msg!("Batch anchored: {} with {} matches, merkle root: {:?}", 
-         batch_id, count, merkle_root);
+    msg!(
+        "Batch anchored: {} with {} matches, merkle root: {:?}",
+        batch_id,
+        count,
+        merkle_root
+    );
     Ok(())
 }
 
@@ -76,10 +74,9 @@ pub struct AnchorBatch<'info> {
         bump
     )]
     pub batch_anchor: Account<'info, BatchAnchor>,
-    
+
     #[account(mut)]
     pub authority: Signer<'info>,
-    
+
     pub system_program: Program<'info, System>,
 }
-

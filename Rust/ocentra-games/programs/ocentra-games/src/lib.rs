@@ -2,13 +2,13 @@ use anchor_lang::prelude::*;
 
 declare_id!("7eWx3H8bXMif7SDyPS1j5LZw1yUGDNZY592WzEKNf696");
 
-pub mod state;
-pub mod instructions;
 pub mod error;
+pub mod instructions;
+pub mod state;
 
 // Organized modules
-pub mod common;
 pub mod card_games;
+pub mod common;
 pub mod games;
 
 // Import instruction modules - Anchor's #[program] macro needs glob import to generate client code
@@ -43,7 +43,9 @@ pub mod ocentra_games {
         hand_hash: [u8; 32],
         hand_size: u8,
     ) -> Result<()> {
-        instructions::games::match_lifecycle::commit_hand::handler(ctx, match_id, user_id, hand_hash, hand_size)
+        instructions::games::match_lifecycle::commit_hand::handler(
+            ctx, match_id, user_id, hand_hash, hand_size,
+        )
     }
 
     pub fn submit_move(
@@ -54,7 +56,14 @@ pub mod ocentra_games {
         payload: Vec<u8>,
         nonce: u64,
     ) -> Result<()> {
-        instructions::games::moves::submit_move::handler(ctx, match_id, user_id, action_type, payload, nonce)
+        instructions::games::moves::submit_move::handler(
+            ctx,
+            match_id,
+            user_id,
+            action_type,
+            payload,
+            nonce,
+        )
     }
 
     pub fn end_match(
@@ -72,14 +81,12 @@ pub mod ocentra_games {
         match_hash: [u8; 32],
         hot_url: Option<String>,
     ) -> Result<()> {
-        instructions::games::match_lifecycle::anchor_match_record::handler(ctx, match_id, match_hash, hot_url)
+        instructions::games::match_lifecycle::anchor_match_record::handler(
+            ctx, match_id, match_hash, hot_url,
+        )
     }
 
-    pub fn register_signer(
-        ctx: Context<RegisterSigner>,
-        pubkey: Pubkey,
-        role: u8,
-    ) -> Result<()> {
+    pub fn register_signer(ctx: Context<RegisterSigner>, pubkey: Pubkey, role: u8) -> Result<()> {
         instructions::common::signers::register_signer::handler(ctx, pubkey, role)
     }
 
@@ -91,7 +98,14 @@ pub mod ocentra_games {
         first_match_id: String,
         last_match_id: String,
     ) -> Result<()> {
-        instructions::common::batches::anchor_batch::handler(ctx, batch_id, merkle_root, count, first_match_id, last_match_id)
+        instructions::common::batches::anchor_batch::handler(
+            ctx,
+            batch_id,
+            merkle_root,
+            count,
+            first_match_id,
+            last_match_id,
+        )
     }
 
     pub fn flag_dispute(
@@ -102,7 +116,14 @@ pub mod ocentra_games {
         evidence_hash: [u8; 32],
         gp_deposit: u32,
     ) -> Result<()> {
-        instructions::common::disputes::flag_dispute::handler(ctx, match_id, user_id, reason, evidence_hash, gp_deposit as u16)
+        instructions::common::disputes::flag_dispute::handler(
+            ctx,
+            match_id,
+            user_id,
+            reason,
+            evidence_hash,
+            gp_deposit as u16,
+        )
     }
 
     pub fn resolve_dispute(
@@ -113,10 +134,7 @@ pub mod ocentra_games {
         instructions::common::disputes::resolve_dispute::handler(ctx, dispute_id, resolution)
     }
 
-    pub fn close_match_account(
-        ctx: Context<CloseMatchAccount>,
-        match_id: String,
-    ) -> Result<()> {
+    pub fn close_match_account(ctx: Context<CloseMatchAccount>, match_id: String) -> Result<()> {
         instructions::common::accounts::close_match_account::handler(ctx, match_id)
     }
 
@@ -126,13 +144,15 @@ pub mod ocentra_games {
         amount: u64,
         reason: u8,
     ) -> Result<()> {
-        instructions::common::validators::slash_validator::handler(ctx, validator_pubkey, amount, reason)
+        instructions::common::validators::slash_validator::handler(
+            ctx,
+            validator_pubkey,
+            amount,
+            reason,
+        )
     }
 
-    pub fn claim_daily_login(
-        ctx: Context<ClaimDailyLogin>,
-        user_id: String,
-    ) -> Result<()> {
+    pub fn claim_daily_login(ctx: Context<ClaimDailyLogin>, user_id: String) -> Result<()> {
         instructions::common::economic::daily_login::handler(ctx, user_id)
     }
 
@@ -175,12 +195,15 @@ pub mod ocentra_games {
         model_id: u8,
         tokens_used: u32,
     ) -> Result<()> {
-        instructions::common::economic::ai_credit_consume::handler(ctx, user_id, model_id, tokens_used)
+        instructions::common::economic::ai_credit_consume::handler(
+            ctx,
+            user_id,
+            model_id,
+            tokens_used,
+        )
     }
 
-    pub fn initialize_registry(
-        ctx: Context<InitializeRegistry>,
-    ) -> Result<()> {
+    pub fn initialize_registry(ctx: Context<InitializeRegistry>) -> Result<()> {
         instructions::common::registry::initialize_registry::handler(ctx)
     }
 
@@ -193,7 +216,15 @@ pub mod ocentra_games {
         rule_engine_url: String,
         version: u8,
     ) -> Result<()> {
-        instructions::common::registry::register_game::handler(ctx, game_id, name, min_players, max_players, rule_engine_url, version)
+        instructions::common::registry::register_game::handler(
+            ctx,
+            game_id,
+            name,
+            min_players,
+            max_players,
+            rule_engine_url,
+            version,
+        )
     }
 
     pub fn update_game(
@@ -206,7 +237,16 @@ pub mod ocentra_games {
         version: Option<u8>,
         enabled: Option<bool>,
     ) -> Result<()> {
-        instructions::common::registry::update_game::handler(ctx, game_id, name, min_players, max_players, rule_engine_url, version, enabled)
+        instructions::common::registry::update_game::handler(
+            ctx,
+            game_id,
+            name,
+            min_players,
+            max_players,
+            rule_engine_url,
+            version,
+            enabled,
+        )
     }
 
     pub fn submit_batch_moves(
@@ -216,5 +256,39 @@ pub mod ocentra_games {
         moves: Vec<BatchMove>,
     ) -> Result<()> {
         instructions::games::moves::submit_batch_moves::handler(ctx, match_id, user_id, moves)
+    }
+
+    // Governance instructions (Phase 01)
+    pub fn initialize_config(
+        ctx: Context<InitializeConfig>,
+        treasury_multisig: Pubkey,
+    ) -> Result<()> {
+        instructions::common::config::initialize_config::handler(ctx, treasury_multisig)
+    }
+
+    pub fn pause_program(ctx: Context<PauseProgram>) -> Result<()> {
+        instructions::common::config::pause_program::handler(ctx)
+    }
+
+    pub fn unpause_program(ctx: Context<UnpauseProgram>) -> Result<()> {
+        instructions::common::config::unpause_program::handler(ctx)
+    }
+
+    pub fn update_config(
+        ctx: Context<UpdateConfig>,
+        platform_fee_bps: Option<u16>,
+        withdrawal_fee_lamports: Option<u64>,
+        min_entry_fee: Option<u64>,
+        max_entry_fee: Option<u64>,
+        treasury_multisig: Option<Pubkey>,
+    ) -> Result<()> {
+        instructions::common::config::update_config::handler(
+            ctx,
+            platform_fee_bps,
+            withdrawal_fee_lamports,
+            min_entry_fee,
+            max_entry_fee,
+            treasury_multisig,
+        )
     }
 }

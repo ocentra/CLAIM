@@ -51,4 +51,3 @@ impl GameRules for ClaimRules {
         )
     }
 }
-

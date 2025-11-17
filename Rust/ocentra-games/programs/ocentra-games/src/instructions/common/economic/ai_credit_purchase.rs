@@ -1,6 +1,6 @@
-use anchor_lang::prelude::*;
-use crate::state::UserAccount;
 use crate::error::GameError;
+use crate::state::UserAccount;
+use anchor_lang::prelude::*;
 
 /// Records AI credit (AC) purchase.
 /// Per spec Section 20.1.6: AI credit purchase system.
@@ -9,24 +9,21 @@ use crate::error::GameError;
 pub fn handler(
     ctx: Context<PurchaseAICredits>,
     user_id: String,
-    ac_amount: u64,  // Amount of AC purchased
+    ac_amount: u64, // Amount of AC purchased
 ) -> Result<()> {
     // Convert String to fixed-size array immediately (optimization)
     let user_id_bytes = user_id.as_bytes();
-    require!(
-        user_id_bytes.len() <= 64,
-        GameError::InvalidPayload
-    );
-    
+    require!(user_id_bytes.len() <= 64, GameError::InvalidPayload);
+
     let _user_account = &mut ctx.accounts.user_account;
-    
+
     // Payment processed via Stripe (off-chain)
     // In production: Call Stripe API to process payment
     // After successful payment, AC balance updated in database
-    
+
     // Update stats (AC balance updated in database, not on-chain)
     // This instruction just records the purchase for tracking
-    
+
     msg!("AI credits purchased: {} AC", ac_amount);
     Ok(())
 }
@@ -40,7 +37,6 @@ pub struct PurchaseAICredits<'info> {
         bump
     )]
     pub user_account: Account<'info, UserAccount>,
-    
+
     pub system_program: Program<'info, System>,
 }
-

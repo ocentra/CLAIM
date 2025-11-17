@@ -5,7 +5,7 @@ import { AnchorError } from "@coral-xyz/anchor";
 import { Keypair, Transaction, SystemProgram, PublicKey, SendTransactionError } from "@solana/web3.js";
 import { program, provider } from "@/common";
 import { getMovePDA } from "@/common";
-import { normalizeAndRethrowAnchorError } from "@/common";
+import { normalizeAndRethrowAnchorError, retryOnUnsupportedSysvar } from "@/common";
 
 /**
  * CLAIM game action types
@@ -184,21 +184,24 @@ export const submitClaimBatchMovesManual = async (
   
   try {
     // First, try using Anchor's RPC (moves are already in correct format with Buffer payloads)
-    return await program.methods
-      .submitBatchMoves(matchId, userId, moves)
-      .accounts({
-        matchAccount: matchPDA,
-        registry: registryPDA,
-        moveAccount0: moveAccountPDAs[0],
-        moveAccount1: moveAccountPDAs[1],
-        moveAccount2: moveAccountPDAs[2],
-        moveAccount3: moveAccountPDAs[3],
-        moveAccount4: moveAccountPDAs[4],
-        player: player.publicKey,
-        systemProgram: SystemProgram.programId,
-      } as never)
-      .signers([player])
-      .rpc();
+    // Wrap in retry logic for "Unsupported sysvar" errors (known localnet validator issue)
+    return await retryOnUnsupportedSysvar(async () => {
+      return await program.methods
+        .submitBatchMoves(matchId, userId, moves)
+        .accounts({
+          matchAccount: matchPDA,
+          registry: registryPDA,
+          moveAccount0: moveAccountPDAs[0],
+          moveAccount1: moveAccountPDAs[1],
+          moveAccount2: moveAccountPDAs[2],
+          moveAccount3: moveAccountPDAs[3],
+          moveAccount4: moveAccountPDAs[4],
+          player: player.publicKey,
+          systemProgram: SystemProgram.programId,
+        } as never)
+        .signers([player])
+        .rpc();
+    });
   } catch (err: unknown) {
     // Check if this is a ConstraintSeeds error (from AnchorError or SendTransactionError)
     // Also check if error message or logs contain "ConstraintSeeds"
@@ -266,8 +269,10 @@ async function submitClaimBatchMovesManualRaw(
   }
   
   try {
-    const signature = await provider.sendAndConfirm(transaction, [player]);
-    return signature;
+    // Wrap in retry logic for "Unsupported sysvar" errors
+    return await retryOnUnsupportedSysvar(async () => {
+      return await provider.sendAndConfirm(transaction, [player]);
+    });
   } catch (err: unknown) {
     // sendAndConfirm throws SendTransactionError, which needs to be normalized
     normalizeAndRethrowAnchorError(err, "submitClaimBatchMovesManualRaw");

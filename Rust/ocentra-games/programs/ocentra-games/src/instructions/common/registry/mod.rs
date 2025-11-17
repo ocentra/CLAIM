@@ -9,4 +9,3 @@ pub use initialize_registry::*;
 #[allow(ambiguous_glob_reexports)]
 pub use register_game::*;
 pub use update_game::*;
-

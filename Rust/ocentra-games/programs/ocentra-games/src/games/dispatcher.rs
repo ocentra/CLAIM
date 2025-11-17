@@ -1,9 +1,9 @@
-use anchor_lang::prelude::*;
-use crate::games::claim::validation::validate_claim_action;
+use crate::error::GameError;
 use crate::games::claim::actions::apply_claim_action;
 use crate::games::claim::rules::ClaimRules;
+use crate::games::claim::validation::validate_claim_action;
 use crate::state::Match;
-use crate::error::GameError;
+use anchor_lang::prelude::*;
 
 /// Validate action using appropriate game rules (static dispatch - no trait objects for Solana)
 pub fn validate_move(
@@ -40,11 +40,16 @@ pub fn apply_action_state(
     match match_account.game_type {
         0 => {
             // CLAIM game
-            apply_claim_action(match_account, player_index, action_type, payload, advance_turn)
+            apply_claim_action(
+                match_account,
+                player_index,
+                action_type,
+                payload,
+                advance_turn,
+            )
         }
         // Future games:
         // 1 => apply_poker_action(..., advance_turn),
         _ => Err(GameError::InvalidPayload.into()),
     }
 }
-

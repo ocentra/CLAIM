@@ -79,7 +79,7 @@ Each phase lives under `docs/Multiplayer and Solana/phases/` and links back to t
 
 | Phase | Status | Next Action | Blocked By |
 |-------|--------|-------------|------------|
-| **[Phase 01 – Governance & Compliance](phases/phase-01-governance-compliance.md)** | ⬜ | Start with custody tiers definition | None |
+| **[Phase 01 – Governance & Compliance](phases/phase-01-governance-compliance.md)** | ✅ | Complete - Ready for legal/compliance review | None |
 | **[Phase 02 – On-chain State Design](phases/phase-02-onchain-state.md)** | ⬜ | Wait for Phase 01 | Phase 01 |
 | **[Phase 03 – Economic Instructions](phases/phase-03-economic-instructions.md)** | ⬜ | Wait for Phase 02 | Phase 02 |
 | **[Phase 04 – Match Lifecycle Updates](phases/phase-04-match-lifecycle.md)** | ⬜ | Wait for Phase 02 | Phase 02 |

@@ -1,5 +1,5 @@
+use crate::state::{GameDefinition, GameRegistry};
 use anchor_lang::prelude::*;
-use crate::state::{GameRegistry, GameDefinition};
 
 /// Initializes the GameRegistry account.
 /// Per spec Section 16.5: Game registry initialization.
@@ -7,7 +7,7 @@ use crate::state::{GameRegistry, GameDefinition};
 pub fn handler(ctx: Context<InitializeRegistry>) -> Result<()> {
     let mut registry = ctx.accounts.registry.load_init()?;
     let clock = Clock::get()?;
-    
+
     // Initialize registry
     registry.authority = ctx.accounts.authority.key();
     registry.game_count = 0;
@@ -24,7 +24,7 @@ pub fn handler(ctx: Context<InitializeRegistry>) -> Result<()> {
     registry._padding1 = [0; 7];
     registry._padding2 = [0; 4];
     registry.last_updated = clock.unix_timestamp;
-    
+
     msg!("GameRegistry initialized");
     Ok(())
 }
@@ -39,9 +39,9 @@ pub struct InitializeRegistry<'info> {
         bump
     )]
     pub registry: AccountLoader<'info, GameRegistry>,
-    
+
     #[account(mut)]
     pub authority: Signer<'info>,
-    
+
     pub system_program: Program<'info, System>,
 }

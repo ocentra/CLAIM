@@ -22,7 +22,7 @@ default = []
 [dependencies]
 anchor-lang = { version = "0.32.1", features = ["init-if-needed"] }
 anchor-spl = "0.32.1"
-solana-program = "2.3.0"
+# solana-program removed - use anchor_lang::solana_program instead
 uuid = { version = "0.8", features = ["v4"] }
 getrandom = { version = "0.2", features = ["js"] }
 bytemuck = { version = "1.14", features = ["derive", "min_const_generics"] }

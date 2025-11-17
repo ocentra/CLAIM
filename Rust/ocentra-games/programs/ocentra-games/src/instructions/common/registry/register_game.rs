@@ -1,6 +1,6 @@
-use anchor_lang::prelude::*;
-use crate::state::{GameRegistry, GameDefinition};
 use crate::error::GameError;
+use crate::state::{GameDefinition, GameRegistry};
+use anchor_lang::prelude::*;
 
 /// Registers a new game in the registry.
 /// Per spec Section 16.5: Game registry system.
@@ -17,13 +17,13 @@ pub fn handler(
 ) -> Result<()> {
     let mut registry = ctx.accounts.registry.load_mut()?;
     let clock = Clock::get()?;
-    
+
     // Validate authority
     require!(
         ctx.accounts.authority.key() == registry.authority,
         GameError::Unauthorized
     );
-    
+
     // Validate inputs
     require!(
         !name.is_empty() && name.len() <= 20,
@@ -37,18 +37,18 @@ pub fn handler(
         min_players > 0 && min_players <= max_players && max_players <= 10,
         GameError::InvalidPayload
     );
-    
+
     // Convert String to fixed-size arrays (optimization)
     let name_bytes = name.as_bytes();
     let mut name_array = [0u8; 20];
     let name_copy_len = name_bytes.len().min(20);
     name_array[..name_copy_len].copy_from_slice(&name_bytes[..name_copy_len]);
-    
+
     let url_bytes = rule_engine_url.as_bytes();
     let mut url_array = [0u8; 200];
     let url_copy_len = url_bytes.len().min(200);
     url_array[..url_copy_len].copy_from_slice(&url_bytes[..url_copy_len]);
-    
+
     // Create game definition
     let game = GameDefinition {
         game_id,
@@ -60,11 +60,11 @@ pub fn handler(
         enabled: 1, // 1 = enabled, 0 = disabled (u8 for zero-copy compatibility)
         _padding: [0; 6],
     };
-    
+
     // Add to registry
     registry.add_game(game)?;
     registry.last_updated = clock.unix_timestamp;
-    
+
     msg!("Game registered: game_id={}, name={}", game_id, name);
     Ok(())
 }
@@ -77,10 +77,9 @@ pub struct RegisterGame<'info> {
         bump
     )]
     pub registry: AccountLoader<'info, GameRegistry>,
-    
+
     #[account(mut)]
     pub authority: Signer<'info>,
-    
+
     pub system_program: Program<'info, System>,
 }
-

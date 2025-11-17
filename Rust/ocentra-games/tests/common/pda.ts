@@ -29,6 +29,14 @@ export const getRegistryPDA = async (): Promise<[PublicKey, number]> => {
   );
 };
 
+// Helper to get ConfigAccount PDA
+export const getConfigAccountPDA = async (): Promise<[PublicKey, number]> => {
+  return await anchor.web3.PublicKey.findProgramAddress(
+    [Buffer.from("config_account")],
+    program.programId
+  );
+};
+
 // Helper to get move PDA (uses split seeds to match on-chain: first32 + rest)
 // Common for all games - game-specific move logic is handled in instruction handlers
 export const getMovePDA = async (

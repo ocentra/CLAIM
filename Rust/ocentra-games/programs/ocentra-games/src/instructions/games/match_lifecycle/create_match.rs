@@ -1,6 +1,6 @@
-use anchor_lang::prelude::*;
-use crate::state::{Match, GameRegistry};
 use crate::error::GameError;
+use crate::state::{GameRegistry, Match};
+use anchor_lang::prelude::*;
 
 pub fn handler(
     ctx: Context<CreateMatch>,
@@ -13,26 +13,18 @@ pub fn handler(
     let clock = Clock::get()?;
 
     // Security: Validate match_id length (UUID v4 is exactly 36 chars)
-    require!(
-        match_id.len() == 36,
-        GameError::InvalidPayload
-    );
+    require!(match_id.len() == 36, GameError::InvalidPayload);
 
     // Security: Validate authority is signer
-    require!(
-        ctx.accounts.authority.is_signer,
-        GameError::Unauthorized
-    );
+    require!(ctx.accounts.authority.is_signer, GameError::Unauthorized);
 
     // Look up game in registry
-    let game_def = registry.find_game(game_type)
+    let game_def = registry
+        .find_game(game_type)
         .ok_or(GameError::InvalidPayload)?;
-    
+
     // Security: Validate game is enabled
-    require!(
-        game_def.enabled != 0,
-        GameError::InvalidPayload
-    );
+    require!(game_def.enabled != 0, GameError::InvalidPayload);
 
     // Convert String to fixed-size array (null-padded)
     let match_id_bytes = match_id.as_bytes();
@@ -45,7 +37,7 @@ pub fn handler(
 
     // Initialize match with optimized struct
     match_account.match_id = match_id_array;
-    
+
     // Per critique Phase 2.4: Initialize version field (default to "1.0.0")
     let version_str = "1.0.0";
     let version_bytes = version_str.as_bytes();
@@ -53,7 +45,7 @@ pub fn handler(
     let version_copy_len = version_bytes.len().min(10);
     version_array[..version_copy_len].copy_from_slice(&version_bytes[..version_copy_len]);
     match_account.version = version_array;
-    
+
     match_account.game_type = game_type;
     match_account.game_name = game_name_array;
     match_account.seed = seed as u32; // Convert u64 to u32
@@ -89,16 +81,15 @@ pub struct CreateMatch<'info> {
         bump
     )]
     pub match_account: AccountLoader<'info, Match>,
-    
+
     #[account(
         seeds = [b"game_registry"],
         bump
     )]
     pub registry: AccountLoader<'info, GameRegistry>,
-    
+
     #[account(mut)]
     pub authority: Signer<'info>,
-    
+
     pub system_program: Program<'info, System>,
 }
-

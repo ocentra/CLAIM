@@ -1,6 +1,6 @@
-use anchor_lang::prelude::*;
-use crate::state::Match;
 use crate::error::GameError;
+use crate::state::Match;
+use anchor_lang::prelude::*;
 
 /// Suit declarations shared by card games
 pub struct SuitDeclarations;
@@ -8,10 +8,7 @@ pub struct SuitDeclarations;
 impl SuitDeclarations {
     /// Validate suit value (0-3: spades, hearts, diamonds, clubs)
     pub fn validate_suit(suit: u8) -> Result<()> {
-        require!(
-            suit < 4,
-            GameError::InvalidPayload
-        );
+        require!(suit < 4, GameError::InvalidPayload);
         Ok(())
     }
 
@@ -38,4 +35,3 @@ impl SuitDeclarations {
         match_account.set_declared_suit(player_index, suit);
     }
 }
-

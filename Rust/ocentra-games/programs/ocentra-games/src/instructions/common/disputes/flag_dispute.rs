@@ -1,6 +1,6 @@
-use anchor_lang::prelude::*;
-use crate::state::{Dispute, ValidatorVote, ConfigAccount};
 use crate::error::GameError;
+use crate::state::{ConfigAccount, Dispute, ValidatorVote};
+use anchor_lang::prelude::*;
 
 /// Flags a dispute with GP deposit.
 /// Per spec Section 23: Dispute deposit system using GP (Game Points) instead of SOL.
@@ -9,30 +9,24 @@ use crate::error::GameError;
 pub fn handler(
     ctx: Context<FlagDispute>,
     match_id: String,
-    user_id: String,  // Firebase UID of flagger (for GP tracking)
+    user_id: String, // Firebase UID of flagger (for GP tracking)
     reason: u8,
     evidence_hash: [u8; 32],
-    gp_deposit: u16,  // GP deposit amount (already deducted off-chain, max 65k)
+    gp_deposit: u16, // GP deposit amount (already deducted off-chain, max 65k)
 ) -> Result<()> {
     let mut dispute = ctx.accounts.dispute.load_init()?;
     let config = &ctx.accounts.config_account;
     let clock = Clock::get()?;
 
     // Security: Validate flagger is signer
-    require!(
-        ctx.accounts.flagger.is_signer,
-        GameError::Unauthorized
-    );
+    require!(ctx.accounts.flagger.is_signer, GameError::Unauthorized);
 
     // Security: Validate match_id is valid UUID
-    require!(
-        match_id.len() == 36,
-        GameError::InvalidPayload
-    );
+    require!(match_id.len() == 36, GameError::InvalidPayload);
 
     // Security: Validate reason bounds (0-4, see dispute_reason module)
     require!(
-        reason <= 4,  // dispute_reason::OTHER
+        reason <= 4, // dispute_reason::OTHER
         GameError::InvalidAction
     );
 
@@ -54,10 +48,7 @@ pub fn handler(
     match_id_array[..36].copy_from_slice(&match_id_bytes[..36.min(match_id_bytes.len())]);
 
     let user_id_bytes = user_id.as_bytes();
-    require!(
-        user_id_bytes.len() <= 64,
-        GameError::InvalidPayload
-    );
+    require!(user_id_bytes.len() <= 64, GameError::InvalidPayload);
     let mut user_id_array = [0u8; 64];
     let copy_len = user_id_bytes.len().min(64);
     user_id_array[..copy_len].copy_from_slice(&user_id_bytes[..copy_len]);
@@ -81,8 +72,13 @@ pub fn handler(
     }; 10]; // Initialize with default values
     dispute.vote_count = 0;
 
-    msg!("Dispute flagged: match {}, reason {}, by {} (GP deposit: {})", 
-         match_id, reason, user_id, gp_deposit);
+    msg!(
+        "Dispute flagged: match {}, reason {}, by {} (GP deposit: {})",
+        match_id,
+        reason,
+        user_id,
+        gp_deposit
+    );
     Ok(())
 }
 
@@ -97,13 +93,12 @@ pub struct FlagDispute<'info> {
         bump
     )]
     pub dispute: AccountLoader<'info, Dispute>,
-    
+
     /// ConfigAccount to check dispute_deposit_gp requirement
     pub config_account: Account<'info, ConfigAccount>,
-    
+
     #[account(mut)]
     pub flagger: Signer<'info>,
-    
+
     pub system_program: Program<'info, System>,
 }
-

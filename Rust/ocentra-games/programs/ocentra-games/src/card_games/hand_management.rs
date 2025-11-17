@@ -1,6 +1,6 @@
-use anchor_lang::prelude::*;
-use crate::state::Match;
 use crate::error::GameError;
+use crate::state::Match;
+use anchor_lang::prelude::*;
 
 /// Hand management shared by card games
 pub struct HandManagement;
@@ -35,4 +35,3 @@ impl HandManagement {
         Ok(())
     }
 }
-

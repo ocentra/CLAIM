@@ -1,6 +1,6 @@
-use anchor_lang::prelude::*;
-use crate::state::Match;
 use crate::error::GameError;
+use crate::state::Match;
+use anchor_lang::prelude::*;
 
 /// Floor card mechanics shared by card games
 pub struct FloorCard;
@@ -8,10 +8,7 @@ pub struct FloorCard;
 impl FloorCard {
     /// Validate floor card is revealed
     pub fn validate_revealed(match_account: &Match) -> Result<()> {
-        require!(
-            match_account.floor_card_revealed(),
-            GameError::InvalidPhase
-        );
+        require!(match_account.floor_card_revealed(), GameError::InvalidPhase);
         Ok(())
     }
 
@@ -34,4 +31,3 @@ impl FloorCard {
         match_account.clear_floor_card_hash();
     }
 }
-
