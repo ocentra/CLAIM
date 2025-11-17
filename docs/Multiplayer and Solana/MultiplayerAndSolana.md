@@ -1,4 +1,4 @@
-# Mltiplayer and Solana
+# Multiplayer and Solana
 
 **Project:** Verifiable Multiplayer Games Platform on Solana — Definitive Spec
 
@@ -37,6 +37,10 @@ This document is a developer-facing, machine-readable specification that your lo
   * Keep on-chain costs minimal while retaining maximum transparency for official/benchmark matches.
   * Enable turn-based multiplayer gameplay with acceptable latency (400ms-1s per move).
   * Enable reproducible benchmarking of multiple AI agents.
+  * Support optional real-stakes (money-match) flows **without** compromising the free-to-play baseline. Players may:
+    * stay fully free (GP/AC token system only),
+    * bring a wallet and fund escrow directly with SOL/SPL, or
+    * deposit via custodial/credit-card rails and let the platform handle wallets/fees.
 
 * **Constraints & decisions:**
 
@@ -44,6 +48,7 @@ This document is a developer-facing, machine-readable specification that your lo
   * Full match payloads (audio, long chain-of-thought) are kept off-chain; only compact anchors (SHA-256 or Merkle root) on-chain.
   * Use Cloudflare R2 for hot storage and match record archives. R2's generous free tier (10GB, 1M operations/month) and no egress fees make it cost-effective and sufficient for match storage needs.
   * Write contracts in **Rust** using Anchor framework for all on-chain operations.
+  * Money-match support is additive: free modes must keep working even if custody/KYC rails are disabled in a region. All new logic must degrade gracefully back to the free token system.
 
 ### 1.2 Game Type: Turn-Based Multiplayer
 
@@ -218,7 +223,10 @@ Components and responsibilities:
 1. **Clients (Human & AI)**
 
    * Web/mobile clients for humans; AI agents as clients or server-side bots.
-   * **Players do NOT need Solana wallets** - All Solana transactions handled by coordinator
+   * **Players do NOT need Solana wallets** - The baseline flow remains walletless, but money-match participants may:
+     * connect a self-custody Solana wallet,
+     * deposit via custodial account (platform-managed wallet), or
+     * pay with card/fiat and let the platform custody funds on their behalf.
    * **Firebase Authentication** - Players authenticate via Firebase (email/password, Google, Facebook, anonymous guest)
    * **User ID Format** - Firebase UID (`user.uid`) is used as `player_id` in matches (stored as String on-chain)
    * Players submit moves through web UI, coordinator submits to Solana on their behalf
@@ -233,11 +241,16 @@ Components and responsibilities:
      - Match discovery - Help players find/join matches
      - UI updates - Broadcast confirmed moves to all players via WebSocket
    
-   * **NOT Responsible For:**
+   * **NOT Responsible For (Phase‑1 baseline):**
      - ❌ State management (Solana is source of truth - query Match/Move accounts directly)
      - ❌ Move validation (Solana program validates on-chain)
      - ❌ State recovery (not needed - Solana IS the state)
      - ❌ Off-chain caching (query Solana directly for current match state)
+
+   * **Dual-path clarification (Phase‑2 / money-match readiness):**
+     - Durable Objects + D1 now mirror match state for real-time play, fraud checks, and custodial balance tracking while Solana remains the final source of truth.
+     - Off-chain mirrors are **not** a fallback—they run continuously, queue actions if Solana is degraded, and push summaries/commitments back on-chain.
+     - Free-only deployments MAY skip the mirror and rely solely on the baseline flow above.
    
    * **Has Solana wallet** - Submits all on-chain transactions on behalf of players
    * **Pays all Solana fees** - Players don't pay network transaction fees
@@ -336,6 +349,8 @@ Components and responsibilities:
 ## 3. Match lifecycle (data flow)
 
 **Latency Model:** All moves submitted as Solana transactions with 400ms-1s confirmation time. This is acceptable for turn-based games where players naturally pause between actions (typically 3-10 seconds of thinking time per turn).
+
+> **Dual execution note:** Real-time gameplay now runs inside Durable Objects (off-chain) with deterministic WASM/Rule engines, while Solana stores periodic checkpoints/summaries. The 400ms-1s Solana latency guideline still applies to checkpoints/money-match operations, but normal moves can be processed instantly off-chain and batched on-chain as hashes/snapshots.
 
 1. Match creation (client requests match, coordinator issues `match_id` UUID v4).
 2. Join phase (players register; coordinator snapshots `players[]`). Match types:
@@ -3468,28 +3483,44 @@ solana airdrop 2
 
 ## 20. Economic Model & Incentives
 
-**Implementation: Token-Based Free-to-Play Model**
+**Implementation: Token-Based Free-to-Play Baseline + Optional Money-Match Rails**
 
-**CRITICAL: NO Real Money Matches - All Matches Are FREE**
+The platform must always operate in pure free-to-play mode. On top of that baseline we layer optional money-match rails for regions/players who opt in.
 
-The economic model uses tokens only - no SOL, no entry fees, no escrow:
-- **All matches are FREE** - No entry fees, no deposits, no real money transactions
-- **Players do NOT need Solana wallets** - Tokens are managed server-side
+### 20.0 Baseline (Always On)
+
+- **All matches default to FREE** – GP/AC token economy continues to work even if custody/KYC rails are disabled.
+- **Players do NOT need Solana wallets** – Tokens are managed server-side; coordinator pays all Solana transaction fees.
 - **Token system only:** Game Points (GP) and AI Credits (AC)
 - **GP:** Free daily distribution, used to play games
 - **AC:** Purchasable with credit card (Stripe), used for AI API calls
 - **Pro subscriptions:** Purchasable with credit card, provides GP multipliers
 
-**How It Works:**
+**How Baseline Works:**
 - Players get free GP daily (no wallet needed)
 - Players use GP to play games (GP is burned per game)
 - Players can purchase AC with credit card for AI features
 - Players can bring their own API key OR use AC (with premium markup)
 - Coordinator pays all Solana transaction fees (players don't pay network fees)
 
+### 20.1 Money-Match Options (Opt-In Layers)
+
+**Money matches are completely optional.** Users can play the entire game without any Solana wallet or real money. The platform functions fully with free matches, benchmarks, and leaderboards.
+
+**Solana wallet is optional even for money matches.** When money matches are enabled, players can choose **one** of the following funding paths per match:
+
+1. **Self-custody wallet (optional):** Connect Solana wallet, stake directly into escrow PDAs, withdraw rewards to the same wallet.
+2. **Custodial balance (no wallet needed):** Deposit via fiat/ACH/card; platform holds funds in managed wallet and stakes on the player's behalf. **This is the default option - no Solana wallet required.**
+3. **Hybrid:** Use free GP for entry + custodial or self-custody for side pots, bounties, or prize multipliers.
+
+Additional rules:
+- Platform charges configurable rake/platform fees on money matches.
+- Custody tiers + KYC requirements defined in Phase 01 docs must be enforced before exposing these options.
+- If rails are disabled (jurisdictional or maintenance), UX falls back to baseline tokens automatically.
+
 ---
 
-### 20.1 Two Token System: Game Points (GP) & AI Credits (AC)
+### 20.2 Two Token System: Game Points (GP) & AI Credits (AC)
 
 **Overview:**
 
@@ -3507,7 +3538,7 @@ The platform uses a dual-token system - all matches are FREE, tokens are the onl
 - **All matches are FREE** - No entry fees, no deposits, no real money
 - **Coordinator pays Solana fees** - Players don't pay network transaction fees
 
-#### 20.1.1 Token Setup
+#### 20.2.1 Token Setup
 
 **Implementation:**
 
@@ -3558,9 +3589,15 @@ pub struct UserAccount {
 
 **Storage Architecture:**
 
-- **Primary Storage:** PostgreSQL database (source of truth for balances)
-- **On-Chain Storage:** UserAccount PDA (optional, for verification/leaderboards)
-- **Sync Strategy:** Database-first, on-chain is read-only mirror
+- **Primary Storage:** PostgreSQL database (source of truth for GP/AC balances)
+- **On-Chain Storage:** UserAccount PDA stores aggregates only (lifetime_gp_earned, games_played, etc.) for leaderboard verification, NOT current balances
+- **Sync Strategy:** One-way (DB → Solana for leaderboard aggregates only)
+- **Why Store Aggregates On-Chain:**
+  - Leaderboard verification: Players can verify their lifetime stats are correct
+  - Merkle proof support: Aggregates included in leaderboard snapshots
+  - Audit trail: Immutable record of lifetime achievements
+  - Cost efficiency: Only periodic updates needed, not per-transaction
+- **Recovery:** Cannot rebuild balances from on-chain (database backups required)
 
 **Database Schema:**
 
@@ -3648,7 +3685,7 @@ async function claimDailyLogin(userId: string): Promise<void> {
 - **If Mismatch:** Log for manual review, database takes precedence
 - **Recovery:** Replay transaction log to rebuild balances if needed
 
-#### 20.1.2 Daily Login System
+#### 20.2.2 Daily Login System
 
 **Implementation:**
 
@@ -3710,7 +3747,7 @@ pub fn claim_daily_login(ctx: Context<ClaimDailyLogin>) -> Result<()> {
 - **Lifetime tracking:** `lifetime_gp_earned` counter
 - **Event emission:** For analytics and leaderboards
 
-#### 20.1.3 Game Payment Flow
+#### 20.2.3 Game Payment Flow
 
 **Implementation:**
 
@@ -3747,7 +3784,7 @@ pub fn start_game_with_gp(ctx: Context<StartGame>, match_id: String) -> Result<(
 - **Stats tracking:** Increments `games_played` counter
 - **Pro users:** May have reduced or zero GP cost (configurable)
 
-#### 20.1.4 Ad Reward System
+#### 20.2.4 Ad Reward System
 
 **Implementation:**
 
@@ -3804,7 +3841,7 @@ pub fn claim_ad_reward(
 - **Verification:** Off-chain oracle signature required
 - **Stats tracking:** Increments `ads_watched` counter
 
-#### 20.1.5 Pro Subscription
+#### 20.2.5 Pro Subscription
 
 **Implementation:**
 
@@ -3872,7 +3909,9 @@ pub fn purchase_subscription(
 - **Premium features:** Access to exclusive game modes, cosmetics, etc.
 - **Duration:** Typically 30 days, extendable
 
-#### 20.1.6 Leaderboard System (Per Game Type + Per Season)
+#### 20.2.6 Leaderboard System (Per Game Type + Per Season)
+
+> **Dual-path note:** The on-chain leaderboard design below is the original fully on-chain approach. In the current dual-path architecture the active implementation stores full leaderboards in Durable Objects/D1 and only commits top-100 snapshots + Merkle roots on-chain (`leaderboard-anchor.md`). Keep this section for historical context or for deployments that prefer a purely on-chain leaderboard.
 
 **Architecture Decision: PER-GAME-TYPE LEADERBOARDS**
 
@@ -4192,7 +4231,7 @@ pub fn submit_score(
 // Claim daily reward with multiplier (already implemented, see daily login section)
 pub fn claim_daily_reward(ctx: Context<ClaimDailyReward>) -> Result<()> {
     // Uses active_multiplier from user account
-    // Implementation in daily login section (20.1.2)
+    // Implementation in daily login section (20.2.2)
 }
 
 // Get user rank (read-only)
@@ -4240,7 +4279,7 @@ pub fn close_old_season(
 }
 ```
 
-#### 20.1.7 AI Credit Purchase
+#### 20.2.7 AI Credit Purchase
 
 **Implementation:**
 
@@ -4285,7 +4324,7 @@ pub fn purchase_ai_credits(
 - **Event tracking:** All purchases logged for analytics
 - **Rate limiting:** Max purchase per transaction, cooldown (configurable)
 
-#### 20.1.8 AI Credit Consumption & Escrow
+#### 20.2.8 AI Credit Consumption & Escrow
 
 **CRITICAL: Pre-Authorization & Escrow System** [FRAMEWORK]
 
@@ -4485,7 +4524,7 @@ pub fn consume_ai_credits(
 - **Model-specific pricing:** Different costs per AI model
 - **Stats tracking:** Tracks total AC spent, API calls made
 
-#### 20.1.9 Cost Tracking & Pricing Oracle
+#### 20.2.9 Cost Tracking & Pricing Oracle
 
 **Implementation:**
 
@@ -4555,7 +4594,7 @@ let profit = model_stats.total_revenue_lamports
 - **Profit tracking:** Per-model and aggregate profit tracking
 - **Admin withdrawal:** Admin-only instruction to withdraw profits to treasury
 
-#### 20.1.10 Anti-Abuse Measures
+#### 20.2.10 Anti-Abuse Measures
 
 **Rate Limiting:**
 
@@ -4583,7 +4622,7 @@ pub fn freeze_user(ctx: Context<FreezeUser>, user_id: String) -> Result<()> {
 - **Withdrawal lockup:** AC withdrawal lockup period (configurable)
 - **Admin freeze:** Admin can freeze user accounts for violations
 
-#### 20.1.11 Account Structure & Size
+#### 20.2.11 Account Structure & Size
 
 **UserAccount:** ~256 bytes max
 
@@ -4651,7 +4690,7 @@ pub struct GameLeaderboard {
 // One leaderboard per game type (CLAIM, Poker, WordSearch, etc.)
 ```
 
-#### 20.1.12 Transaction Optimization
+#### 20.2.12 Transaction Optimization
 
 **Batching:**
 
@@ -4679,7 +4718,7 @@ pub fn claim_login_and_start_game(
 }
 ```
 
-#### 20.1.13 Events to Emit
+#### 20.2.13 Events to Emit
 
 **All token operations emit events for analytics:**
 
@@ -4761,7 +4800,7 @@ pub struct SeasonEnded {
 }
 ```
 
-#### 20.1.14 Admin Instructions
+#### 20.2.14 Admin Instructions
 
 **Configuration Management:**
 
@@ -5243,6 +5282,8 @@ export async function signMatchRecord(
 ---
 
 ## 25. Continuous Integration & Testing Plan
+
+> **Shared fixtures:** Use the deterministic JSON fixtures under `test-data/` (matches, users, leaderboard, loaders.ts) for Anchor, Worker, and UI test suites. Extend or version those fixtures whenever new scenarios are introduced so all languages stay in sync.
 
 ### 23.1 Local Test Harness
 
