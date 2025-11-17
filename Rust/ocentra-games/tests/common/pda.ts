@@ -97,3 +97,27 @@ export const getBatchMovePDA = async (
   return [pda, bump];
 };
 
+// Phase 02: Helper to get EscrowAccount PDA
+// Seeds: ["escrow", matchPDA]
+export const getEscrowPDA = async (
+  matchPDA: PublicKey
+): Promise<[PublicKey, number]> => {
+  const [pda, bump] = await anchor.web3.PublicKey.findProgramAddress(
+    [Buffer.from("escrow"), matchPDA.toBuffer()],
+    program.programId
+  );
+  return [pda, bump];
+};
+
+// Phase 02: Helper to get UserDepositAccount PDA
+// Seeds: ["user_deposit", authority]
+export const getUserDepositPDA = async (
+  authority: PublicKey
+): Promise<[PublicKey, number]> => {
+  const [pda, bump] = await anchor.web3.PublicKey.findProgramAddress(
+    [Buffer.from("user_deposit"), authority.toBuffer()],
+    program.programId
+  );
+  return [pda, bump];
+};
+

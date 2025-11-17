@@ -44,6 +44,12 @@ pub struct ConfigAccount {
     // Emergency controls
     pub is_paused: bool, // Global pause flag (pauses all paid matches)
 
+    // Phase 02: KYC and payment method configuration
+    pub kyc_tier_wallet: u8, // Minimum KYC tier required for wallet payments
+    pub kyc_tier_platform: u8, // Minimum KYC tier required for platform payments
+    pub supported_payment_methods: u8, // Bitmask: bit 0 = WALLET, bit 1 = PLATFORM
+    pub _padding_phase02: [u8; 5], // Explicit padding to align timestamps to 8 bytes
+
     // Timestamps
     pub created_at: i64,   // Account creation timestamp
     pub last_updated: i64, // Last update timestamp
@@ -70,12 +76,15 @@ impl ConfigAccount {
         8 +                                 // withdrawal_fee_lamports (u64)
         8 +                                 // min_entry_fee (u64)
         8 +                                 // max_entry_fee (u64)
-        1 +                                 // is_paused (bool, padded to 8 bytes for alignment)
-        7 +                                 // padding for is_paused alignment
+        1 +                                 // is_paused (bool)
+        1 +                                 // kyc_tier_wallet (u8)
+        1 +                                 // kyc_tier_platform (u8)
+        1 +                                 // supported_payment_methods (u8)
+        5 +                                 // _padding_phase02
         8 +                                 // created_at (i64)
         8; // last_updated (i64)
 
-    // Total: 8 + 32 + 8 + 8 + 8 + 4 + 4 + 1 + 8 + 8 + 1 + 4 + 40 + 8 + 8 + 32 + 2 + 8 + 8 + 8 + 8 + 8 + 8 = 240 bytes
+    // Total: 8 + 32 + 8 + 8 + 8 + 4 + 4 + 1 + 8 + 8 + 1 + 4 + 40 + 8 + 8 + 32 + 2 + 8 + 8 + 8 + 8 + 1 + 1 + 1 + 1 + 5 + 8 + 8 = 248 bytes
 
     pub fn get_ac_price_usd(&self) -> f64 {
         // Convert [u8; 8] back to f64
@@ -84,5 +93,26 @@ impl ConfigAccount {
 
     pub fn set_ac_price_usd(&mut self, price: f64) {
         self.ac_price_usd = price.to_le_bytes();
+    }
+
+    // Phase 02: Payment method helpers
+    pub fn is_payment_method_supported(&self, payment_method: u8) -> bool {
+        match payment_method {
+            crate::state::enums::payment_method::WALLET => {
+                (self.supported_payment_methods & 0x01) != 0
+            }
+            crate::state::enums::payment_method::PLATFORM => {
+                (self.supported_payment_methods & 0x02) != 0
+            }
+            _ => false,
+        }
+    }
+
+    pub fn get_required_kyc_tier(&self, payment_method: u8) -> u8 {
+        match payment_method {
+            crate::state::enums::payment_method::WALLET => self.kyc_tier_wallet,
+            crate::state::enums::payment_method::PLATFORM => self.kyc_tier_platform,
+            _ => crate::state::enums::kyc_tier::NONE,
+        }
     }
 }

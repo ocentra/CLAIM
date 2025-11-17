@@ -73,6 +73,14 @@ pub struct Match {
     // Total before last_nonce: 10 + 320 = 330 bytes (330 % 8 = 2, so we need 6 bytes padding)
     pub _padding6: [u8; 6], // Explicit padding to align last_nonce to 8 bytes
     pub last_nonce: [u64; 10], // 10 players × 8 bytes = 80 bytes - 8-byte aligned
+
+    // Phase 02: Paid match fields
+    pub entry_fee_lamports: u64, // Entry fee in lamports (0 = free match) - 8-byte aligned
+    pub prize_pool_lamports: u64, // Prize pool in lamports (0 = no prize) - 8-byte aligned
+    pub match_type: u8,          // 0 = FREE, 1 = PAID (from enums::match_type)
+    pub payment_method: u8,      // 0 = WALLET, 1 = PLATFORM (from enums::payment_method)
+    pub _padding7: [u8; 6],      // Explicit padding to align tournament_id to 8 bytes
+    pub tournament_id: [u8; 16], // Optional tournament ID (all zeros = not a tournament match) - 8-byte aligned
 }
 
 // DO NOT manually implement Pod/Zeroable - Anchor's macro will derive them
@@ -93,7 +101,10 @@ impl Match {
         5 + 1 + 2 +                      // declared_suits + flags + _padding5
         32 + 10 + 320 +                  // floor_card_hash + hand_sizes + committed_hand_hashes
         6 +                              // _padding6 (to align last_nonce to 8 bytes)
-        (8 * 10); // last_nonce (u64 array, 8-byte aligned)
+        (8 * 10) +                       // last_nonce (u64 array, 8-byte aligned)
+        8 + 8 +                          // entry_fee_lamports + prize_pool_lamports
+        1 + 1 + 6 +                      // match_type + payment_method + _padding7
+        16; // tournament_id
 
     /// Get game config from registry. Requires GameRegistry account to be passed.
     /// This method is used by instructions that have access to the registry.
@@ -344,5 +355,42 @@ impl Match {
     // Helper to check if user_id is already in match
     pub fn has_player_id(&self, user_id: &[u8]) -> bool {
         self.find_player_index(user_id).is_some()
+    }
+
+    // Phase 02: Paid match helper methods
+    pub fn is_paid_match(&self) -> bool {
+        self.match_type == crate::state::enums::match_type::PAID
+    }
+
+    pub fn is_free_match(&self) -> bool {
+        self.match_type == crate::state::enums::match_type::FREE
+    }
+
+    pub fn get_payment_method(&self) -> u8 {
+        self.payment_method
+    }
+
+    pub fn is_wallet_payment(&self) -> bool {
+        self.payment_method == crate::state::enums::payment_method::WALLET
+    }
+
+    pub fn is_platform_payment(&self) -> bool {
+        self.payment_method == crate::state::enums::payment_method::PLATFORM
+    }
+
+    pub fn get_tournament_id(&self) -> Option<[u8; 16]> {
+        if self.tournament_id.iter().all(|&b| b == 0) {
+            None
+        } else {
+            Some(self.tournament_id)
+        }
+    }
+
+    pub fn set_tournament_id(&mut self, tournament_id: [u8; 16]) {
+        self.tournament_id = tournament_id;
+    }
+
+    pub fn clear_tournament_id(&mut self) {
+        self.tournament_id = [0u8; 16];
     }
 }
