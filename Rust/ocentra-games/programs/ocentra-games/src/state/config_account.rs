@@ -40,6 +40,7 @@ pub struct ConfigAccount {
     pub withdrawal_fee_lamports: u64, // Fixed withdrawal fee in lamports
     pub min_entry_fee: u64,        // Minimum entry fee per match in lamports
     pub max_entry_fee: u64,        // Maximum entry fee per match in lamports
+    pub cancellation_fee_bps: u16, // Cancellation fee in basis points (250 = 2.5% of total entry fees)
 
     // Emergency controls
     pub is_paused: bool, // Global pause flag (pauses all paid matches)
@@ -76,6 +77,7 @@ impl ConfigAccount {
         8 +                                 // withdrawal_fee_lamports (u64)
         8 +                                 // min_entry_fee (u64)
         8 +                                 // max_entry_fee (u64)
+        2 +                                 // cancellation_fee_bps (u16)
         1 +                                 // is_paused (bool)
         1 +                                 // kyc_tier_wallet (u8)
         1 +                                 // kyc_tier_platform (u8)

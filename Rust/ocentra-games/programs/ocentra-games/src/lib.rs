@@ -291,4 +291,43 @@ pub mod ocentra_games {
             treasury_multisig,
         )
     }
+
+    // Economic instructions (Phase 03)
+    pub fn deposit_sol(ctx: Context<DepositSol>, amount: u64) -> Result<()> {
+        instructions::common::economic::deposit_sol::handler(ctx, amount)
+    }
+
+    pub fn withdraw_sol(ctx: Context<WithdrawSol>, amount: u64) -> Result<()> {
+        instructions::common::economic::withdraw_sol::handler(ctx, amount)
+    }
+
+    pub fn distribute_prizes(
+        ctx: Context<DistributePrizes>,
+        match_id: String,
+        winner_indices: Vec<u8>,
+        prize_amounts: Vec<u64>,
+    ) -> Result<()> {
+        instructions::common::economic::distribute_prizes::handler(
+            ctx,
+            match_id,
+            winner_indices,
+            prize_amounts,
+        )
+    }
+
+    pub fn refund_escrow(
+        ctx: Context<RefundEscrow>,
+        match_id: String,
+        player_indices: Vec<u8>,
+        cancellation_reason: u8,
+        abandoned_player_index: Option<u8>,
+    ) -> Result<()> {
+        instructions::common::economic::refund_escrow::handler(
+            ctx,
+            match_id,
+            player_indices,
+            cancellation_reason,
+            abandoned_player_index,
+        )
+    }
 }

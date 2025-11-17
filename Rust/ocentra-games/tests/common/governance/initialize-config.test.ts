@@ -30,17 +30,25 @@ class InitializeConfigTest extends BaseTest {
     // Use authority as treasury multisig for testing (in real scenario, this would be a Squads multisig)
     const treasuryMultisig = authority.publicKey;
     
-    // Initialize config account
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (program.methods as any)
-      .initializeConfig(treasuryMultisig)
-      .accounts({
-        configAccount: configPDA,
-        authority: authority.publicKey,
-        systemProgram: SystemProgram.programId,
-      } as never)
-      .rpc();
+    // Initialize config account (skip if already initialized)
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (program.methods as any)
+        .initializeConfig(treasuryMultisig)
+        .accounts({
+          configAccount: configPDA,
+          authority: authority.publicKey,
+          systemProgram: SystemProgram.programId,
+        } as never)
+        .rpc();
+    } catch (err: unknown) {
+      const error = err as { message?: string };
+      // If account already exists, that's fine - just verify it's correct
+      if (!error.message?.includes("already in use") && !error.message?.includes("0x0")) {
+        throw err;
+      }
+      // Account already initialized, continue to verification
+    }
     
     // Verify config was initialized
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -118,4 +118,26 @@ pub enum GameError {
 
     #[msg("Invalid fee parameter - value out of bounds")]
     InvalidFeeParameter,
+
+    // Economic instruction errors (Phase 03)
+    #[msg("Account is frozen - deposits and withdrawals are disabled")]
+    AccountFrozen,
+
+    #[msg("Account is locked - withdrawals are disabled until lock period expires")]
+    AccountLocked,
+
+    #[msg("Escrow already distributed - prizes have already been paid out")]
+    EscrowAlreadyDistributed,
+
+    #[msg("Escrow not funded - not all players have paid entry fees")]
+    EscrowNotFunded,
+
+    #[msg("Match not ended - cannot distribute prizes until match ends")]
+    MatchNotEnded,
+
+    #[msg("Match not cancelled - cannot refund escrow for active or ended matches")]
+    MatchNotCancelled,
+
+    #[msg("Invalid payment method - payment method mismatch")]
+    InvalidPaymentMethod,
 }

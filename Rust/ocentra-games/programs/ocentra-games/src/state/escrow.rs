@@ -34,9 +34,14 @@ pub struct EscrowAccount {
     /// Bit 0: funded (all players have paid entry fee)
     /// Bit 1: distributed (prizes have been distributed)
     /// Bit 2: cancelled (match was cancelled, refunds issued)
-    /// Bits 3-7: reserved
+    /// Bits 3-5: cancellation_reason (3 bits = 8 values, see cancellation_reason constants)
+    /// Bits 6-7: reserved
     pub status_flags: u8, // 1 byte
-    pub _padding2: [u8; 7], // Explicit padding to align reserved to 8 bytes
+    
+    /// Abandoned player index (0-9 = player index, 255 = none/not applicable)
+    /// Only set when cancellation_reason is PLAYER_ABANDONMENT, TIMEOUT, or GRACE_PERIOD_EXPIRED
+    pub abandoned_player_index: u8, // 1 byte
+    pub _padding2: [u8; 6], // Explicit padding to align reserved to 8 bytes
 
     /// Reserved space for future SPL token support (mint metadata, etc.)
     pub reserved: [u8; 32], // 32 bytes - 8-byte aligned
@@ -51,7 +56,7 @@ impl EscrowAccount {
         8 +                               // platform_fee_lamports
         8 +                               // treasury_due_lamports
         (8 * MAX_PLAYERS) +               // player_stakes (10 × 8 = 80 bytes)
-        1 + 7 +                           // status_flags + _padding2
+        1 + 1 + 6 +                       // status_flags + abandoned_player_index + _padding2
         32; // reserved
 
     /// PDA seed pattern for EscrowAccount
@@ -93,6 +98,18 @@ impl EscrowAccount {
         } else {
             self.status_flags &= !0x04;
         }
+    }
+
+    /// Get cancellation reason (bits 3-5 of status_flags)
+    pub fn get_cancellation_reason(&self) -> u8 {
+        (self.status_flags >> 3) & 0x07
+    }
+
+    /// Set cancellation reason (bits 3-5 of status_flags)
+    /// reason must be 0-7 (3 bits)
+    pub fn set_cancellation_reason(&mut self, reason: u8) {
+        // Clear bits 3-5, then set new reason
+        self.status_flags = (self.status_flags & 0xC7) | ((reason & 0x07) << 3);
     }
 
     /// Get player stake by index
