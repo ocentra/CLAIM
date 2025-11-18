@@ -1,5 +1,5 @@
 use crate::error::GameError;
-use crate::state::{EscrowAccount, GameRegistry, Match};
+use crate::state::{ConfigAccount, EscrowAccount, GameRegistry, Match};
 use anchor_lang::prelude::*;
 
 pub fn handler(
@@ -77,6 +77,11 @@ pub fn handler(
     
     // Validate paid match parameters
     if entry_fee_lamports > 0 {
+        // Check if program is paused (only for paid matches)
+        if let Some(config) = &ctx.accounts.config_account {
+            require!(!config.is_paused, GameError::ProgramPaused);
+        }
+
         // If entry fee is set, match must be PAID
         require!(
             match_type_val == crate::state::enums::match_type::PAID,
@@ -194,6 +199,13 @@ pub struct CreateMatch<'info> {
         bump
     )]
     pub escrow_account: Option<AccountLoader<'info, EscrowAccount>>,
+
+    /// Config account (optional - only needed for paid matches to check is_paused)
+    #[account(
+        seeds = [b"config_account"],
+        bump
+    )]
+    pub config_account: Option<Account<'info, ConfigAccount>>,
 
     #[account(mut)]
     pub authority: Signer<'info>,

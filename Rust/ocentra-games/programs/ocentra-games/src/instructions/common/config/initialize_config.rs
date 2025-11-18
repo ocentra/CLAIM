@@ -37,6 +37,12 @@ pub fn handler(ctx: Context<InitializeConfig>, treasury_multisig: Pubkey) -> Res
     config.max_entry_fee = 100_000_000_000; // 100 SOL default
     config.is_paused = false; // Not paused by default
 
+    // Initialize Phase 02 fields (KYC and payment methods)
+    config.kyc_tier_wallet = crate::state::enums::kyc_tier::NONE; // No KYC required by default
+    config.kyc_tier_platform = crate::state::enums::kyc_tier::NONE; // No KYC required by default
+    config.supported_payment_methods = 0x03; // Enable both WALLET (0x01) and PLATFORM (0x02) by default
+    config.cancellation_fee_bps = 250; // 2.5% default cancellation fee
+
     // Set timestamps
     config.created_at = clock.unix_timestamp;
     config.last_updated = clock.unix_timestamp;

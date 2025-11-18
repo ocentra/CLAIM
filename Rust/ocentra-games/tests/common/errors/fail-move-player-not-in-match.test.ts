@@ -31,7 +31,6 @@ class FailMovePlayerNotInMatchTest extends BaseTest {
       getMovePDA,
       createStartedMatch,
       submitMoveManual,
-      AnchorError: AnchorErrorType,
     } = await import('@/helpers');
 
     const matchId = generateUniqueMatchId("not-in-match");

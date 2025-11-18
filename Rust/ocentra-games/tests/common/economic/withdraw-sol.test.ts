@@ -7,7 +7,7 @@ import { BaseTest } from '@/core';
 import { TestCategory, ClusterRequirement } from '@/core';
 import { registerMochaTest } from '@/core';
 import { SystemProgram, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { getUserDepositPDA, getConfigAccountPDA } from '@/common';
+import { getUserDepositPDA, getConfigAccountPDA, ConfigAccountType, UserDepositAccountType } from '@/common';
 import * as anchor from "@coral-xyz/anchor";
 
 class WithdrawSolTest extends BaseTest {
@@ -27,7 +27,7 @@ class WithdrawSolTest extends BaseTest {
   async run(): Promise<void> {
     const { program, authority, airdrop } = await import('@/helpers');
     
-    // Setup: Initialize config if needed
+    // Setup: Initialize config if needed and ensure it's unpaused
     const [configPDA] = await getConfigAccountPDA();
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -46,9 +46,21 @@ class WithdrawSolTest extends BaseTest {
       }
     }
 
-    // Get config to check withdrawal fee
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const config = await program.account.configAccount.fetch(configPDA) as any;
+    // Get config to check withdrawal fee and ensure it's unpaused
+    let config = await program.account.configAccount.fetch(configPDA) as unknown as ConfigAccountType;
+    if (config.isPaused ?? config.is_paused) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (program.methods as any)
+        .unpauseProgram()
+        .accounts({
+          configAccount: configPDA,
+          authority: authority.publicKey,
+          systemProgram: SystemProgram.programId,
+        } as never)
+        .rpc();
+      // Fetch again after unpausing
+      config = await program.account.configAccount.fetch(configPDA) as unknown as ConfigAccountType;
+    }
     const withdrawalFee = config.withdrawalFeeLamports?.toNumber() ?? config.withdrawal_fee_lamports?.toNumber() ?? 5000;
 
     // Test 1: Success - Withdraw with fee deduction
@@ -88,8 +100,7 @@ class WithdrawSolTest extends BaseTest {
       .rpc();
     
     // Verify account balances updated
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const depositAccount1 = await program.account.userDepositAccount.fetch(depositPDA1) as any;
+    const depositAccount1 = await program.account.userDepositAccount.fetch(depositPDA1) as unknown as UserDepositAccountType;
     const expectedAvailable = depositAmount.sub(withdrawAmount).sub(new anchor.BN(withdrawalFee)).toNumber();
     this.assertEqual(
       depositAccount1.availableLamports?.toNumber() ?? depositAccount1.available_lamports?.toNumber() ?? 0,
@@ -256,8 +267,7 @@ class WithdrawSolTest extends BaseTest {
       .rpc();
     
     // Verify account is empty (except fee was deducted)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const depositAccount4 = await program.account.userDepositAccount.fetch(depositPDA4) as any;
+    const depositAccount4 = await program.account.userDepositAccount.fetch(depositPDA4) as unknown as UserDepositAccountType;
     this.assertEqual(
       depositAccount4.availableLamports?.toNumber() ?? depositAccount4.available_lamports?.toNumber() ?? 0,
       0,
@@ -265,12 +275,16 @@ class WithdrawSolTest extends BaseTest {
     );
 
     // Test 9: Success - Verify withdrawal fee is sent to treasury
+    // Use a separate treasury account to avoid interference from transaction fees
+    const treasury5 = Keypair.generate();
+    await airdrop(treasury5.publicKey, 0.1); // Small amount for rent
+
     const user5 = Keypair.generate();
     await airdrop(user5.publicKey, 2);
     const [depositPDA5] = await getUserDepositPDA(user5.publicKey);
     const depositAmount5 = new anchor.BN(0.1 * LAMPORTS_PER_SOL);
     const withdrawAmount5 = new anchor.BN(0.05 * LAMPORTS_PER_SOL);
-    
+
     // Deposit
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (program.methods as any)
@@ -282,10 +296,10 @@ class WithdrawSolTest extends BaseTest {
       } as never)
       .signers([user5])
       .rpc();
-    
+
     // Get treasury balance before withdrawal
-    const treasuryBalanceBefore = await program.provider.connection.getBalance(authority.publicKey);
-    
+    const treasuryBalanceBefore = await program.provider.connection.getBalance(treasury5.publicKey);
+
     // Withdraw
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (program.methods as any)
@@ -294,20 +308,20 @@ class WithdrawSolTest extends BaseTest {
         userDepositAccount: depositPDA5,
         user: user5.publicKey,
         configAccount: configPDA,
-        treasury: authority.publicKey,
+        treasury: treasury5.publicKey, // Use separate treasury
         systemProgram: SystemProgram.programId,
       } as never)
       .signers([user5])
       .rpc();
-    
+
     // Verify treasury received fee (if fee > 0)
     if (withdrawalFee > 0) {
-      const treasuryBalanceAfter = await program.provider.connection.getBalance(authority.publicKey);
+      const treasuryBalanceAfter = await program.provider.connection.getBalance(treasury5.publicKey);
       const treasuryReceived = treasuryBalanceAfter - treasuryBalanceBefore;
-      // Note: Balance change includes transaction fees, so we check it's approximately correct
+      // Treasury should receive exactly the withdrawal fee
       this.assert(
-        treasuryReceived >= withdrawalFee - 10000, // Allow for transaction fees
-        `Treasury should receive approximately ${withdrawalFee} lamports, got ${treasuryReceived}`
+        treasuryReceived === withdrawalFee,
+        `Treasury should receive exactly ${withdrawalFee} lamports, got ${treasuryReceived}`
       );
     }
 

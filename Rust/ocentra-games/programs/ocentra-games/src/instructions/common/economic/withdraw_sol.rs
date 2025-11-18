@@ -10,6 +10,10 @@ pub fn handler(ctx: Context<WithdrawSol>, amount: u64) -> Result<()> {
     require!(amount > 0, GameError::InvalidPayload);
 
     let config = &ctx.accounts.config_account;
+
+    // Check if program is paused
+    require!(!config.is_paused, GameError::ProgramPaused);
+
     let clock = Clock::get()?;
     let withdrawal_fee = config.withdrawal_fee_lamports;
     let total_required = amount

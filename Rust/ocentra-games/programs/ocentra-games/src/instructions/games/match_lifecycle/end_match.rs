@@ -166,6 +166,7 @@ pub struct EndMatch<'info> {
 
     /// Escrow account (only required for paid matches)
     /// CHECK: Validated in handler - only required if match is paid
+    /// For free matches, this can be None and Anchor will skip constraint validation
     #[account(
         seeds = [b"escrow", match_account.key().as_ref()],
         bump

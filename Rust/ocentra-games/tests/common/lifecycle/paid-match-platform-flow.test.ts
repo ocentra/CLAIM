@@ -10,7 +10,7 @@ import { BaseTest } from '@/core';
 import { TestCategory, ClusterRequirement } from '@/core';
 import { registerMochaTest } from '@/core';
 import { SystemProgram, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { getMatchPDA, getEscrowPDA, getConfigAccountPDA, getUserDepositPDA } from '@/common';
+import { getMatchPDA, getEscrowPDA, getConfigAccountPDA, getUserDepositPDA, ConfigAccountType, UserDepositAccountType } from '@/common';
 import * as anchor from "@coral-xyz/anchor";
 
 // Match type and payment method constants
@@ -51,7 +51,7 @@ class PaidMatchPlatformFlowTest extends BaseTest {
     } = await import('@/helpers');
     const { getRegistryPDA } = await import('@/common');
 
-    // Setup: Initialize config if needed
+    // Setup: Initialize config if needed and ensure it's unpaused
     const [configPDA] = await getConfigAccountPDA();
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -68,6 +68,20 @@ class PaidMatchPlatformFlowTest extends BaseTest {
       if (!error.message?.includes("already in use") && !error.message?.includes("0x0")) {
         throw err;
       }
+    }
+    
+    // Ensure config is unpaused (may have been paused by previous tests)
+    const config = await program.account.configAccount.fetch(configPDA) as unknown as ConfigAccountType;
+    if (config.isPaused ?? config.is_paused) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (program.methods as any)
+        .unpauseProgram()
+        .accounts({
+          configAccount: configPDA,
+          authority: authority.publicKey,
+          systemProgram: SystemProgram.programId,
+        } as never)
+        .rpc();
     }
 
     const matchId = generateUniqueMatchId("paid-platform");
@@ -115,8 +129,7 @@ class PaidMatchPlatformFlowTest extends BaseTest {
       .rpc();
 
     // Verify deposits
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const depositAccount1 = await program.account.userDepositAccount.fetch(depositPDA1) as any;
+    const depositAccount1 = await program.account.userDepositAccount.fetch(depositPDA1) as unknown as UserDepositAccountType;
     this.assertEqual(
       depositAccount1.availableLamports?.toNumber() ?? depositAccount1.available_lamports?.toNumber() ?? 0,
       depositAmount.toNumber(),
@@ -144,7 +157,10 @@ class PaidMatchPlatformFlowTest extends BaseTest {
       .rpc();
 
     // Step 3: Join match with platform payment
-    const depositAccount1BeforeJoin = await program.account.userDepositAccount.fetch(depositPDA1) as any;
+    const depositAccount1BeforeJoin = await program.account.userDepositAccount.fetch(depositPDA1) as unknown as {
+      availableLamports?: { toNumber(): number };
+      available_lamports?: { toNumber(): number };
+    };
     const availableBefore1 = depositAccount1BeforeJoin.availableLamports?.toNumber() ?? depositAccount1BeforeJoin.available_lamports?.toNumber() ?? 0;
 
     await program.methods
@@ -162,7 +178,12 @@ class PaidMatchPlatformFlowTest extends BaseTest {
       .rpc();
 
     // Verify deposit account updated
-    const depositAccount1AfterJoin = await program.account.userDepositAccount.fetch(depositPDA1) as any;
+    const depositAccount1AfterJoin = await program.account.userDepositAccount.fetch(depositPDA1) as unknown as {
+      availableLamports?: { toNumber(): number };
+      available_lamports?: { toNumber(): number };
+      inPlayLamports?: { toNumber(): number };
+      in_play_lamports?: { toNumber(): number };
+    };
     const availableAfter1 = depositAccount1AfterJoin.availableLamports?.toNumber() ?? depositAccount1AfterJoin.available_lamports?.toNumber() ?? 0;
     const inPlayAfter1 = depositAccount1AfterJoin.inPlayLamports?.toNumber() ?? depositAccount1AfterJoin.in_play_lamports?.toNumber() ?? 0;
     
@@ -194,7 +215,10 @@ class PaidMatchPlatformFlowTest extends BaseTest {
       .rpc();
 
     // Verify escrow is fully funded
-    const escrowAccountAfterJoin = await program.account.escrowAccount.fetch(escrowPDA) as any;
+    const escrowAccountAfterJoin = await program.account.escrowAccount.fetch(escrowPDA) as unknown as {
+      totalEntryLamports?: { toNumber(): number };
+      total_entry_lamports?: { toNumber(): number };
+    };
     const expectedTotal = entryFee.toNumber() * 2;
     this.assertEqual(
       escrowAccountAfterJoin.totalEntryLamports?.toNumber() ?? escrowAccountAfterJoin.total_entry_lamports?.toNumber() ?? 0,
@@ -224,32 +248,37 @@ class PaidMatchPlatformFlowTest extends BaseTest {
       .rpc();
 
     // Step 6: Distribute prizes
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const config = await program.account.configAccount.fetch(configPDA) as any;
-    const platformFeeBps = config.platformFeeBps ?? config.platform_fee_bps ?? 500;
+    const configForFee = await program.account.configAccount.fetch(configPDA) as unknown as ConfigAccountType;
+    const platformFeeBps = configForFee.platformFeeBps ?? configForFee.platform_fee_bps ?? 500;
     const platformFee = Math.floor(expectedTotal * platformFeeBps / 10000);
     const prizePool = expectedTotal - platformFee;
 
+    // Capture balances before distribution
+    const treasuryBalanceBefore = await program.provider.connection.getBalance(authority.publicKey);
+
+    // Provide all winner accounts (required by Anchor, even if not all used)
+    // Use player1 as dummy for unused slots
     await program.methods
       .distributePrizes(
         matchId,
-        [0], // Winner index
-        [new anchor.BN(prizePool)]
+        Buffer.from([0]), // Winner index - Buffer required for Vec<u8>
+        [new anchor.BN(prizePool)] // Prize amounts as BN[] required for Vec<u64>
       )
       .accounts({
         escrowAccount: escrowPDA,
         matchAccount: matchPDA,
         configAccount: configPDA,
+        treasury: authority.publicKey,
         winner0: player1.publicKey,
-        winner1: null,
-        winner2: null,
-        winner3: null,
-        winner4: null,
-        winner5: null,
-        winner6: null,
-        winner7: null,
-        winner8: null,
-        winner9: null,
+        winner1: player1.publicKey, // Dummy - not used but required
+        winner2: player1.publicKey, // Dummy - not used but required
+        winner3: player1.publicKey, // Dummy - not used but required
+        winner4: player1.publicKey, // Dummy - not used but required
+        winner5: player1.publicKey, // Dummy - not used but required
+        winner6: player1.publicKey, // Dummy - not used but required
+        winner7: player1.publicKey, // Dummy - not used but required
+        winner8: player1.publicKey, // Dummy - not used but required
+        winner9: player1.publicKey, // Dummy - not used but required
         winnerDeposit0: depositPDA1, // Platform payment - prize goes to deposit account
         winnerDeposit1: null,
         winnerDeposit2: null,
@@ -260,20 +289,63 @@ class PaidMatchPlatformFlowTest extends BaseTest {
         winnerDeposit7: null,
         winnerDeposit8: null,
         winnerDeposit9: null,
-        treasury: authority.publicKey,
         systemProgram: SystemProgram.programId,
       } as never)
       .rpc();
 
-    // Verify winner's deposit account received prize
-    const depositAccount1AfterDistribute = await program.account.userDepositAccount.fetch(depositPDA1) as any;
+    // Verify escrow balance is empty (all funds distributed)
+    const escrowBalanceAfter = await program.provider.connection.getBalance(escrowPDA);
+    // Escrow should only have rent-exempt balance left (minimal)
+    // Rent-exempt minimum for EscrowAccount is ~2.2M lamports (0.0022 SOL)
+    // Check that balance is close to rent-exempt minimum (within 10% tolerance)
+    const rentExemptMinimum = 2000000; // ~0.002 SOL
+    const rentExemptMaximum = 3000000; // ~0.003 SOL (allows for small variations)
+    this.assert(
+      escrowBalanceAfter >= rentExemptMinimum && escrowBalanceAfter <= rentExemptMaximum,
+      `Escrow should only have rent-exempt balance. Expected between ${rentExemptMinimum} and ${rentExemptMaximum} lamports, got ${escrowBalanceAfter}`
+    );
+
+    // Verify escrow account total_entry_lamports is 0
+    const escrowAccountAfterDistribute = await program.account.escrowAccount.fetch(escrowPDA) as unknown as {
+      totalEntryLamports?: { toNumber(): number };
+      total_entry_lamports?: { toNumber(): number };
+    };
+    const escrowTotalAfter = escrowAccountAfterDistribute.totalEntryLamports?.toNumber() ?? escrowAccountAfterDistribute.total_entry_lamports?.toNumber() ?? 0;
+    this.assertEqual(
+      escrowTotalAfter,
+      0,
+      'Escrow total_entry_lamports should be 0 after distribution'
+    );
+
+    // Verify treasury received platform fee (accounting for transaction fees)
+    const treasuryBalanceAfter = await program.provider.connection.getBalance(authority.publicKey);
+    const treasuryIncrease = treasuryBalanceAfter - treasuryBalanceBefore;
+    // Treasury receives platform fee but pays transaction fees (~5000 lamports)
+    // So net increase should be platformFee - transactionFee
+    // Allow tolerance for transaction fees (typically 5000-10000 lamports)
+    const transactionFeeTolerance = 10000; // Allow up to 0.00001 SOL for transaction fees
+    this.assert(
+      treasuryIncrease >= platformFee - transactionFeeTolerance,
+      `Treasury should receive platform fee (minus transaction fees). Expected >= ${platformFee - transactionFeeTolerance} lamports, got ${treasuryIncrease}`
+    );
+
+    // Verify winner's deposit account received prize (exact amount)
+    const depositAccount1AfterDistribute = await program.account.userDepositAccount.fetch(depositPDA1) as unknown as {
+      availableLamports?: { toNumber(): number };
+      available_lamports?: { toNumber(): number };
+      inPlayLamports?: { toNumber(): number };
+      in_play_lamports?: { toNumber(): number };
+    };
     const availableFinal = depositAccount1AfterDistribute.availableLamports?.toNumber() ?? depositAccount1AfterDistribute.available_lamports?.toNumber() ?? 0;
     const inPlayFinal = depositAccount1AfterDistribute.inPlayLamports?.toNumber() ?? depositAccount1AfterDistribute.in_play_lamports?.toNumber() ?? 0;
 
     // Winner should have prize added to available, and in_play should be unlocked (entry fee removed)
-    this.assert(
-      availableFinal > availableAfter1,
-      'Winner should receive prize in deposit account'
+    // Expected: availableAfter1 (after join) + prizePool = availableFinal
+    const expectedAvailableFinal = availableAfter1 + prizePool;
+    this.assertEqual(
+      availableFinal,
+      expectedAvailableFinal,
+      `Winner should receive exact prize pool. Expected ${expectedAvailableFinal} lamports, got ${availableFinal}`
     );
     this.assertEqual(
       inPlayFinal,

@@ -7,7 +7,7 @@ import { BaseTest } from '@/core';
 import { TestCategory, ClusterRequirement } from '@/core';
 import { registerMochaTest } from '@/core';
 import { SystemProgram, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { getUserDepositPDA, getConfigAccountPDA } from '@/common';
+import { getUserDepositPDA, getConfigAccountPDA, ConfigAccountType, UserDepositAccountType } from '@/common';
 import * as anchor from "@coral-xyz/anchor";
 
 class DepositSolTest extends BaseTest {
@@ -27,7 +27,7 @@ class DepositSolTest extends BaseTest {
   async run(): Promise<void> {
     const { program, authority, airdrop } = await import('@/helpers');
     
-    // Setup: Initialize config if needed
+    // Setup: Initialize config if needed and ensure it's unpaused
     const [configPDA] = await getConfigAccountPDA();
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -45,6 +45,20 @@ class DepositSolTest extends BaseTest {
         throw err;
       }
     }
+    
+    // Ensure config is unpaused (may have been paused by previous tests)
+    const config = await program.account.configAccount.fetch(configPDA) as unknown as ConfigAccountType;
+    if (config.isPaused ?? config.is_paused) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (program.methods as any)
+        .unpauseProgram()
+        .accounts({
+          configAccount: configPDA,
+          authority: authority.publicKey,
+          systemProgram: SystemProgram.programId,
+        } as never)
+        .rpc();
+    }
 
     // Test 1: Success - First deposit (account initialization)
     const user1 = Keypair.generate();
@@ -58,15 +72,16 @@ class DepositSolTest extends BaseTest {
       .accounts({
         userDepositAccount: depositPDA1,
         user: user1.publicKey,
+        configAccount: configPDA,
         systemProgram: SystemProgram.programId,
       } as never)
       .signers([user1])
       .rpc();
     
     // Verify account was initialized and updated
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const depositAccount1 = await program.account.userDepositAccount.fetch(depositPDA1) as any;
+    const depositAccount1 = await program.account.userDepositAccount.fetch(depositPDA1) as unknown as UserDepositAccountType;
     this.assertTruthy(depositAccount1, 'Deposit account should exist');
+    this.assertTruthy(depositAccount1.authority, 'Authority should exist');
     this.assertEqual(
       depositAccount1.authority.toString(),
       user1.publicKey.toString(),
@@ -102,14 +117,14 @@ class DepositSolTest extends BaseTest {
       .accounts({
         userDepositAccount: depositPDA1,
         user: user1.publicKey,
+        configAccount: configPDA,
         systemProgram: SystemProgram.programId,
       } as never)
       .signers([user1])
       .rpc();
     
     // Verify balances accumulated
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const depositAccount1After = await program.account.userDepositAccount.fetch(depositPDA1) as any;
+    const depositAccount1After = await program.account.userDepositAccount.fetch(depositPDA1) as unknown as UserDepositAccountType;
     const expectedTotal = depositAmount1.add(depositAmount2).toNumber();
     this.assertEqual(
       depositAccount1After.totalDeposited?.toNumber() ?? depositAccount1After.total_deposited?.toNumber() ?? 0,
@@ -137,6 +152,7 @@ class DepositSolTest extends BaseTest {
       .accounts({
         userDepositAccount: depositPDA2,
         user: user2.publicKey,
+        configAccount: configPDA,
         systemProgram: SystemProgram.programId,
       } as never)
       .signers([user2])
@@ -154,6 +170,7 @@ class DepositSolTest extends BaseTest {
         .accounts({
           userDepositAccount: depositPDA1,
           user: user1.publicKey,
+          configAccount: configPDA,
           systemProgram: SystemProgram.programId,
         } as never)
         .signers([user1])
@@ -176,6 +193,7 @@ class DepositSolTest extends BaseTest {
         .accounts({
           userDepositAccount: depositPDA1, // user1's account
           user: user3.publicKey, // but user3 is signing
+          configAccount: configPDA,
           systemProgram: SystemProgram.programId,
         } as never)
         .signers([user3])
@@ -208,14 +226,14 @@ class DepositSolTest extends BaseTest {
       .accounts({
         userDepositAccount: depositPDA4,
         user: user4.publicKey,
+        configAccount: configPDA,
         systemProgram: SystemProgram.programId,
       } as never)
       .signers([user4])
       .rpc();
     
     // Verify large deposit succeeded
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const depositAccount4 = await program.account.userDepositAccount.fetch(depositPDA4) as any;
+    const depositAccount4 = await program.account.userDepositAccount.fetch(depositPDA4) as unknown as UserDepositAccountType;
     this.assertEqual(
       depositAccount4.totalDeposited?.toNumber() ?? depositAccount4.total_deposited?.toNumber() ?? 0,
       largeAmount.toNumber(),
@@ -237,6 +255,7 @@ class DepositSolTest extends BaseTest {
       .accounts({
         userDepositAccount: depositPDA5,
         user: user5.publicKey,
+        configAccount: configPDA,
         systemProgram: SystemProgram.programId,
       } as never)
       .signers([user5])
@@ -249,6 +268,7 @@ class DepositSolTest extends BaseTest {
       .accounts({
         userDepositAccount: depositPDA5,
         user: user5.publicKey,
+        configAccount: configPDA,
         systemProgram: SystemProgram.programId,
       } as never)
       .signers([user5])
@@ -261,14 +281,14 @@ class DepositSolTest extends BaseTest {
       .accounts({
         userDepositAccount: depositPDA5,
         user: user5.publicKey,
+        configAccount: configPDA,
         systemProgram: SystemProgram.programId,
       } as never)
       .signers([user5])
       .rpc();
     
     // Verify all deposits accumulated
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const depositAccount5 = await program.account.userDepositAccount.fetch(depositPDA5) as any;
+    const depositAccount5 = await program.account.userDepositAccount.fetch(depositPDA5) as unknown as UserDepositAccountType;
     const expectedTotalMultiple = deposit1.add(deposit2).add(deposit3).toNumber();
     this.assertEqual(
       depositAccount5.totalDeposited?.toNumber() ?? depositAccount5.total_deposited?.toNumber() ?? 0,

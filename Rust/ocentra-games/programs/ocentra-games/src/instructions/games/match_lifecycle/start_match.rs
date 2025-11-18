@@ -46,16 +46,13 @@ pub fn handler(ctx: Context<StartMatch>, match_id: String) -> Result<()> {
         // Validate escrow account exists
         let escrow_loader = ctx.accounts.escrow_account.as_ref()
             .ok_or(GameError::InvalidPayload)?;
-        let escrow_account = escrow_loader.load()?;
+        let mut escrow_account = escrow_loader.load_mut()?;
 
         // Validate escrow belongs to this match
         require!(
             escrow_account.match_pda == ctx.accounts.match_account.key(),
             GameError::InvalidPayload
         );
-
-        // Verify escrow is funded (all players have paid)
-        require!(escrow_account.is_funded(), GameError::EscrowNotFunded);
 
         // Verify total escrow equals expected prize pool
         let expected_total = entry_fee
@@ -66,12 +63,16 @@ pub fn handler(ctx: Context<StartMatch>, match_id: String) -> Result<()> {
             GameError::InvalidPayload
         );
 
+        // Mark escrow as funded now that match is starting
+        // This indicates all players have paid their entry fees
+        escrow_account.set_funded(true);
+
         // Phase 04: KYC tier validation (if required)
         // Note: KYC tier checks would be implemented here if needed
         // For now, we assume all players meet KYC requirements if they can join
 
         msg!(
-            "Paid match escrow verified: {} lamports total ({} players × {} lamports entry fee)",
+            "Paid match escrow verified and funded: {} lamports total ({} players × {} lamports entry fee)",
             escrow_account.total_entry_lamports,
             match_account.player_count,
             entry_fee
@@ -136,6 +137,7 @@ pub struct StartMatch<'info> {
     /// Escrow account (only required for paid matches)
     /// CHECK: Validated in handler - only required if match is paid
     #[account(
+        mut,
         seeds = [b"escrow", match_account.key().as_ref()],
         bump
     )]

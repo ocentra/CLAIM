@@ -83,7 +83,7 @@ class FailEndUnauthorizedTest extends BaseTest {
     } catch (err: unknown) {
       const error = err as { error?: { errorCode?: { code?: string } }; message?: string };
       const isUnauthorized = error.error?.errorCode?.code === "Unauthorized";
-      const hasConstraint = error.message?.includes("constraint");
+      const hasConstraint = error.message?.includes("constraint") ?? false;
       this.assert(isUnauthorized || hasConstraint, 'Should have Unauthorized or constraint error');
     }
   }

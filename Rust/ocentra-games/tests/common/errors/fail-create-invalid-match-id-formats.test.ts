@@ -74,7 +74,7 @@ class FailCreateInvalidMatchIdFormatsTest extends BaseTest {
         // Expected to fail - check for InvalidPayload or constraint error
         const error = err as { error?: { errorCode?: { code?: string } }; message?: string };
         const isInvalidPayload = error.error?.errorCode?.code === "InvalidPayload";
-        const hasConstraint = error.message?.includes("constraint");
+        const hasConstraint = error.message?.includes("constraint") ?? false;
         this.assert(isInvalidPayload || hasConstraint, 
           `Should have InvalidPayload or constraint error for ${invalidId}`);
       }

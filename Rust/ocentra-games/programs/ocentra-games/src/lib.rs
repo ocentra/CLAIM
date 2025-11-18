@@ -294,6 +294,7 @@ pub mod ocentra_games {
         min_entry_fee: Option<u64>,
         max_entry_fee: Option<u64>,
         treasury_multisig: Option<Pubkey>,
+        supported_payment_methods: Option<u8>,
     ) -> Result<()> {
         instructions::common::config::update_config::handler(
             ctx,
@@ -302,6 +303,7 @@ pub mod ocentra_games {
             min_entry_fee,
             max_entry_fee,
             treasury_multisig,
+            supported_payment_methods,
         )
     }
 

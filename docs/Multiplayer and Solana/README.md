@@ -80,13 +80,13 @@ Each phase lives under `docs/Multiplayer and Solana/phases/` and links back to t
 | Phase | Status | Next Action | Blocked By |
 |-------|--------|-------------|------------|
 | **[Phase 01 – Governance & Compliance](phases/phase-01-governance-compliance.md)** | ✅ | Complete - Ready for legal/compliance review | None |
-| **[Phase 02 – On-chain State Design](phases/phase-02-onchain-state.md)** | ⬜ | Wait for Phase 01 | Phase 01 |
-| **[Phase 03 – Economic Instructions](phases/phase-03-economic-instructions.md)** | ⬜ | Wait for Phase 02 | Phase 02 |
-| **[Phase 04 – Match Lifecycle Updates](phases/phase-04-match-lifecycle.md)** | ⬜ | Wait for Phase 02 | Phase 02 |
-| **[Phase 05 – Client & UI](phases/phase-05-client-ui.md)** | ⬜ | Wait for Phase 04 | Phase 04 |
-| **[Phase 06 – Backend & Firebase](phases/phase-06-backend-firebase.md)** | ⬜ | Wait for Phase 04 | Phase 04 |
-| **[Phase 07 – Testing & CI](phases/phase-07-testing-ci.md)** | ⬜ | Can start in parallel with Phase 04-06 | None (parallel) |
-| **[Phase 08 – Off-chain Mirror & WASM](phases/phase-08-offchain-mirror.md)** | ⬜ | **Wait for ALL on-chain phases (01-04) to complete** | Phases 01, 02, 03, 04 |
+| **[Phase 02 – On-chain State Design](phases/phase-02-onchain-state.md)** | ✅ | Complete - All state structs implemented | None |
+| **[Phase 03 – Economic Instructions](phases/phase-03-economic-instructions.md)** | ✅ | Complete - All economic instructions implemented | None |
+| **[Phase 04 – Match Lifecycle Updates](phases/phase-04-match-lifecycle.md)** | ✅ | Complete - Paid match lifecycle integrated | None |
+| **[Phase 05 – Client & UI](phases/phase-05-client-ui.md)** | ⬜ | Ready to start | None |
+| **[Phase 06 – Backend & Firebase](phases/phase-06-backend-firebase.md)** | ⬜ | Ready to start | None |
+| **[Phase 07 – Testing & CI](phases/phase-07-testing-ci.md)** | ⬜ | Can start in parallel with Phase 05-06 | None (parallel) |
+| **[Phase 08 – Off-chain Mirror & WASM](phases/phase-08-offchain-mirror.md)** | ⬜ | Ready to start - All on-chain phases complete | None |
 | **[Phase 09 – Monitoring & Operations](phases/phase-09-monitoring-ops.md)** | ⬜ | Wait for Phase 08 | Phase 08 |
 | **[Phase 10 – Expansion Tracks](phases/phase-10-expansion-tracks.md)** | ⬜ | Optional, after all core phases | All core phases |
 

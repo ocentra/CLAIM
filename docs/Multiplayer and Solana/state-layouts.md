@@ -42,11 +42,21 @@ This appendix tracks the zero-copy structs introduced for paid matches so develo
 | `platform_fee_lamports` | 8 | Accrued platform fees |
 | `treasury_due_lamports` | 8 | Amount owed to treasury |
 | `player_stakes` | 80 | 10 × u64 (one per player slot) |
-| `status_flags` | 1 | Bitfield: funded (bit 0), distributed (bit 1), cancelled (bit 2) |
-| `_padding2` | 7 | Padding to align reserved |
+| `status_flags` | 1 | Bitfield: funded (bit 0), distributed (bit 1), cancelled (bit 2), cancellation_reason (bits 3-5) |
+| `abandoned_player_index` | 1 | Player who abandoned (0-9 = player index, 255 = none) |
+| `_padding2` | 6 | Padding to align reserved |
 | `reserved` | 32 | Future SPL token support |
-| **Total** | **200** | 8 + 32 + 1 + 7 + 8 + 8 + 8 + 80 + 1 + 7 + 32 |
+| **Total** | **200** | 8 + 32 + 1 + 7 + 8 + 8 + 8 + 80 + 1 + 1 + 6 + 32 |
 | **PDA Seeds** | | `["escrow", match_pda.as_ref()]` |
+
+### Cancellation Reasons (stored in status_flags bits 3-5)
+| Value | Constant | Description |
+| --- | --- | --- |
+| 0 | `PLATFORM_FAULT` | Platform issue - full refunds, no platform fee |
+| 1 | `PLAYER_ABANDONMENT` | Player left/disconnected - abandoned player forfeits |
+| 2 | `INSUFFICIENT_PLAYERS` | Not enough players joined - full refunds, small fee |
+| 3 | `TIMEOUT` | Player timeout - abandoned player forfeits |
+| 4 | `GRACE_PERIOD_EXPIRED` | Reconnection grace period expired - abandoned player forfeits |
 
 ## UserDepositAccount (new)
 | Field | Size | Notes |

@@ -6,7 +6,7 @@
 import { BaseTest } from '@/core';
 import { TestCategory, ClusterRequirement } from '@/core';
 import { registerMochaTest } from '@/core';
-import { getConfigAccountPDA } from '@/common';
+import { getConfigAccountPDA, ConfigAccountType } from '@/common';
 import { SystemProgram } from "@solana/web3.js";
 
 class ConfigPaymentMethodsTest extends BaseTest {
@@ -50,8 +50,7 @@ class ConfigPaymentMethodsTest extends BaseTest {
     }
     
     // Fetch config account
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const config = await program.account.configAccount.fetch(configPDA) as any;
+    const config = await program.account.configAccount.fetch(configPDA) as unknown as ConfigAccountType;
     
     // Verify Phase 02 fields exist
     this.assertTruthy(config, 'Config account should exist');

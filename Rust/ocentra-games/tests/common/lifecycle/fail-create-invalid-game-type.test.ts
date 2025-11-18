@@ -8,7 +8,7 @@ import { TestCategory, ClusterRequirement } from '@/core';
 import { registerMochaTest } from '@/core';
 import { SystemProgram } from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
-import type { AnchorError } from '@/helpers';
+import { normalizeAndRethrowAnchorError } from '@/common';
 
 class FailCreateInvalidGameTypeTest extends BaseTest {
   constructor() {
@@ -64,8 +64,13 @@ class FailCreateInvalidGameTypeTest extends BaseTest {
 
       this.assert(false, 'Should have thrown InvalidPayload error');
     } catch (err: unknown) {
-      const error = err as AnchorError;
-      this.assertEqual(error.error?.errorCode?.code, "InvalidPayload");
+      // Normalize the error to get proper AnchorError structure
+      try {
+        normalizeAndRethrowAnchorError(err, "createMatch with invalid game_type");
+      } catch (normalizedErr: unknown) {
+        const errorCode = this.getErrorCode(normalizedErr);
+        this.assertEqual(errorCode, "InvalidPayload");
+      }
     }
   }
 }

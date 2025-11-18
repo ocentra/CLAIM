@@ -189,21 +189,109 @@ pub struct ConfigAccount {
 
 ### Pause Mechanism
 
-**Purpose:** Halt all paid-match operations in case of:
-- Security incident
-- Smart contract bug discovery
-- Regulatory compliance issue
-- Treasury compromise
+**Purpose:** Emergency circuit breaker to halt all paid-match operations in case of:
+- **Security vulnerability discovered** - Immediate pause to prevent exploitation
+- **Economic exploit detected** - Someone finds a way to drain funds
+- **Regulatory compliance issue** - Legal/compliance concern requiring immediate halt
+- **Critical bug in payment logic** - Funds at risk, pause to prevent further damage
+- **Planned maintenance/upgrade** - Scheduled downtime for system updates
+
+**What is Pause/Unpause?**
+
+Pause/unpause is an emergency control mechanism that allows the treasury multisig to temporarily disable all paid match operations. It acts as a **circuit breaker** - a safety switch that can instantly stop money-related operations if something goes wrong.
 
 **Implementation:**
-- `is_paused` flag in `ConfigAccount`
+- `is_paused` boolean flag in `ConfigAccount` (defaults to `false` on initialization)
 - `pause_program` instruction (requires multisig authority)
 - `unpause_program` instruction (requires multisig authority)
 
+**Who Can Pause/Unpause?**
+
+Only the **treasury multisig** can pause or unpause the program. This prevents a single person from pausing the program and ensures emergency actions require consensus from multiple signers.
+
+```rust
+// Validate authority is treasury multisig
+require!(
+    ctx.accounts.authority.key() == config.treasury_multisig,
+    GameError::Unauthorized
+);
+```
+
+**What Operations Are Blocked?**
+
+When `is_paused = true`, the following operations are blocked:
+
+1. **`deposit_sol`** - Users cannot deposit SOL into platform custody
+2. **`withdraw_sol`** - Users cannot withdraw SOL from platform custody
+3. **`create_match` (paid matches only)** - Cannot create paid matches
+4. **`join_match` (paid matches only)** - Cannot join paid matches
+5. **`distribute_prizes`** - Cannot distribute prizes from escrow
+6. **`refund_escrow`** - Cannot refund escrow funds
+
+**Important:** Free matches continue to function normally. The pause mechanism only affects paid match operations.
+
 **Enforcement:**
-- All paid-match instructions check `is_paused` flag
-- If `is_paused = true`, instructions return error
-- Free matches continue to function (pause only affects paid matches)
+
+All paid-match instructions check the `is_paused` flag at the start of execution:
+
+```rust
+// Example from create_match.rs
+if entry_fee_lamports > 0 {
+    if let Some(config) = &ctx.accounts.config_account {
+        require!(!config.is_paused, GameError::ProgramPaused);
+    }
+    // ... rest of paid match logic
+}
+```
+
+If `is_paused = true`, instructions immediately return `GameError::ProgramPaused` with the message: "Program is paused - paid matches are temporarily disabled."
+
+**Real-World Usage Example:**
+
+```
+1. Bug discovered: "Users can withdraw more than they deposited!"
+2. Treasury multisig calls pause_program() (requires quorum signatures)
+3. is_paused = true
+4. All deposit/withdraw/create paid match operations fail immediately
+5. Developers investigate and fix the bug
+6. Treasury multisig calls unpause_program() (requires quorum signatures)
+7. is_paused = false
+8. Operations resume normally
+```
+
+**Error Code:**
+
+When paused, instructions return:
+- **Error Code:** `ProgramPaused` (6036)
+- **Error Message:** "Program is paused - paid matches are temporarily disabled."
+
+**Testing Considerations:**
+
+In test environments, tests may share the same `ConfigAccount`. If one test pauses the program, subsequent tests will fail. Tests should ensure the config is unpaused before running:
+
+```typescript
+// After initializing config...
+const config = await program.account.configAccount.fetch(configPDA);
+if (config.isPaused) {
+  await program.methods
+    .unpauseProgram()
+    .accounts({
+      configAccount: configPDA,
+      authority: authority.publicKey,
+      systemProgram: SystemProgram.programId,
+    })
+    .rpc();
+}
+```
+
+**Best Practices:**
+
+1. **Pause Immediately** - Don't wait if you suspect a security issue
+2. **Communicate Clearly** - Notify users when paused and why
+3. **Fix Quickly** - Pause is temporary; fix the issue and unpause
+4. **Document Everything** - Log pause/unpause actions in audit logs
+5. **Test Regularly** - Practice pause/unpause procedures in devnet
+6. **Monitor Closely** - Set up alerts for pause state changes
 
 ### Config Update Authority
 

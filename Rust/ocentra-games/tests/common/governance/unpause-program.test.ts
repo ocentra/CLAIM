@@ -7,7 +7,7 @@ import { BaseTest } from '@/core';
 import { TestCategory, ClusterRequirement } from '@/core';
 import { registerMochaTest } from '@/core';
 import { SystemProgram, Keypair } from "@solana/web3.js";
-import { getConfigAccountPDA } from '@/common';
+import { getConfigAccountPDA, ConfigAccountType } from '@/common';
 
 class UnpauseProgramTest extends BaseTest {
   constructor() {
@@ -60,10 +60,9 @@ class UnpauseProgramTest extends BaseTest {
       .rpc();
     
     // Verify program is paused
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let config = await program.account.configAccount.fetch(configPDA) as any;
+    let config = await program.account.configAccount.fetch(configPDA) as unknown as ConfigAccountType;
     this.assertTruthy(config, 'Config should exist');
-    this.assertEqual(config.isPaused, true, 'Config should be paused');
+    this.assertEqual(config.isPaused ?? config.is_paused, true, 'Config should be paused');
     
     // Unpause program (treasury multisig)
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -77,9 +76,8 @@ class UnpauseProgramTest extends BaseTest {
       .rpc();
     
     // Verify program is unpaused
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    config = await program.account.configAccount.fetch(configPDA) as any;
-    this.assertEqual(config.isPaused, false, 'Config should be unpaused');
+    config = await program.account.configAccount.fetch(configPDA) as unknown as ConfigAccountType;
+    this.assertEqual(config.isPaused ?? config.is_paused, false, 'Config should be unpaused');
     
     // Test: Unauthorized user cannot unpause
     const unauthorizedUser = Keypair.generate();

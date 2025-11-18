@@ -6,7 +6,7 @@
 import { BaseTest } from '@/core';
 import { TestCategory, ClusterRequirement } from '@/core';
 import { registerMochaTest } from '@/core';
-import { getMatchPDA } from '@/common';
+import { getMatchPDA, MatchAccountType } from '@/common';
 import { SystemProgram } from "@solana/web3.js";
 import * as anchor from "@coral-xyz/anchor";
 
@@ -57,8 +57,7 @@ class MatchSizeTest extends BaseTest {
       .rpc();
     
     // Fetch the match account
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const matchAccount = await program.account.match.fetch(matchPDA) as any;
+    const matchAccount = await program.account.match.fetch(matchPDA) as unknown as MatchAccountType;
     
     // Verify account exists (this confirms the size was sufficient)
     this.assertTruthy(matchAccount, 'Match account should exist');

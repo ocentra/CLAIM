@@ -12,6 +12,7 @@ pub fn handler(
     min_entry_fee: Option<u64>,
     max_entry_fee: Option<u64>,
     treasury_multisig: Option<Pubkey>,
+    supported_payment_methods: Option<u8>,
 ) -> Result<()> {
     let clock = Clock::get()?;
     let config = &mut ctx.accounts.config_account;
@@ -59,6 +60,16 @@ pub fn handler(
     if let Some(new_multisig) = treasury_multisig {
         config.treasury_multisig = new_multisig;
         msg!("Treasury multisig updated to: {}", new_multisig);
+    }
+
+    // Update supported_payment_methods if provided (Phase 02)
+    if let Some(methods) = supported_payment_methods {
+        require!(
+            methods <= 0x03, // Only bits 0 and 1 are valid (WALLET and PLATFORM)
+            GameError::InvalidFeeParameter
+        );
+        config.supported_payment_methods = methods;
+        msg!("Supported payment methods updated to: 0x{:02x}", methods);
     }
 
     config.last_updated = clock.unix_timestamp;

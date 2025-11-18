@@ -23,44 +23,44 @@ Extend account schemas to track paid-match metadata, escrow holdings, and user d
 
 ## Implementation Checklist
 
-**Phase Status:** ⬜ Not Started | 🟡 In Progress | ✅ Complete
+**Phase Status:** ✅ Complete
 
 **⚠️ IMPORTANT:** If you encounter anything confusing, ambiguous, or unclear during implementation, STOP and ask the user (master) for clarification. Do not make assumptions.
 
 ### Deliverables Checklist
-- [ ] Deliverable 1: Updated state structs with `entry_fee`, `prize_pool`, `match_type`, `payment_method`, `tournament_id` fields
-- [ ] Deliverable 2: Escrow account PDA schema created
-- [ ] Deliverable 3: User deposit PDA created
-- [ ] Deliverable 4: Config account additions completed
-- [ ] Deliverable 5: Size calculations + rent exemption table documented
+- [x] Deliverable 1: Updated state structs with `entry_fee`, `prize_pool`, `match_type`, `payment_method`, `tournament_id` fields
+- [x] Deliverable 2: Escrow account PDA schema created
+- [x] Deliverable 3: User deposit PDA created
+- [x] Deliverable 4: Config account additions completed
+- [x] Deliverable 5: Size calculations + rent exemption table documented
 
 ### Implementation Steps
-- [ ] **Step 1:** Define enum-like constants for `MatchType` (free, paid) and `PaymentMethod` (wallet, platform) in `state/match_state.rs` or a new `state/enums.rs` module.
-- [ ] **Step 2:** Append fixed-size fields to `Match` struct after existing fixed-length sections to maintain alignment. Keep arrays padded and update `MAX_SIZE`.
-- [ ] **Step 3:** Create `EscrowAccount` zero-copy struct under `state/escrow.rs` with:
-  - [ ] `match_pda`, `bump`
-  - [ ] `total_entry_lamports`, `platform_fee_lamports`, `payout_ready` flag
-  - [ ] `player_stakes: [u64; MAX_PLAYERS]`
-  - [ ] optional `reserved` bytes for future tokens (USDC, etc.)
-- [ ] **Step 4:** Create `UserDepositAccount` under `state/user_deposit.rs` with lamport counters + optional token mint metadata; ensure seeds include `user_authority` or `custody_delegate`.
-- [ ] **Step 5:** Update `state/config_account.rs` with deposit/withdraw fee values, treasury pubkeys, and `kyc_required_tier` thresholds for each payment method.
-- [ ] **Step 6:** Write constructor helpers in `state/mod.rs` to derive PDAs given match ID or user authority, keeping seeds consistent with forthcoming instructions.
-- [ ] **Step 7:** Document all struct layouts (offset tables, total bytes) in `docs/Multiplayer and Solana/state-layouts.md` for reference.
-- [ ] **Step 8:** **After ANY code change in this phase:** Run full test suite: `anchor build && anchor test && cargo check && cargo fmt && pnpm lint && pnpm test`. This ensures Rust, Anchor, and TypeScript code stays in sync and passes all checks.
-- [ ] **Step 9:** Stuck on Solana internals? Ask via the Solana Expert MCP tools (Solana Expert, Solana Docs Search, Anchor Expert) instead of guessing.
+- [x] **Step 1:** Define enum-like constants for `MatchType` (free, paid) and `PaymentMethod` (wallet, platform) in `state/match_state.rs` or a new `state/enums.rs` module.
+- [x] **Step 2:** Append fixed-size fields to `Match` struct after existing fixed-length sections to maintain alignment. Keep arrays padded and update `MAX_SIZE`.
+- [x] **Step 3:** Create `EscrowAccount` zero-copy struct under `state/escrow.rs` with:
+  - [x] `match_pda`, `bump`
+  - [x] `total_entry_lamports`, `platform_fee_lamports`, `payout_ready` flag
+  - [x] `player_stakes: [u64; MAX_PLAYERS]`
+  - [x] optional `reserved` bytes for future tokens (USDC, etc.)
+- [x] **Step 4:** Create `UserDepositAccount` under `state/user_deposit.rs` with lamport counters + optional token mint metadata; ensure seeds include `user_authority` or `custody_delegate`.
+- [x] **Step 5:** Update `state/config_account.rs` with deposit/withdraw fee values, treasury pubkeys, and `kyc_required_tier` thresholds for each payment method.
+- [x] **Step 6:** Write constructor helpers in `state/mod.rs` to derive PDAs given match ID or user authority, keeping seeds consistent with forthcoming instructions.
+- [x] **Step 7:** Document all struct layouts (offset tables, total bytes) in `docs/Multiplayer and Solana/state-layouts.md` for reference.
+- [x] **Step 8:** **After ANY code change in this phase:** Run full test suite: `anchor build && anchor test && cargo check && cargo fmt && pnpm lint && pnpm test`. This ensures Rust, Anchor, and TypeScript code stays in sync and passes all checks.
+- [x] **Step 9:** Stuck on Solana internals? Ask via the Solana Expert MCP tools (Solana Expert, Solana Docs Search, Anchor Expert) instead of guessing.
 
 ### Testing Checklist
-- [ ] Rust unit tests for `Match::MAX_SIZE` written and passing
-- [ ] Rust unit tests for `EscrowAccount::MAX_SIZE` written and passing
-- [ ] PDA seed derivations tested
-- [ ] Snapshot tests ensuring `bytemuck::bytes_of` round-trips for zero-copy structs
-- [ ] Anchor tests verifying rent exemption lamports computed during initialization are sufficient
+- [x] Rust unit tests for `Match::MAX_SIZE` written and passing
+- [x] Rust unit tests for `EscrowAccount::MAX_SIZE` written and passing
+- [x] PDA seed derivations tested
+- [x] Snapshot tests ensuring `bytemuck::bytes_of` round-trips for zero-copy structs
+- [x] Anchor tests verifying rent exemption lamports computed during initialization are sufficient
 
 ### Exit Criteria Checklist
-- [ ] All new state structs committed with documented size math
-- [ ] Anchor build succeeds with no `accounts larger than 10kb` warnings
-- [ ] Tests cover PDA derivations and ensure new enums/flags default correctly
-- [ ] All checkboxes above are checked ✅
+- [x] All new state structs committed with documented size math
+- [x] Anchor build succeeds with no `accounts larger than 10kb` warnings
+- [x] Tests cover PDA derivations and ensure new enums/flags default correctly
+- [x] All checkboxes above are checked ✅
 
 ## File & Module Impact
 - `programs/ocentra-games/src/state/match_state.rs`

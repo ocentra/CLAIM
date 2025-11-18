@@ -1,5 +1,5 @@
 use crate::error::GameError;
-use crate::state::{ConfigAccount, EscrowAccount, Match};
+use crate::state::{ConfigAccount, EscrowAccount, Match, UserDepositAccount};
 use anchor_lang::prelude::*;
 
 /// Distributes prize pool from EscrowAccount to all winners atomically.
@@ -35,6 +35,10 @@ pub fn handler(
 
     // Load accounts
     let config = &ctx.accounts.config_account;
+
+    // Check if program is paused
+    require!(!config.is_paused, GameError::ProgramPaused);
+
     let match_account = ctx.accounts.match_account.load()?;
     let mut escrow_account = ctx.accounts.escrow_account.load_mut()?;
 
@@ -104,26 +108,36 @@ pub fn handler(
         GameError::InvalidPayload
     );
 
-    // Transfer platform fee to treasury first (before prize distribution)
+    // Update escrow with platform fee info (before dropping borrow)
     if platform_fee > 0 {
-        let cpi_accounts = anchor_lang::system_program::Transfer {
-            from: ctx.accounts.escrow_account.to_account_info(),
-            to: ctx.accounts.treasury.to_account_info(),
-        };
-        let cpi_program = ctx.accounts.system_program.to_account_info();
-        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
-        anchor_lang::system_program::transfer(cpi_ctx, platform_fee)?;
-
         escrow_account.platform_fee_lamports = platform_fee;
         escrow_account.treasury_due_lamports = platform_fee;
     }
+    
+    // Drop mutable borrow before lamport transfers
+    drop(escrow_account);
+    
+    // Get account info for manual lamport transfers (after dropping mutable borrow)
+    let escrow_account_info = ctx.accounts.escrow_account.to_account_info();
+
+    // Transfer platform fee to treasury first (before prize distribution)
+    if platform_fee > 0 {
+        // Transfer platform fee to treasury using manual lamport transfer
+        // Cannot use system_program::transfer() because escrow_account carries data
+        let treasury_account_info = ctx.accounts.treasury.to_account_info();
+        **escrow_account_info.try_borrow_mut_lamports()? -= platform_fee;
+        **treasury_account_info.try_borrow_mut_lamports()? += platform_fee;
+    }
+
+    // Determine payment method from match
+    let payment_method = match_account.get_payment_method();
 
     // Distribute prizes to all winners atomically
     // If any transfer fails, the entire transaction reverts (atomic)
     for (i, &winner_index) in winner_indices.iter().enumerate() {
         let prize_amount = prize_amounts[i];
         require!(i < 10, GameError::InvalidPayload);
-        
+
         // Get winner account by index (accounts are in order: winner_0, winner_1, etc.)
         let winner_account = match i {
             0 => &ctx.accounts.winner_0,
@@ -139,25 +153,71 @@ pub fn handler(
             _ => return Err(GameError::InvalidPayload.into()),
         };
 
-        // Transfer prize to winner
-        let cpi_accounts = anchor_lang::system_program::Transfer {
-            from: ctx.accounts.escrow_account.to_account_info(),
-            to: winner_account.to_account_info(),
-        };
-        let cpi_program = ctx.accounts.system_program.to_account_info();
-        let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
-        anchor_lang::system_program::transfer(cpi_ctx, prize_amount)?;
+        if payment_method == crate::state::enums::payment_method::WALLET {
+            // Transfer prize to winner wallet using manual lamport transfer
+            // Cannot use system_program::transfer() because escrow_account carries data
+            let winner_account_info = winner_account.to_account_info();
+            **escrow_account_info.try_borrow_mut_lamports()? -= prize_amount;
+            **winner_account_info.try_borrow_mut_lamports()? += prize_amount;
 
-        msg!(
-            "Distributed {} lamports to winner {} (match player index: {})",
-            prize_amount,
-            winner_account.key(),
-            winner_index
-        );
+            msg!(
+                "Distributed {} lamports to winner wallet {} (match player index: {})",
+                prize_amount,
+                winner_account.key(),
+                winner_index
+            );
+        } else {
+            // Platform payment: Transfer prize to winner's deposit account
+            let deposit_account = match i {
+                0 => ctx.accounts.winner_deposit_0.as_ref(),
+                1 => ctx.accounts.winner_deposit_1.as_ref(),
+                2 => ctx.accounts.winner_deposit_2.as_ref(),
+                3 => ctx.accounts.winner_deposit_3.as_ref(),
+                4 => ctx.accounts.winner_deposit_4.as_ref(),
+                5 => ctx.accounts.winner_deposit_5.as_ref(),
+                6 => ctx.accounts.winner_deposit_6.as_ref(),
+                7 => ctx.accounts.winner_deposit_7.as_ref(),
+                8 => ctx.accounts.winner_deposit_8.as_ref(),
+                9 => ctx.accounts.winner_deposit_9.as_ref(),
+                _ => return Err(GameError::InvalidPayload.into()),
+            };
+
+            let deposit_account = deposit_account
+                .ok_or(GameError::InvalidPaymentMethod)?;
+
+            // Transfer prize to winner's deposit account using manual lamport transfer
+            let deposit_account_info = deposit_account.to_account_info();
+            **escrow_account_info.try_borrow_mut_lamports()? -= prize_amount;
+            **deposit_account_info.try_borrow_mut_lamports()? += prize_amount;
+
+            // Update deposit account balances
+            let mut deposit_account_mut = deposit_account.load_mut()?;
+            deposit_account_mut.available_lamports = deposit_account_mut
+                .available_lamports
+                .checked_add(prize_amount)
+                .ok_or(GameError::Overflow)?;
+            // Unlock entry fee from in_play (it was locked when joining)
+            let entry_fee = match_account.entry_fee_lamports;
+            if deposit_account_mut.in_play_lamports >= entry_fee {
+                deposit_account_mut.in_play_lamports = deposit_account_mut
+                    .in_play_lamports
+                    .checked_sub(entry_fee)
+                    .ok_or(GameError::Overflow)?;
+            }
+
+            msg!(
+                "Distributed {} lamports to winner deposit {} (match player index: {})",
+                prize_amount,
+                deposit_account_info.key(),
+                winner_index
+            );
+        }
     }
 
-    // Mark escrow as distributed (only after all transfers succeed)
+    // Re-borrow escrow to mark as distributed and clear total_entry_lamports (only after all transfers succeed)
+    let mut escrow_account = ctx.accounts.escrow_account.load_mut()?;
     escrow_account.set_distributed(true);
+    escrow_account.total_entry_lamports = 0; // Clear entry lamports after distribution
 
     msg!(
         "Prize distribution complete: {} lamports distributed to {} winners, platform fee: {}",
@@ -236,6 +296,77 @@ pub struct DistributePrizes<'info> {
     /// CHECK: Validated in handler - indices must match winner_indices parameter
     #[account(mut)]
     pub winner_9: AccountInfo<'info>,
+
+    /// Winner deposit accounts (only needed for platform payment method)
+    #[account(
+        mut,
+        seeds = [b"user_deposit", winner_0.key().as_ref()],
+        bump
+    )]
+    pub winner_deposit_0: Option<AccountLoader<'info, UserDepositAccount>>,
+
+    #[account(
+        mut,
+        seeds = [b"user_deposit", winner_1.key().as_ref()],
+        bump
+    )]
+    pub winner_deposit_1: Option<AccountLoader<'info, UserDepositAccount>>,
+
+    #[account(
+        mut,
+        seeds = [b"user_deposit", winner_2.key().as_ref()],
+        bump
+    )]
+    pub winner_deposit_2: Option<AccountLoader<'info, UserDepositAccount>>,
+
+    #[account(
+        mut,
+        seeds = [b"user_deposit", winner_3.key().as_ref()],
+        bump
+    )]
+    pub winner_deposit_3: Option<AccountLoader<'info, UserDepositAccount>>,
+
+    #[account(
+        mut,
+        seeds = [b"user_deposit", winner_4.key().as_ref()],
+        bump
+    )]
+    pub winner_deposit_4: Option<AccountLoader<'info, UserDepositAccount>>,
+
+    #[account(
+        mut,
+        seeds = [b"user_deposit", winner_5.key().as_ref()],
+        bump
+    )]
+    pub winner_deposit_5: Option<AccountLoader<'info, UserDepositAccount>>,
+
+    #[account(
+        mut,
+        seeds = [b"user_deposit", winner_6.key().as_ref()],
+        bump
+    )]
+    pub winner_deposit_6: Option<AccountLoader<'info, UserDepositAccount>>,
+
+    #[account(
+        mut,
+        seeds = [b"user_deposit", winner_7.key().as_ref()],
+        bump
+    )]
+    pub winner_deposit_7: Option<AccountLoader<'info, UserDepositAccount>>,
+
+    #[account(
+        mut,
+        seeds = [b"user_deposit", winner_8.key().as_ref()],
+        bump
+    )]
+    pub winner_deposit_8: Option<AccountLoader<'info, UserDepositAccount>>,
+
+    #[account(
+        mut,
+        seeds = [b"user_deposit", winner_9.key().as_ref()],
+        bump
+    )]
+    pub winner_deposit_9: Option<AccountLoader<'info, UserDepositAccount>>,
 
     pub system_program: Program<'info, System>,
 }

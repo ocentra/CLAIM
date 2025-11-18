@@ -9,4 +9,5 @@ export * from './test-data';
 export * from './match-helpers';
 export * from './errors';
 export * from './assertions';
+export * from './types';
 

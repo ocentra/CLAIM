@@ -7,7 +7,7 @@ import { BaseTest } from '@/core';
 import { TestCategory, ClusterRequirement } from '@/core';
 import { registerMochaTest } from '@/core';
 import { SystemProgram } from "@solana/web3.js";
-import { getConfigAccountPDA } from '@/common';
+import { getConfigAccountPDA, ConfigAccountType } from '@/common';
 
 class InitializeConfigTest extends BaseTest {
   constructor() {
@@ -51,18 +51,28 @@ class InitializeConfigTest extends BaseTest {
     }
     
     // Verify config was initialized
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const config = await program.account.configAccount.fetch(configPDA) as any;
+    const config = await program.account.configAccount.fetch(configPDA) as unknown as ConfigAccountType;
     this.assertTruthy(config, 'Config should exist');
-    this.assert(
-      config.treasuryMultisig.equals(treasuryMultisig),
-      `Treasury multisig should be ${treasuryMultisig.toString()}, got ${config.treasuryMultisig.toString()}`
-    );
-    this.assertEqual(config.isPaused, false, 'isPaused should be false');
-    this.assertEqual(config.platformFeeBps, 500, 'platformFeeBps should be 500 (5%)');
-    this.assertEqual(config.minEntryFee.toNumber(), 10000, 'minEntryFee should be 10000 lamports');
-    this.assertEqual(config.maxEntryFee.toNumber(), 100_000_000_000, 'maxEntryFee should be 100 SOL');
+    const treasuryMultisigValue = config.treasuryMultisig ?? config.treasury_multisig;
+    if (treasuryMultisigValue && typeof treasuryMultisigValue === 'object' && 'equals' in treasuryMultisigValue && typeof treasuryMultisigValue.equals === 'function') {
+      const multisigWithEquals = treasuryMultisigValue as { toString(): string; equals(other: { toString(): string }): boolean };
+      this.assert(
+        multisigWithEquals.equals(treasuryMultisig),
+        `Treasury multisig should be ${treasuryMultisig.toString()}, got ${multisigWithEquals.toString()}`
+      );
+    } else {
+      this.assertEqual(
+        treasuryMultisigValue?.toString() ?? '',
+        treasuryMultisig.toString(),
+        'Treasury multisig should match'
+      );
+    }
+    this.assertEqual(config.isPaused ?? config.is_paused, false, 'isPaused should be false');
+    this.assertEqual(config.platformFeeBps ?? config.platform_fee_bps, 500, 'platformFeeBps should be 500 (5%)');
+    const minEntryFee = config.minEntryFee?.toNumber() ?? config.min_entry_fee?.toNumber() ?? 0;
+    this.assertEqual(minEntryFee, 10000, 'minEntryFee should be 10000 lamports');
+    const maxEntryFee = config.maxEntryFee?.toNumber() ?? config.max_entry_fee?.toNumber() ?? 0;
+    this.assertEqual(maxEntryFee, 100_000_000_000, 'maxEntryFee should be 100 SOL');
   }
 }
 

@@ -10,7 +10,7 @@ import { BaseTest } from '@/core';
 import { TestCategory, ClusterRequirement } from '@/core';
 import { registerMochaTest } from '@/core';
 import { SystemProgram, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { getMatchPDA, getEscrowPDA, getConfigAccountPDA } from '@/common';
+import { getMatchPDA, getEscrowPDA, getConfigAccountPDA, ConfigAccountType, EscrowAccountType } from '@/common';
 import * as anchor from "@coral-xyz/anchor";
 
 // Match type and payment method constants
@@ -51,7 +51,7 @@ class PaidMatchWalletFlowTest extends BaseTest {
     } = await import('@/helpers');
     const { getRegistryPDA } = await import('@/common');
 
-    // Setup: Initialize config if needed
+    // Setup: Initialize config if needed and ensure it's unpaused
     const [configPDA] = await getConfigAccountPDA();
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -68,6 +68,20 @@ class PaidMatchWalletFlowTest extends BaseTest {
       if (!error.message?.includes("already in use") && !error.message?.includes("0x0")) {
         throw err;
       }
+    }
+    
+    // Ensure config is unpaused (may have been paused by previous tests)
+    const config = await program.account.configAccount.fetch(configPDA) as unknown as ConfigAccountType;
+    if (config.isPaused ?? config.is_paused) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (program.methods as any)
+        .unpauseProgram()
+        .accounts({
+          configAccount: configPDA,
+          authority: authority.publicKey,
+          systemProgram: SystemProgram.programId,
+        } as never)
+        .rpc();
     }
 
     const matchId = generateUniqueMatchId("paid-wallet");
@@ -109,21 +123,20 @@ class PaidMatchWalletFlowTest extends BaseTest {
 
     // Verify match is paid
     const matchAccount = await program.account.match.fetch(matchPDA);
-    this.assertEqual(matchAccount.matchType ?? matchAccount.match_type ?? 0, MATCH_TYPE.PAID, 'Match type should be PAID');
+    this.assertEqual(matchAccount.matchType ?? 0, MATCH_TYPE.PAID, 'Match type should be PAID');
     this.assertEqual(
-      matchAccount.entryFeeLamports?.toNumber() ?? matchAccount.entry_fee_lamports?.toNumber() ?? 0,
+      matchAccount.entryFeeLamports?.toNumber() ?? 0,
       entryFee.toNumber(),
       'Entry fee should match'
     );
     this.assertEqual(
-      matchAccount.paymentMethod ?? matchAccount.payment_method ?? 0,
+      matchAccount.paymentMethod ?? 0,
       PAYMENT_METHOD.WALLET,
       'Payment method should be WALLET'
     );
 
     // Verify escrow account exists and is initialized
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const escrowAccount = await program.account.escrowAccount.fetch(escrowPDA) as any;
+    const escrowAccount = await program.account.escrowAccount.fetch(escrowPDA) as unknown as EscrowAccountType;
     this.assertTruthy(escrowAccount, 'Escrow account should exist');
     this.assertEqual(
       escrowAccount.matchPda?.toString() ?? escrowAccount.match_pda?.toString() ?? '',
@@ -163,20 +176,24 @@ class PaidMatchWalletFlowTest extends BaseTest {
     );
 
     // Verify escrow received payment
-    const escrowAccountAfterJoin1 = await program.account.escrowAccount.fetch(escrowPDA) as any;
+    const escrowAccountAfterJoin1 = await program.account.escrowAccount.fetch(escrowPDA) as unknown as {
+      totalEntryLamports?: { toNumber(): number };
+      total_entry_lamports?: { toNumber(): number };
+      playerStakes?: Array<{ toNumber(): number }>;
+      player_stakes?: Array<{ toNumber(): number }>;
+    };
     this.assertEqual(
       escrowAccountAfterJoin1.totalEntryLamports?.toNumber() ?? escrowAccountAfterJoin1.total_entry_lamports?.toNumber() ?? 0,
       entryFee.toNumber(),
       'Escrow should have received entry fee'
     );
     this.assertEqual(
-      escrowAccountAfterJoin1.playerStakes?.[0]?.toNumber() ?? escrowAccountAfterJoin1.player_stakes?.[0] ?? 0,
+      escrowAccountAfterJoin1.playerStakes?.[0]?.toNumber() ?? escrowAccountAfterJoin1.player_stakes?.[0]?.toNumber() ?? 0,
       entryFee.toNumber(),
       'Player 0 stake should equal entry fee'
     );
 
     // Join second player
-    const player2BalanceBefore = await program.provider.connection.getBalance(player2.publicKey);
     
     await program.methods
       .joinMatch(matchId, getTestUserId(1))
@@ -193,15 +210,23 @@ class PaidMatchWalletFlowTest extends BaseTest {
       .rpc();
 
     // Verify escrow is fully funded
-    const escrowAccountAfterJoin2 = await program.account.escrowAccount.fetch(escrowPDA) as any;
+    // status_flags bit 0 (0x01) = funded
+    const escrowAccountAfterJoin2 = await program.account.escrowAccount.fetch(escrowPDA) as unknown as {
+      totalEntryLamports?: { toNumber(): number };
+      total_entry_lamports?: { toNumber(): number };
+      statusFlags?: number;
+      status_flags?: number;
+    };
     const expectedTotal = entryFee.toNumber() * 2; // 2 players
     this.assertEqual(
       escrowAccountAfterJoin2.totalEntryLamports?.toNumber() ?? escrowAccountAfterJoin2.total_entry_lamports?.toNumber() ?? 0,
       expectedTotal,
       'Escrow should have total from both players'
     );
+    const statusFlags = escrowAccountAfterJoin2.statusFlags ?? escrowAccountAfterJoin2.status_flags ?? 0;
+    const isFunded = (statusFlags & 0x01) !== 0;
     this.assert(
-      escrowAccountAfterJoin2.isFunded ?? escrowAccountAfterJoin2.is_funded ?? false,
+      isFunded,
       'Escrow should be marked as funded'
     );
 
@@ -234,17 +259,21 @@ class PaidMatchWalletFlowTest extends BaseTest {
 
     // Test 5: Distribute prizes
     // Get config to calculate platform fee
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const config = await program.account.configAccount.fetch(configPDA) as any;
-    const platformFeeBps = config.platformFeeBps ?? config.platform_fee_bps ?? 500; // Default 5%
+    const configForFee = await program.account.configAccount.fetch(configPDA) as unknown as ConfigAccountType;
+    const platformFeeBps = configForFee.platformFeeBps ?? configForFee.platform_fee_bps ?? 500; // Default 5%
     const platformFee = Math.floor(expectedTotal * platformFeeBps / 10000);
     const prizePool = expectedTotal - platformFee;
 
+    // Capture balances before distribution
+    const treasuryBalanceBefore = await program.provider.connection.getBalance(authority.publicKey);
+    const player1BalanceBeforeDistribute = await program.provider.connection.getBalance(player1.publicKey);
+
     // Distribute prizes (winner gets all prize pool)
+    // Note: All winner accounts must be provided (use dummy for unused slots)
     await program.methods
       .distributePrizes(
         matchId,
-        [0], // Winner index
+        Buffer.from([0]), // Winner index - Buffer required for Vec<u8>
         [new anchor.BN(prizePool)] // Prize amount
       )
       .accounts({
@@ -252,16 +281,16 @@ class PaidMatchWalletFlowTest extends BaseTest {
         matchAccount: matchPDA,
         configAccount: configPDA,
         winner0: player1.publicKey,
-        winner1: null,
-        winner2: null,
-        winner3: null,
-        winner4: null,
-        winner5: null,
-        winner6: null,
-        winner7: null,
-        winner8: null,
-        winner9: null,
-        winnerDeposit0: null,
+        winner1: player1.publicKey, // Dummy - not used but required
+        winner2: player1.publicKey, // Dummy - not used but required
+        winner3: player1.publicKey, // Dummy - not used but required
+        winner4: player1.publicKey, // Dummy - not used but required
+        winner5: player1.publicKey, // Dummy - not used but required
+        winner6: player1.publicKey, // Dummy - not used but required
+        winner7: player1.publicKey, // Dummy - not used but required
+        winner8: player1.publicKey, // Dummy - not used but required
+        winner9: player1.publicKey, // Dummy - not used but required
+        winnerDeposit0: null, // Wallet payment - no deposit accounts needed
         winnerDeposit1: null,
         winnerDeposit2: null,
         winnerDeposit3: null,
@@ -277,18 +306,61 @@ class PaidMatchWalletFlowTest extends BaseTest {
       .rpc();
 
     // Verify escrow is marked as distributed
-    const escrowAccountAfterDistribute = await program.account.escrowAccount.fetch(escrowPDA) as any;
+    // status_flags bit 1 (0x02) = distributed
+    const escrowAccountAfterDistribute = await program.account.escrowAccount.fetch(escrowPDA) as unknown as {
+      statusFlags?: number;
+      status_flags?: number;
+      totalEntryLamports?: { toNumber(): number };
+      total_entry_lamports?: { toNumber(): number };
+    };
+    const distributedFlags = escrowAccountAfterDistribute.statusFlags ?? escrowAccountAfterDistribute.status_flags ?? 0;
+    const isDistributed = (distributedFlags & 0x02) !== 0;
     this.assert(
-      escrowAccountAfterDistribute.isDistributed ?? escrowAccountAfterDistribute.is_distributed ?? false,
+      isDistributed,
       'Escrow should be marked as distributed'
     );
 
-    // Verify winner received prize (balance increased)
-    const player1BalanceFinal = await program.provider.connection.getBalance(player1.publicKey);
-    // Winner should receive prize (accounting for transaction fees)
+    // Verify escrow balance is empty (all funds distributed)
+    const escrowBalanceAfter = await program.provider.connection.getBalance(escrowPDA);
+    // Escrow should only have rent-exempt balance left (minimal)
+    // Rent-exempt minimum for EscrowAccount is ~2.2M lamports (0.0022 SOL)
+    // Check that balance is close to rent-exempt minimum (within 10% tolerance)
+    const rentExemptMinimum = 2000000; // ~0.002 SOL
+    const rentExemptMaximum = 3000000; // ~0.003 SOL (allows for small variations)
     this.assert(
-      player1BalanceFinal > player1BalanceAfter,
-      'Winner should receive prize payment'
+      escrowBalanceAfter >= rentExemptMinimum && escrowBalanceAfter <= rentExemptMaximum,
+      `Escrow should only have rent-exempt balance. Expected between ${rentExemptMinimum} and ${rentExemptMaximum} lamports, got ${escrowBalanceAfter}`
+    );
+
+    // Verify escrow account total_entry_lamports is 0
+    const escrowTotalAfter = escrowAccountAfterDistribute.totalEntryLamports?.toNumber() ?? escrowAccountAfterDistribute.total_entry_lamports?.toNumber() ?? 0;
+    this.assertEqual(
+      escrowTotalAfter,
+      0,
+      'Escrow total_entry_lamports should be 0 after distribution'
+    );
+
+    // Verify treasury received platform fee (accounting for transaction fees)
+    const treasuryBalanceAfter = await program.provider.connection.getBalance(authority.publicKey);
+    const treasuryIncrease = treasuryBalanceAfter - treasuryBalanceBefore;
+    // Treasury receives platform fee but pays transaction fees (~5000 lamports)
+    // So net increase should be platformFee - transactionFee
+    // Allow tolerance for transaction fees (typically 5000-10000 lamports)
+    const transactionFeeTolerance = 10000; // Allow up to 0.00001 SOL for transaction fees
+    this.assert(
+      treasuryIncrease >= platformFee - transactionFeeTolerance,
+      `Treasury should receive platform fee (minus transaction fees). Expected >= ${platformFee - transactionFeeTolerance} lamports, got ${treasuryIncrease}`
+    );
+
+    // Verify winner received prize (exact amount, accounting for transaction fees)
+    const player1BalanceFinal = await program.provider.connection.getBalance(player1.publicKey);
+    const player1Increase = player1BalanceFinal - player1BalanceBeforeDistribute;
+    // Winner should receive prize pool (accounting for transaction fees)
+    // Transaction fees reduce the net increase, so check that increase is >= prize pool minus some tolerance
+    const tolerance = 5000; // 0.000005 SOL tolerance for transaction fees
+    this.assert(
+      player1Increase >= prizePool - tolerance,
+      `Winner should receive prize pool. Expected >= ${prizePool - tolerance} lamports, got ${player1Increase}`
     );
 
     console.log('✓ Paid match wallet flow completed successfully');

@@ -87,6 +87,9 @@ pub fn handler(
     // Load config for cancellation fee calculation
     let config = &ctx.accounts.config_account;
 
+    // Check if program is paused
+    require!(!config.is_paused, GameError::ProgramPaused);
+
     // Determine payment method from match
     let payment_method = match_account.get_payment_method();
 
@@ -126,8 +129,8 @@ pub fn handler(
         0
     };
 
-    // Refund all players atomically (except abandoned player if they forfeit)
-    // If any refund fails, the entire transaction reverts (atomic)
+    // Collect refund data first (while escrow is mutably borrowed)
+    let mut refunds: Vec<(usize, u8, u64)> = Vec::new();
     for (i, &player_index) in player_indices.iter().enumerate() {
         // Skip abandoned player if they forfeit entry fee
         if abandoned_forfeits
@@ -154,6 +157,29 @@ pub fn handler(
         require!(player_stake > 0, GameError::InvalidPayload);
         require!(i < 10, GameError::InvalidPayload);
         
+        refunds.push((i, player_index, player_stake));
+        
+        // Update escrow account
+        escrow_account.set_player_stake(player_index as usize, 0);
+        escrow_account.total_entry_lamports = escrow_account
+            .total_entry_lamports
+            .checked_sub(player_stake)
+            .ok_or(GameError::Overflow)?;
+
+        total_refunded = total_refunded
+            .checked_add(player_stake)
+            .ok_or(GameError::Overflow)?;
+    }
+    
+    // Drop mutable borrow before lamport transfers
+    drop(escrow_account);
+    
+    // Get account info for manual lamport transfers (after dropping mutable borrow)
+    let escrow_account_info = ctx.accounts.escrow_account.to_account_info();
+
+    // Refund all players atomically (except abandoned player if they forfeit)
+    // If any refund fails, the entire transaction reverts (atomic)
+    for (i, player_index, player_stake) in refunds {
         // Get player account by index (accounts are in order: player_0, player_1, etc.)
         let player_account = match i {
             0 => &ctx.accounts.player_0,
@@ -170,14 +196,11 @@ pub fn handler(
         };
 
         if payment_method == crate::state::enums::payment_method::WALLET {
-            // Refund to player's wallet
-            let cpi_accounts = anchor_lang::system_program::Transfer {
-                from: ctx.accounts.escrow_account.to_account_info(),
-                to: player_account.to_account_info(),
-            };
-            let cpi_program = ctx.accounts.system_program.to_account_info();
-            let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
-            anchor_lang::system_program::transfer(cpi_ctx, player_stake)?;
+            // Refund to player's wallet using manual lamport transfer
+            // Cannot use system_program::transfer() because escrow_account carries data
+            let player_account_info = player_account.to_account_info();
+            **escrow_account_info.try_borrow_mut_lamports()? -= player_stake;
+            **player_account_info.try_borrow_mut_lamports()? += player_stake;
         } else {
             // Refund to player's platform deposit account
             let deposit_account = match i {
@@ -197,13 +220,11 @@ pub fn handler(
             let deposit_account = deposit_account
                 .ok_or(GameError::InvalidPaymentMethod)?;
 
-            let cpi_accounts = anchor_lang::system_program::Transfer {
-                from: ctx.accounts.escrow_account.to_account_info(),
-                to: deposit_account.to_account_info(),
-            };
-            let cpi_program = ctx.accounts.system_program.to_account_info();
-            let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
-            anchor_lang::system_program::transfer(cpi_ctx, player_stake)?;
+            // Refund to player's platform deposit account using manual lamport transfer
+            // Cannot use system_program::transfer() because escrow_account carries data
+            let deposit_account_info = deposit_account.to_account_info();
+            **escrow_account_info.try_borrow_mut_lamports()? -= player_stake;
+            **deposit_account_info.try_borrow_mut_lamports()? += player_stake;
 
             // Update player deposit account balances
             let mut deposit_account_mut = deposit_account.load_mut()?;
@@ -217,17 +238,6 @@ pub fn handler(
                 .ok_or(GameError::Overflow)?;
         }
 
-        // Update escrow account
-        escrow_account.set_player_stake(player_index as usize, 0);
-        escrow_account.total_entry_lamports = escrow_account
-            .total_entry_lamports
-            .checked_sub(player_stake)
-            .ok_or(GameError::Overflow)?;
-
-        total_refunded = total_refunded
-            .checked_add(player_stake)
-            .ok_or(GameError::Overflow)?;
-
         msg!(
             "Refunded {} lamports to player {} (match player index: {})",
             player_stake,
@@ -235,6 +245,9 @@ pub fn handler(
             player_index
         );
     }
+    
+    // Re-borrow escrow to mark as cancelled
+    let escrow_account = ctx.accounts.escrow_account.load_mut()?;
 
     // Transfer cancellation fee + abandoned stake to treasury (if applicable)
     let platform_receives = cancellation_fee
@@ -245,6 +258,9 @@ pub fn handler(
         })
         .ok_or(GameError::Overflow)?;
 
+    // Drop mutable borrow before treasury transfer
+    drop(escrow_account);
+    
     if platform_receives > 0 {
         let treasury = ctx
             .accounts
@@ -252,27 +268,19 @@ pub fn handler(
             .as_ref()
             .ok_or(GameError::InvalidPayload)?;
         let treasury_account_info = treasury.to_account_info();
-        let escrow_account_info = ctx.accounts.escrow_account.to_account_info();
+        
+        // Transfer to treasury using manual lamport transfer
+        // Cannot use system_program::transfer() because escrow_account carries data
+        **escrow_account_info.try_borrow_mut_lamports()? -= platform_receives;
+        **treasury_account_info.try_borrow_mut_lamports()? += platform_receives;
 
-        // Calculate new balances first, then assign
-        let escrow_balance = escrow_account_info.lamports();
-        let treasury_balance = treasury_account_info.lamports();
-
-        let new_escrow_balance = escrow_balance
-            .checked_sub(platform_receives)
-            .ok_or(GameError::Overflow)?;
-        let new_treasury_balance = treasury_balance
-            .checked_add(platform_receives)
-            .ok_or(GameError::Overflow)?;
-
-        // Assign new balances
-        **escrow_account_info.lamports.borrow_mut() = new_escrow_balance;
-        **treasury_account_info.lamports.borrow_mut() = new_treasury_balance;
-
+        // Re-borrow escrow to update treasury_due_lamports
+        let mut escrow_account = ctx.accounts.escrow_account.load_mut()?;
         escrow_account.treasury_due_lamports = escrow_account
             .treasury_due_lamports
             .checked_add(platform_receives)
             .ok_or(GameError::Overflow)?;
+        drop(escrow_account);
 
         msg!(
             "Transferred {} lamports to treasury (cancellation fee: {}, abandoned stake: {})",
@@ -286,8 +294,10 @@ pub fn handler(
         );
     }
 
-    // Mark escrow as cancelled after all refunds complete
+    // Re-borrow escrow to mark as cancelled and clear total_entry_lamports after all refunds complete
+    let mut escrow_account = ctx.accounts.escrow_account.load_mut()?;
     escrow_account.set_cancelled(true);
+    escrow_account.total_entry_lamports = 0; // Clear entry lamports after refund
 
     msg!(
         "Escrow refund complete: {} players refunded (total: {} lamports), platform receives: {} lamports",

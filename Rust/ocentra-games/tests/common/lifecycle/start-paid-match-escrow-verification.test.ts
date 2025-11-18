@@ -9,7 +9,7 @@ import { BaseTest } from '@/core';
 import { TestCategory, ClusterRequirement } from '@/core';
 import { registerMochaTest } from '@/core';
 import { SystemProgram, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { getMatchPDA, getEscrowPDA, getConfigAccountPDA } from '@/common';
+import { getMatchPDA, getEscrowPDA, getConfigAccountPDA, ConfigAccountType } from '@/common';
 import * as anchor from "@coral-xyz/anchor";
 
 const MATCH_TYPE = { FREE: 0, PAID: 1 } as const;
@@ -42,7 +42,7 @@ class StartPaidMatchEscrowVerificationTest extends BaseTest {
     } = await import('@/helpers');
     const { getRegistryPDA } = await import('@/common');
 
-    // Setup: Initialize config
+    // Setup: Initialize config and ensure it's unpaused
     const [configPDA] = await getConfigAccountPDA();
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -59,6 +59,20 @@ class StartPaidMatchEscrowVerificationTest extends BaseTest {
       if (!error.message?.includes("already in use") && !error.message?.includes("0x0")) {
         throw err;
       }
+    }
+    
+    // Ensure config is unpaused (may have been paused by previous tests)
+    const config = await program.account.configAccount.fetch(configPDA) as unknown as ConfigAccountType;
+    if (config.isPaused ?? config.is_paused) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (program.methods as any)
+        .unpauseProgram()
+        .accounts({
+          configAccount: configPDA,
+          authority: authority.publicKey,
+          systemProgram: SystemProgram.programId,
+        } as never)
+        .rpc();
     }
 
     const matchId = generateUniqueMatchId("escrow-verification");
@@ -132,15 +146,23 @@ class StartPaidMatchEscrowVerificationTest extends BaseTest {
       .rpc();
 
     // Verify escrow is fully funded
-    const escrowAccount = await program.account.escrowAccount.fetch(escrowPDA) as any;
+    // status_flags bit 0 (0x01) = funded
+    const escrowAccount = await program.account.escrowAccount.fetch(escrowPDA) as unknown as {
+      totalEntryLamports?: { toNumber(): number };
+      total_entry_lamports?: { toNumber(): number };
+      statusFlags?: number;
+      status_flags?: number;
+    };
     const expectedTotal = entryFee.toNumber() * 2;
     this.assertEqual(
       escrowAccount.totalEntryLamports?.toNumber() ?? escrowAccount.total_entry_lamports?.toNumber() ?? 0,
       expectedTotal,
       'Escrow should be fully funded'
     );
+    const statusFlags = escrowAccount.statusFlags ?? escrowAccount.status_flags ?? 0;
+    const isFunded = (statusFlags & 0x01) !== 0;
     this.assert(
-      escrowAccount.isFunded ?? escrowAccount.is_funded ?? false,
+      isFunded,
       'Escrow should be marked as funded'
     );
 

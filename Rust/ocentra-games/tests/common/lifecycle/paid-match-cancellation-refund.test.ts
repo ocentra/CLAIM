@@ -9,7 +9,7 @@ import { BaseTest } from '@/core';
 import { TestCategory, ClusterRequirement } from '@/core';
 import { registerMochaTest } from '@/core';
 import { SystemProgram, Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { getMatchPDA, getEscrowPDA, getConfigAccountPDA } from '@/common';
+import { getMatchPDA, getEscrowPDA, getConfigAccountPDA, ConfigAccountType } from '@/common';
 import * as anchor from "@coral-xyz/anchor";
 
 const MATCH_TYPE = { FREE: 0, PAID: 1 } as const;
@@ -49,7 +49,7 @@ class PaidMatchCancellationRefundTest extends BaseTest {
     } = await import('@/helpers');
     const { getRegistryPDA } = await import('@/common');
 
-    // Setup: Initialize config
+    // Setup: Initialize config and ensure it's unpaused
     const [configPDA] = await getConfigAccountPDA();
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -66,6 +66,20 @@ class PaidMatchCancellationRefundTest extends BaseTest {
       if (!error.message?.includes("already in use") && !error.message?.includes("0x0")) {
         throw err;
       }
+    }
+    
+    // Ensure config is unpaused (may have been paused by previous tests)
+    const config = await program.account.configAccount.fetch(configPDA) as unknown as ConfigAccountType;
+    if (config.isPaused ?? config.is_paused) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (program.methods as any)
+        .unpauseProgram()
+        .accounts({
+          configAccount: configPDA,
+          authority: authority.publicKey,
+          systemProgram: SystemProgram.programId,
+        } as never)
+        .rpc();
     }
 
     const matchId = generateUniqueMatchId("cancellation-refund");
@@ -104,8 +118,6 @@ class PaidMatchCancellationRefundTest extends BaseTest {
       .rpc();
 
     // Join 2 players
-    const player1BalanceBefore = await program.provider.connection.getBalance(player1.publicKey);
-    
     await program.methods
       .joinMatch(matchId, getTestUserId(0))
       .accounts({
@@ -135,19 +147,26 @@ class PaidMatchCancellationRefundTest extends BaseTest {
       .rpc();
 
     // Verify escrow is funded
-    const escrowAccountBefore = await program.account.escrowAccount.fetch(escrowPDA) as any;
+    const escrowAccountBefore = await program.account.escrowAccount.fetch(escrowPDA) as unknown as {
+      totalEntryLamports?: { toNumber(): number };
+      total_entry_lamports?: { toNumber(): number };
+    };
     const totalEscrow = escrowAccountBefore.totalEntryLamports?.toNumber() ?? escrowAccountBefore.total_entry_lamports?.toNumber() ?? 0;
     this.assertEqual(totalEscrow, entryFee.toNumber() * 2, 'Escrow should have both players\' entry fees');
+
+    // Capture balance after joining (before refund)
+    const player1BalanceBeforeRefund = await program.provider.connection.getBalance(player1.publicKey);
 
     // Mark match as cancelled (in real scenario, this would happen via cancelMatch instruction)
     // For now, we'll test refund_escrow directly
     // Note: In production, cancelMatch would set match phase and call refund_escrow
     
     // Test refund with PLATFORM_FAULT (all players get full refunds)
+    // Anchor expects Vec<u8> as Buffer, not plain array
     await program.methods
       .refundEscrow(
         matchId,
-        [0, 1], // All players
+        Buffer.from([0, 1]), // All players - Buffer required for Vec<u8>
         CANCELLATION_REASON.PLATFORM_FAULT,
         null // No abandoned player
       )
@@ -181,16 +200,22 @@ class PaidMatchCancellationRefundTest extends BaseTest {
       .rpc();
 
     // Verify escrow is marked as cancelled
-    const escrowAccountAfter = await program.account.escrowAccount.fetch(escrowPDA) as any;
+    // status_flags bit 2 (0x04) = cancelled
+    const escrowAccountAfter = await program.account.escrowAccount.fetch(escrowPDA) as unknown as {
+      statusFlags?: number;
+      status_flags?: number;
+    };
+    const statusFlags = escrowAccountAfter.statusFlags ?? escrowAccountAfter.status_flags ?? 0;
+    const isCancelled = (statusFlags & 0x04) !== 0;
     this.assert(
-      escrowAccountAfter.isCancelled ?? escrowAccountAfter.is_cancelled ?? false,
+      isCancelled,
       'Escrow should be marked as cancelled'
     );
 
-    // Verify players received refunds (balance increased)
-    const player1BalanceAfter = await program.provider.connection.getBalance(player1.publicKey);
+    // Verify players received refunds (balance increased from before refund)
+    const player1BalanceAfterRefund = await program.provider.connection.getBalance(player1.publicKey);
     this.assert(
-      player1BalanceAfter > player1BalanceBefore,
+      player1BalanceAfterRefund > player1BalanceBeforeRefund,
       'Player should receive refund'
     );
 

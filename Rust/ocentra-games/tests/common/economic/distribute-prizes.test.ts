@@ -10,7 +10,7 @@ import { BaseTest } from '@/core';
 import { TestCategory, ClusterRequirement } from '@/core';
 import { registerMochaTest } from '@/core';
 import { SystemProgram, Keypair } from "@solana/web3.js";
-import { getMatchPDA, getEscrowPDA, getConfigAccountPDA } from '@/common';
+import { getMatchPDA, getEscrowPDA, getConfigAccountPDA, ConfigAccountType, MatchAccountType } from '@/common';
 import * as anchor from "@coral-xyz/anchor";
 
 class DistributePrizesTest extends BaseTest {
@@ -32,7 +32,7 @@ class DistributePrizesTest extends BaseTest {
     const { program, authority, airdrop, generateUniqueMatchId, getTestSeed, getTestGame } = await import('@/helpers');
     const { getRegistryPDA } = await import('@/common');
     
-    // Setup: Initialize config if needed
+    // Setup: Initialize config if needed and ensure it's unpaused
     const [configPDA] = await getConfigAccountPDA();
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -49,6 +49,20 @@ class DistributePrizesTest extends BaseTest {
       if (!error.message?.includes("already in use") && !error.message?.includes("0x0")) {
         throw err;
       }
+    }
+    
+    // Ensure config is unpaused (may have been paused by previous tests)
+    const config = await program.account.configAccount.fetch(configPDA) as unknown as ConfigAccountType;
+    if (config.isPaused ?? config.is_paused) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (program.methods as any)
+        .unpauseProgram()
+        .accounts({
+          configAccount: configPDA,
+          authority: authority.publicKey,
+          systemProgram: SystemProgram.programId,
+        } as never)
+        .rpc();
     }
 
     // Get config
@@ -290,8 +304,7 @@ class DistributePrizesTest extends BaseTest {
     }
 
     // Test 8: Failure - Invalid winner index (>= player_count)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const matchAccountForTest8 = await program.account.match.fetch(matchPDA) as any;
+    const matchAccountForTest8 = await program.account.match.fetch(matchPDA) as unknown as MatchAccountType;
     const playerCount = matchAccountForTest8.playerCount ?? matchAccountForTest8.player_count ?? 0;
     
     if (playerCount < 10) {

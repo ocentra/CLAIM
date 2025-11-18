@@ -10,7 +10,7 @@ import { BaseTest } from '@/core';
 import { TestCategory, ClusterRequirement } from '@/core';
 import { registerMochaTest } from '@/core';
 import { SystemProgram } from "@solana/web3.js";
-import { getMatchPDA, getRegistryPDA, getEscrowPDA } from '@/common';
+import { getMatchPDA, getRegistryPDA, getEscrowPDA, MatchAccountType } from '@/common';
 import * as anchor from "@coral-xyz/anchor";
 
 class FreeMatchUnaffectedTest extends BaseTest {
@@ -69,7 +69,7 @@ class FreeMatchUnaffectedTest extends BaseTest {
       .rpc();
 
     // Verify match is free
-    const matchAccount = await program.account.match.fetch(matchPDA);
+    const matchAccount = await program.account.match.fetch(matchPDA) as unknown as MatchAccountType;
     this.assertEqual(matchAccount.matchType ?? matchAccount.match_type ?? 0, 0, 'Match type should be FREE (0)');
     this.assertEqual(
       matchAccount.entryFeeLamports?.toNumber() ?? matchAccount.entry_fee_lamports?.toNumber() ?? 0,
@@ -90,10 +90,11 @@ class FreeMatchUnaffectedTest extends BaseTest {
     } catch (err: unknown) {
       const error = err as { message?: string };
       // Expected: account not found
+      const hasAccountError = error.message?.includes('Account does not exist') ?? false;
+      const hasNotFoundError = error.message?.includes('account not found') ?? false;
+      const hasInvalidDataError = error.message?.includes('Invalid account data') ?? false;
       this.assert(
-        error.message?.includes('Account does not exist') || 
-        error.message?.includes('account not found') ||
-        error.message?.includes('Invalid account data'),
+        hasAccountError || hasNotFoundError || hasInvalidDataError,
         `Expected account not found error, got: ${error.message}`
       );
     }
@@ -128,7 +129,7 @@ class FreeMatchUnaffectedTest extends BaseTest {
       .rpc();
 
     // Verify players joined
-    const matchAccountAfterJoin = await program.account.match.fetch(matchPDA);
+    const matchAccountAfterJoin = await program.account.match.fetch(matchPDA) as unknown as MatchAccountType;
     this.assertEqual(matchAccountAfterJoin.playerCount ?? matchAccountAfterJoin.player_count ?? 0, 2, 'Should have 2 players');
 
     // Test: Start free match (no escrow verification needed)
