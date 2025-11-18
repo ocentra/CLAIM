@@ -48,6 +48,7 @@ class FailMoveMatchEndedTest extends BaseTest {
       .endMatch(matchId, Array.from(matchHash), hotUrl)
       .accounts({
         matchAccount: matchPDA,
+        escrowAccount: null, // Escrow not needed for free matches
         authority: (await import('@/helpers')).authority.publicKey,
       } as never)
       .rpc();

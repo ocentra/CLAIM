@@ -77,10 +77,19 @@ class RefundEscrowTest extends BaseTest {
 
     // Create match
     await program.methods
-      .createMatch(matchId, claimGame.game_id, new anchor.BN(seed))
+      .createMatch(
+        matchId,
+        claimGame.game_id,
+        new anchor.BN(seed),
+        null, // entry_fee (None = free match)
+        null, // payment_method (None = default)
+        null, // match_type (None = default FREE)
+        null  // tournament_id (None = not a tournament)
+      )
       .accounts({
         matchAccount: matchPDA,
         registry: registryPDA,
+        escrowAccount: null, // Escrow not needed for free matches
         authority: authority.publicKey,
         systemProgram: SystemProgram.programId,
       } as never)

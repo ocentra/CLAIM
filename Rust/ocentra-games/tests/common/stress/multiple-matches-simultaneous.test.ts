@@ -51,10 +51,19 @@ class MultipleMatchesSimultaneousTest extends BaseTest {
       matchIds.map((matchId, i) => 
         retryOnUnsupportedSysvar(async () => {
           return await program.methods
-            .createMatch(matchId, claimGame.game_id, new anchor.BN(seed + i))
+            .createMatch(
+              matchId,
+              claimGame.game_id,
+              new anchor.BN(seed + i),
+              null, // entry_fee (None = free match)
+              null, // payment_method (None = default)
+              null, // match_type (None = default FREE)
+              null  // tournament_id (None = not a tournament)
+            )
             .accounts({
               matchAccount: matchPDAs[i][0],
               registry: registryPDA,
+              escrowAccount: null, // Escrow not needed for free matches
               authority: authority.publicKey,
               systemProgram: SystemProgram.programId,
             } as never)

@@ -38,10 +38,19 @@ export const createStartedMatch = async (
     // Create match
     const seed = getTestSeed();
     await program.methods
-      .createMatch(matchId, claimGame.game_id, new anchor.BN(seed))
+      .createMatch(
+        matchId,
+        claimGame.game_id,
+        new anchor.BN(seed),
+        null, // entry_fee (None = free match)
+        null, // payment_method (None = default)
+        null, // match_type (None = default FREE)
+        null  // tournament_id (None = not a tournament)
+      )
       .accounts({
         matchAccount: matchPDA,
         registry: registryPDA,
+        escrowAccount: null, // Escrow not needed for free matches
         authority: authority.publicKey,
         systemProgram: SystemProgram.programId,
       } as never)
@@ -65,6 +74,9 @@ export const createStartedMatch = async (
         .accounts({
           matchAccount: matchPDA,
           registry: registryPDA,
+          escrowAccount: null, // Escrow not needed for free matches
+          userDepositAccount: null, // Not needed for free matches
+          playerWallet: null, // Not needed for free matches
           player: player.publicKey,
           systemProgram: SystemProgram.programId,
         } as never)
@@ -80,6 +92,7 @@ export const createStartedMatch = async (
       .accounts({
         matchAccount: matchPDA,
         registry: registryPDA,
+        escrowAccount: null, // Escrow not needed for free matches
         authority: authority.publicKey,
       } as never)
       .rpc();
@@ -115,10 +128,19 @@ export const createMatchWithContext = async (
   }
   
   await program.methods
-    .createMatch(matchId, gameId, new anchor.BN(seed))
+    .createMatch(
+      matchId,
+      gameId,
+      new anchor.BN(seed),
+      null, // entry_fee (None = free match)
+      null, // payment_method (None = default)
+      null, // match_type (None = default FREE)
+      null  // tournament_id (None = not a tournament)
+    )
     .accounts({
       matchAccount: matchPDA,
       registry: registryPDA,
+      escrowAccount: null, // Escrow not needed for free matches
       authority: authority.publicKey,
       systemProgram: SystemProgram.programId,
     } as never)

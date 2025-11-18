@@ -50,10 +50,19 @@ class FailJoinMatchFullTest extends BaseTest {
 
     // Create match
     await program.methods
-      .createMatch(testMatchId, claimGame.game_id, new anchor.BN(seed))
+      .createMatch(
+        testMatchId,
+        claimGame.game_id,
+        new anchor.BN(seed),
+        null, // entry_fee (None = free match)
+        null, // payment_method (None = default)
+        null, // match_type (None = default FREE)
+        null  // tournament_id (None = not a tournament)
+      )
       .accounts({
         matchAccount: matchPDA,
         registry: registryPDA,
+        escrowAccount: null, // Escrow not needed for free matches
         authority: (await import('@/helpers')).authority.publicKey,
         systemProgram: SystemProgram.programId,
       } as never)
@@ -67,7 +76,11 @@ class FailJoinMatchFullTest extends BaseTest {
         .accounts({
           matchAccount: matchPDA,
           registry: registryPDA,
+          escrowAccount: null, // Escrow not needed for free matches
+          userDepositAccount: null, // Not needed for free matches
+          playerWallet: null, // Not needed for free matches
           player: players[i].publicKey,
+          systemProgram: SystemProgram.programId,
         } as never)
         .signers([players[i]])
         .rpc();
@@ -81,7 +94,11 @@ class FailJoinMatchFullTest extends BaseTest {
         .accounts({
           matchAccount: matchPDA,
           registry: registryPDA,
+          escrowAccount: null, // Escrow not needed for free matches
+          userDepositAccount: null, // Not needed for free matches
+          playerWallet: null, // Not needed for free matches
           player: player5.publicKey,
+          systemProgram: SystemProgram.programId,
         } as never)
         .signers([player5])
         .rpc();

@@ -50,10 +50,19 @@ class FailEndAlreadyEndedTest extends BaseTest {
 
     // Create match
     await program.methods
-      .createMatch(matchId, claimGame.game_id, new anchor.BN(seed))
+      .createMatch(
+        matchId,
+        claimGame.game_id,
+        new anchor.BN(seed),
+        null, // entry_fee (None = free match)
+        null, // payment_method (None = default)
+        null, // match_type (None = default FREE)
+        null  // tournament_id (None = not a tournament)
+      )
       .accounts({
         matchAccount: matchPDA,
         registry: registryPDA,
+        escrowAccount: null, // Escrow not needed for free matches
         authority: (await import('@/helpers')).authority.publicKey,
         systemProgram: SystemProgram.programId,
       } as never)
@@ -65,7 +74,11 @@ class FailEndAlreadyEndedTest extends BaseTest {
       .accounts({
         matchAccount: matchPDA,
         registry: registryPDA,
+        escrowAccount: null, // Escrow not needed for free matches
+        userDepositAccount: null, // Not needed for free matches
+        playerWallet: null, // Not needed for free matches
         player: player1.publicKey,
+        systemProgram: SystemProgram.programId,
       } as never)
       .signers([player1])
       .rpc();
@@ -75,7 +88,11 @@ class FailEndAlreadyEndedTest extends BaseTest {
       .accounts({
         matchAccount: matchPDA,
         registry: registryPDA,
+        escrowAccount: null, // Escrow not needed for free matches
+        userDepositAccount: null, // Not needed for free matches
+        playerWallet: null, // Not needed for free matches
         player: player2.publicKey,
+        systemProgram: SystemProgram.programId,
       } as never)
       .signers([player2])
       .rpc();
@@ -85,6 +102,7 @@ class FailEndAlreadyEndedTest extends BaseTest {
       .accounts({
         matchAccount: matchPDA,
         registry: registryPDA,
+        escrowAccount: null, // Escrow not needed for free matches
         authority: (await import('@/helpers')).authority.publicKey,
       } as never)
       .rpc();
@@ -97,6 +115,7 @@ class FailEndAlreadyEndedTest extends BaseTest {
       .endMatch(matchId, Array.from(matchHash), hotUrl)
       .accounts({
         matchAccount: matchPDA,
+        escrowAccount: null, // Escrow not needed for free matches
         authority: (await import('@/helpers')).authority.publicKey,
       } as never)
       .rpc();
@@ -107,6 +126,7 @@ class FailEndAlreadyEndedTest extends BaseTest {
         .endMatch(matchId, Array.from(matchHash), hotUrl)
         .accounts({
           matchAccount: matchPDA,
+          escrowAccount: null, // Escrow not needed for free matches
           authority: (await import('@/helpers')).authority.publicKey,
         } as never)
         .rpc();

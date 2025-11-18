@@ -1,5 +1,5 @@
 use crate::error::GameError;
-use crate::state::Match;
+use crate::state::{EscrowAccount, Match};
 use anchor_lang::prelude::*;
 
 pub fn handler(
@@ -31,6 +31,37 @@ pub fn handler(
         return Err(GameError::MatchAlreadyEnded.into());
     }
     require!(match_account.phase == 1, GameError::InvalidPhase);
+
+    // Phase 04: Validate escrow state for paid matches
+    if match_account.is_paid_match() {
+        // For paid matches, escrow must exist and be funded
+        // Note: distribute_prizes will be called separately after match ends
+        if let Some(escrow_loader) = ctx.accounts.escrow_account.as_ref() {
+            let escrow_account = escrow_loader.load()?;
+            
+            // Validate escrow belongs to this match
+            require!(
+                escrow_account.match_pda == ctx.accounts.match_account.key(),
+                GameError::InvalidPayload
+            );
+
+            // Escrow should be funded (all players paid)
+            require!(escrow_account.is_funded(), GameError::EscrowNotFunded);
+
+            // Escrow should not already be distributed (prizes not yet paid)
+            require!(
+                !escrow_account.is_distributed(),
+                GameError::EscrowAlreadyDistributed
+            );
+
+            msg!(
+                "Paid match ending: escrow verified ({} lamports), prizes will be distributed separately",
+                escrow_account.total_entry_lamports
+            );
+        } else {
+            return Err(GameError::InvalidPayload.into());
+        }
+    }
 
     // Security: Validate match_hash if provided
     if let Some(hash) = match_hash {
@@ -132,6 +163,14 @@ pub struct EndMatch<'info> {
         bump
     )]
     pub match_account: AccountLoader<'info, Match>,
+
+    /// Escrow account (only required for paid matches)
+    /// CHECK: Validated in handler - only required if match is paid
+    #[account(
+        seeds = [b"escrow", match_account.key().as_ref()],
+        bump
+    )]
+    pub escrow_account: Option<AccountLoader<'info, EscrowAccount>>,
 
     pub authority: Signer<'info>,
 }

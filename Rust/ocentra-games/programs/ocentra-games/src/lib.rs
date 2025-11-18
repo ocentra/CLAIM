@@ -24,8 +24,21 @@ pub mod ocentra_games {
         match_id: String,
         game_type: u8,
         seed: u64,
+        entry_fee: Option<u64>,
+        payment_method: Option<u8>,
+        match_type: Option<u8>,
+        tournament_id: Option<[u8; 16]>,
     ) -> Result<()> {
-        instructions::games::match_lifecycle::create_match::handler(ctx, match_id, game_type, seed)
+        instructions::games::match_lifecycle::create_match::handler(
+            ctx,
+            match_id,
+            game_type,
+            seed,
+            entry_fee,
+            payment_method,
+            match_type,
+            tournament_id,
+        )
     }
 
     pub fn join_match(ctx: Context<JoinMatch>, match_id: String, user_id: String) -> Result<()> {

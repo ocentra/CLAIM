@@ -47,10 +47,19 @@ class FailEndUnauthorizedTest extends BaseTest {
 
     // Create match
     await program.methods
-      .createMatch(matchId, claimGame.game_id, new anchor.BN(seed))
+      .createMatch(
+        matchId,
+        claimGame.game_id,
+        new anchor.BN(seed),
+        null, // entry_fee (None = free match)
+        null, // payment_method (None = default)
+        null, // match_type (None = default FREE)
+        null  // tournament_id (None = not a tournament)
+      )
       .accounts({
         matchAccount: matchPDA,
         registry: registryPDA,
+        escrowAccount: null, // Escrow not needed for free matches
         authority: (await import('@/helpers')).authority.publicKey,
         systemProgram: SystemProgram.programId,
       } as never)
@@ -64,6 +73,7 @@ class FailEndUnauthorizedTest extends BaseTest {
         .endMatch(matchId, Array.from(matchHash), hotUrl)
         .accounts({
           matchAccount: matchPDA,
+          escrowAccount: null, // Escrow not needed for free matches
           authority: unauthorizedPlayer.publicKey,
         } as never)
         .signers([unauthorizedPlayer])

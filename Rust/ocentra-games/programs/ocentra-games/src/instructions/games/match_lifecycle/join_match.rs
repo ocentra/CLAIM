@@ -1,5 +1,5 @@
 use crate::error::GameError;
-use crate::state::{GameRegistry, Match};
+use crate::state::{EscrowAccount, GameRegistry, Match, UserDepositAccount};
 use anchor_lang::prelude::*;
 
 pub fn handler(ctx: Context<JoinMatch>, match_id: String, user_id: String) -> Result<()> {
@@ -43,7 +43,120 @@ pub fn handler(ctx: Context<JoinMatch>, match_id: String, user_id: String) -> Re
         GameError::MatchFull
     );
 
-    // Add player to match
+    // Phase 04: Handle payment for paid matches
+    if match_account.is_paid_match() {
+        let entry_fee = match_account.entry_fee_lamports;
+        require!(entry_fee > 0, GameError::InvalidPayload);
+
+        // Validate escrow account exists for paid matches
+        let escrow_loader = ctx.accounts.escrow_account.as_ref()
+            .ok_or(GameError::InvalidPayload)?;
+        let mut escrow_account = escrow_loader.load_mut()?;
+
+        // Validate escrow belongs to this match
+        require!(
+            escrow_account.match_pda == ctx.accounts.match_account.key(),
+            GameError::InvalidPayload
+        );
+
+        // Phase 04: Payment method validation
+        // All players in a match MUST use the same payment method
+        let match_payment_method = match_account.get_payment_method();
+        
+        // Handle payment based on match's payment method
+        if match_payment_method == crate::state::enums::payment_method::WALLET {
+            // Wallet payment: CPI transfer from player wallet → escrow PDA
+            // For wallet payment, player signer IS the wallet
+            let player_wallet = ctx.accounts.player_wallet.as_ref()
+                .ok_or(GameError::InvalidPayload)?;
+            require!(
+                ctx.accounts.player.key() == player_wallet.key(),
+                GameError::InvalidPayload
+            );
+
+            let cpi_accounts = anchor_lang::system_program::Transfer {
+                from: player_wallet.to_account_info(),
+                to: escrow_loader.to_account_info(),
+            };
+            let cpi_program = ctx.accounts.system_program.to_account_info();
+            let cpi_ctx = CpiContext::new(cpi_program, cpi_accounts);
+            anchor_lang::system_program::transfer(cpi_ctx, entry_fee)?;
+
+            msg!("Player {} paid {} lamports from wallet to escrow", user_id, entry_fee);
+        } else if match_payment_method == crate::state::enums::payment_method::PLATFORM {
+            // Platform payment: Deduct from UserDepositAccount → escrow
+            let user_deposit_loader = ctx.accounts.user_deposit_account.as_ref()
+                .ok_or(GameError::InvalidPayload)?;
+            let mut user_deposit_account = user_deposit_loader.load_mut()?;
+
+            // Validate authority
+            require!(
+                user_deposit_account.authority == ctx.accounts.player.key(),
+                GameError::Unauthorized
+            );
+
+            // Validate sufficient balance (available + in_play)
+            let total_balance = user_deposit_account.available_lamports
+                .checked_add(user_deposit_account.in_play_lamports)
+                .ok_or(GameError::Overflow)?;
+            require!(
+                total_balance >= entry_fee,
+                GameError::InsufficientFunds
+            );
+
+            // Transfer lamports from UserDepositAccount PDA to escrow PDA
+            // Manual lamport manipulation (same pattern as withdraw_sol)
+            **escrow_loader.to_account_info().try_borrow_mut_lamports()? += entry_fee;
+            **user_deposit_loader.to_account_info().try_borrow_mut_lamports()? -= entry_fee;
+
+            // Update account balances:
+            // 1. Deduct from available first (if available), then from in_play
+            // 2. Add to in_play to lock the entry fee (prevents withdrawal during match)
+            if user_deposit_account.available_lamports >= entry_fee {
+                user_deposit_account.available_lamports = user_deposit_account
+                    .available_lamports
+                    .checked_sub(entry_fee)
+                    .ok_or(GameError::Overflow)?;
+            } else {
+                let remaining = entry_fee
+                    .checked_sub(user_deposit_account.available_lamports)
+                    .ok_or(GameError::Overflow)?;
+                user_deposit_account.available_lamports = 0;
+                // Deduct from in_play (this was already locked, now it's moved to escrow)
+                user_deposit_account.in_play_lamports = user_deposit_account
+                    .in_play_lamports
+                    .checked_sub(remaining)
+                    .ok_or(GameError::Overflow)?;
+            }
+
+            // Lock the entry fee in in_play_lamports (prevents withdrawal during match)
+            user_deposit_account.in_play_lamports = user_deposit_account
+                .in_play_lamports
+                .checked_add(entry_fee)
+                .ok_or(GameError::Overflow)?;
+
+            msg!("Player {} paid {} lamports from platform deposit to escrow", user_id, entry_fee);
+        } else {
+            return Err(GameError::InvalidPaymentMethod.into());
+        }
+
+        // Update escrow account with player stake
+        escrow_account.set_player_stake(player_index, entry_fee);
+        escrow_account.total_entry_lamports = escrow_account
+            .total_entry_lamports
+            .checked_add(entry_fee)
+            .ok_or(GameError::Overflow)?;
+
+        // Check if escrow is fully funded (all players have paid)
+        let expected_total = entry_fee
+            .checked_mul(max_players as u64)
+            .ok_or(GameError::Overflow)?;
+        if escrow_account.total_entry_lamports >= expected_total {
+            escrow_account.set_funded(true);
+        }
+    }
+
+    // Add player to match (only after payment succeeds)
     match_account.set_player_id(player_index, user_id_array);
     match_account.player_count += 1;
 
@@ -79,5 +192,30 @@ pub struct JoinMatch<'info> {
     )]
     pub registry: AccountLoader<'info, GameRegistry>,
 
+    /// Escrow account (only required for paid matches)
+    /// CHECK: Validated in handler - only required if match is paid
+    #[account(
+        mut,
+        seeds = [b"escrow", match_account.key().as_ref()],
+        bump
+    )]
+    pub escrow_account: Option<AccountLoader<'info, EscrowAccount>>,
+
+    /// User deposit account (only required for platform payment method)
+    /// CHECK: Validated in handler - only required if payment_method == PLATFORM
+    #[account(
+        mut,
+        seeds = [b"user_deposit", player.key().as_ref()],
+        bump
+    )]
+    pub user_deposit_account: Option<AccountLoader<'info, UserDepositAccount>>,
+
+    /// Player wallet (only required for wallet payment method)
+    /// CHECK: Validated in handler - only required if payment_method == WALLET
+    #[account(mut)]
+    pub player_wallet: Option<AccountInfo<'info>>,
+
     pub player: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
 }

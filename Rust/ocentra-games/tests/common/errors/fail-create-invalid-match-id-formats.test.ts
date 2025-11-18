@@ -51,10 +51,19 @@ class FailCreateInvalidMatchIdFormatsTest extends BaseTest {
       const [matchPDA] = await getMatchPDA(invalidId);
       try {
         await program.methods
-          .createMatch(invalidId, claimGame.game_id, new anchor.BN(seed))
+          .createMatch(
+            invalidId,
+            claimGame.game_id,
+            new anchor.BN(seed),
+            null, // entry_fee (None = free match)
+            null, // payment_method (None = default)
+            null, // match_type (None = default FREE)
+            null  // tournament_id (None = not a tournament)
+          )
           .accounts({
             matchAccount: matchPDA,
             registry: registryPDA,
+            escrowAccount: null, // Escrow not needed for free matches
             authority: (await import('@/helpers')).authority.publicKey,
             systemProgram: SystemProgram.programId,
           } as never)

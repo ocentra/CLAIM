@@ -1,5 +1,5 @@
 use crate::error::GameError;
-use crate::state::{GameRegistry, Match};
+use crate::state::{EscrowAccount, GameRegistry, Match};
 use anchor_lang::prelude::*;
 
 pub fn handler(ctx: Context<StartMatch>, match_id: String) -> Result<()> {
@@ -37,6 +37,46 @@ pub fn handler(ctx: Context<StartMatch>, match_id: String) -> Result<()> {
         match_account.player_count >= min_players && match_account.player_count <= max_players,
         GameError::InsufficientPlayers
     );
+
+    // Phase 04: Verify escrow for paid matches
+    if match_account.is_paid_match() {
+        let entry_fee = match_account.entry_fee_lamports;
+        require!(entry_fee > 0, GameError::InvalidPayload);
+
+        // Validate escrow account exists
+        let escrow_loader = ctx.accounts.escrow_account.as_ref()
+            .ok_or(GameError::InvalidPayload)?;
+        let escrow_account = escrow_loader.load()?;
+
+        // Validate escrow belongs to this match
+        require!(
+            escrow_account.match_pda == ctx.accounts.match_account.key(),
+            GameError::InvalidPayload
+        );
+
+        // Verify escrow is funded (all players have paid)
+        require!(escrow_account.is_funded(), GameError::EscrowNotFunded);
+
+        // Verify total escrow equals expected prize pool
+        let expected_total = entry_fee
+            .checked_mul(match_account.player_count as u64)
+            .ok_or(GameError::Overflow)?;
+        require!(
+            escrow_account.total_entry_lamports == expected_total,
+            GameError::InvalidPayload
+        );
+
+        // Phase 04: KYC tier validation (if required)
+        // Note: KYC tier checks would be implemented here if needed
+        // For now, we assume all players meet KYC requirements if they can join
+
+        msg!(
+            "Paid match escrow verified: {} lamports total ({} players × {} lamports entry fee)",
+            escrow_account.total_entry_lamports,
+            match_account.player_count,
+            entry_fee
+        );
+    }
 
     // Convert game_name array to string for logging (null-terminated)
     let game_name_str = String::from_utf8_lossy(&match_account.game_name)
@@ -92,6 +132,14 @@ pub struct StartMatch<'info> {
         bump
     )]
     pub registry: AccountLoader<'info, GameRegistry>,
+
+    /// Escrow account (only required for paid matches)
+    /// CHECK: Validated in handler - only required if match is paid
+    #[account(
+        seeds = [b"escrow", match_account.key().as_ref()],
+        bump
+    )]
+    pub escrow_account: Option<AccountLoader<'info, EscrowAccount>>,
 
     pub authority: Signer<'info>,
 }
