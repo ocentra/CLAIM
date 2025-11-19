@@ -27,16 +27,18 @@ export default defineConfig(({ mode = 'test' }) => {
         '**/dist/**',
         '**/e2e/**', // Exclude Playwright E2E tests
         '**/*.e2e.spec.ts',
+        '**/*integration*.test.ts', // Exclude integration tests by filename pattern
+        '**/*.e2e.test.ts', // Exclude e2e tests by filename pattern
+        '**/R2Service.hello.test.ts', // Exclude hello world E2E test (requires Worker)
+        '**/R2Service.integration.test.ts', // Explicitly exclude integration test
         'Rust/**', // Exclude Rust TypeScript tests (run via anchor test in build-rust job)
+        // Exclude integration and load test directories (require Solana validator/Worker)
+        '**/__tests__/integration/**', // Exclude integration tests directory
+        '**/__tests__/load/**', // Exclude load tests directory
         // Exclude R2Service.e2e.test.ts from regular test runs (requires Worker to be running)
         // Run it explicitly with: npm run test:storage:e2e
         // Only exclude if NOT explicitly running this specific file
         ...(process.argv.some(arg => arg.includes('R2Service.e2e.test.ts')) ? [] : ['**/R2Service.e2e.test.ts']),
-        // Conditionally exclude integration/load tests if SKIP_SOLANA_TESTS is set
-        ...(process.env.SKIP_SOLANA_TESTS === 'true' ? [
-          '**/integration/**',
-          '**/load/**',
-        ] : []),
       ],
       coverage: {
         provider: 'v8',
@@ -66,6 +68,7 @@ export default defineConfig(({ mode = 'test' }) => {
       '@ui': resolve(__dirname, './src/ui'),
       '@config': resolve(__dirname, './src/config'),
       '@assets': resolve(__dirname, './src/assets'),
+      '@test-data': resolve(__dirname, './test-data/loaders'),
     },
   },
   }

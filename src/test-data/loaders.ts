@@ -5,7 +5,7 @@
  * This is the SAME data used in Rust/Anchor tests, ensuring E2E consistency.
  */
 
-import type { MatchRecord } from '../lib/match-recording/types';
+import type { MatchRecord } from '@lib/match-recording/types';
 import * as fs from 'fs';
 import * as path from 'path';
 

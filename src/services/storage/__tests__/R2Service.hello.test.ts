@@ -10,8 +10,8 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { getStorageConfig } from '../StorageConfig';
-import { R2Service } from '../R2Service';
+import { getStorageConfig } from '@services/storage/StorageConfig';
+import { R2Service } from '@services/storage/R2Service';
 
 describe('R2Service Hello World E2E Test', () => {
   let workerUrl: string;

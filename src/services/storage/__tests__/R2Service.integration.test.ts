@@ -1,75 +1,29 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { R2Service } from '../R2Service';
+import { R2Service } from '@services/storage/R2Service';
+import { loadMatchRecord } from '@test-data';
 
 /**
- * Integration tests for R2Service with mocked realistic match record data.
+ * Integration tests for R2Service using real test data from test-data/ folder.
  * Tests full write/read cycles, error handling, and edge cases.
+ * Uses canonical match records that flow through the entire system.
  */
 
-describe('R2Service Integration Tests with Mocked Data', () => {
+describe('R2Service Integration Tests with Real Test Data', () => {
   let r2Service: R2Service;
   const mockConfig = {
     workerUrl: 'https://test-worker.workers.dev',
     bucketName: 'test-bucket',
   };
 
-  // Mock realistic match record data (using any for test data flexibility)
+  // Helper to create a match record from test-data with custom match_id
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const createMockMatchRecord = (matchId: string): any => ({
-    match_id: matchId,
-    version: '1.0.0',
-    game_type: 'card_game',
-    created_at: new Date().toISOString(),
-    ended_at: new Date().toISOString(),
-    players: [
-      {
-        player_id: 'player-1',
-        wallet_address: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
-        player_type: 'human',
-        score: 100,
-      },
-      {
-        player_id: 'player-2',
-        wallet_address: '9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM',
-        player_type: 'ai',
-        score: 85,
-      },
-    ],
-    events: [
-      {
-        event_type: 'match_created',
-        timestamp: Date.now(),
-        player_id: 'player-1',
-        data: { game_state: 'initialized' },
-      },
-      {
-        event_type: 'move',
-        timestamp: Date.now() + 1000,
-        player_id: 'player-1',
-        data: { action: 'play_card', card: { suit: 'hearts', value: 'ace' } },
-      },
-      {
-        event_type: 'match_ended',
-        timestamp: Date.now() + 5000,
-        player_id: 'system',
-        data: { winner: 'player-1', reason: 'score' },
-      },
-    ],
-    metadata: {
-      rng_seed: 12345,
-      model_version: null as string | null,
-      chain_of_thought_hash: null as string | null,
-    },
-    signatures: [
-      {
-        signer: 'coordinator',
-        signature: 'mock-signature-123',
-        timestamp: Date.now(),
-      },
-    ],
-    hash: 'mock-hash-abc123',
-    hot_url: `https://test-worker.workers.dev/api/matches/${matchId}`,
-  });
+  const createMatchRecordFromTestData = (matchId: string, testDataName: string = 'claim-4player-complete'): any => {
+    const baseRecord = loadMatchRecord(testDataName);
+    return {
+      ...baseRecord,
+      match_id: matchId, // Override match_id for test isolation
+    };
+  };
 
   beforeEach(() => {
     r2Service = new R2Service(mockConfig);
@@ -79,17 +33,15 @@ describe('R2Service Integration Tests with Mocked Data', () => {
   describe('Full Write/Read Cycle', () => {
     it('should upload and retrieve a complete match record', async () => {
       const matchId = 'test-match-full-cycle';
-      const matchRecord = createMockMatchRecord(matchId);
+      const matchRecord = createMatchRecordFromTestData(matchId);
       const matchRecordJSON = JSON.stringify(matchRecord, null, 2);
 
-      // Mock upload
+      // Mock upload - R2Service calls response.text() first
+      const mockResponse = { success: true, matchId, url: `matches/${matchId}.json` };
       global.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
-          success: true,
-          matchId,
-          url: `matches/${matchId}.json`,
-        }),
+        text: async () => JSON.stringify(mockResponse),
+        json: async () => mockResponse,
       });
 
       const uploadResult = await r2Service.uploadMatchRecord(matchId, matchRecordJSON);
@@ -127,7 +79,7 @@ describe('R2Service Integration Tests with Mocked Data', () => {
 
     it('should handle large match records with many events', async () => {
       const matchId = 'test-match-large';
-      const matchRecord = createMockMatchRecord(matchId);
+      const matchRecord = createMatchRecordFromTestData(matchId);
       
       // Add many events to simulate a long game
       for (let i = 0; i < 50; i++) {
@@ -146,9 +98,11 @@ describe('R2Service Integration Tests with Mocked Data', () => {
       // Should be under 10MB limit
       expect(sizeBytes).toBeLessThan(10 * 1024 * 1024);
 
+      const mockResponse = { success: true, matchId, url: `matches/${matchId}.json` };
       global.fetch = vi.fn().mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ success: true, matchId, url: `matches/${matchId}.json` }),
+        text: async () => JSON.stringify(mockResponse),
+        json: async () => mockResponse,
       });
 
       const result = await r2Service.uploadMatchRecord(matchId, matchRecordJSON);
@@ -157,7 +111,7 @@ describe('R2Service Integration Tests with Mocked Data', () => {
 
     it('should handle match records with AI chain-of-thought', async () => {
       const matchId = 'test-match-ai';
-      const matchRecord = createMockMatchRecord(matchId);
+      const matchRecord = createMatchRecordFromTestData(matchId);
       
       matchRecord.metadata.model_version = 'gpt-4-turbo';
       matchRecord.metadata.chain_of_thought_hash = 'hash-of-cot-123';
@@ -191,10 +145,12 @@ describe('R2Service Integration Tests with Mocked Data', () => {
 
       const matchRecordJSON = JSON.stringify(matchRecord, null, 2);
 
+      const mockResponse = { success: true, matchId, url: `matches/${matchId}.json` };
       global.fetch = vi.fn()
         .mockResolvedValueOnce({
           ok: true,
-          json: async () => ({ success: true, matchId, url: `matches/${matchId}.json` }),
+          text: async () => JSON.stringify(mockResponse),
+          json: async () => mockResponse,
         })
         .mockResolvedValueOnce({
           ok: true,
@@ -217,7 +173,7 @@ describe('R2Service Integration Tests with Mocked Data', () => {
       // Create a string larger than 10MB
       const largeData = 'x'.repeat(11 * 1024 * 1024);
       const matchRecord = {
-        ...createMockMatchRecord(matchId),
+        ...createMatchRecordFromTestData(matchId),
         large_data: largeData,
       };
       const matchRecordJSON = JSON.stringify(matchRecord);
@@ -229,17 +185,19 @@ describe('R2Service Integration Tests with Mocked Data', () => {
 
     it('should handle network errors during upload with retry', async () => {
       const matchId = 'test-match-retry';
-      const matchRecord = createMockMatchRecord(matchId);
+      const matchRecord = createMatchRecordFromTestData(matchId);
       const matchRecordJSON = JSON.stringify(matchRecord);
 
       // First two attempts fail, third succeeds
+      const mockResponse = { success: true, matchId, url: `matches/${matchId}.json` };
       global.fetch = vi
         .fn()
         .mockRejectedValueOnce(new Error('Network error'))
         .mockRejectedValueOnce(new Error('Network error'))
         .mockResolvedValueOnce({
           ok: true,
-          json: async () => ({ success: true, matchId, url: `matches/${matchId}.json` }),
+          text: async () => JSON.stringify(mockResponse),
+          json: async () => mockResponse,
         });
 
       const result = await r2Service.uploadMatchRecord(matchId, matchRecordJSON);
@@ -346,14 +304,16 @@ describe('R2Service Integration Tests with Mocked Data', () => {
   describe('Data Integrity', () => {
     it('should preserve all match record fields during upload/retrieve', async () => {
       const matchId = 'test-match-integrity';
-      const originalRecord = createMockMatchRecord(matchId);
+      const originalRecord = createMatchRecordFromTestData(matchId);
       const originalJSON = JSON.stringify(originalRecord, null, 2);
 
+      const mockResponse = { success: true, matchId, url: `matches/${matchId}.json` };
       global.fetch = vi
         .fn()
         .mockResolvedValueOnce({
           ok: true,
-          json: async () => ({ success: true, matchId, url: `matches/${matchId}.json` }),
+          text: async () => JSON.stringify(mockResponse),
+          json: async () => mockResponse,
         })
         .mockResolvedValueOnce({
           ok: true,
@@ -376,7 +336,7 @@ describe('R2Service Integration Tests with Mocked Data', () => {
 
     it('should handle special characters in match data', async () => {
       const matchId = 'test-match-special-chars';
-      const matchRecord = createMockMatchRecord(matchId);
+      const matchRecord = createMatchRecordFromTestData(matchId);
       
       // Add special characters in event data
       matchRecord.events.push({
@@ -391,11 +351,13 @@ describe('R2Service Integration Tests with Mocked Data', () => {
 
       const matchRecordJSON = JSON.stringify(matchRecord, null, 2);
 
+      const mockResponse = { success: true, matchId, url: `matches/${matchId}.json` };
       global.fetch = vi
         .fn()
         .mockResolvedValueOnce({
           ok: true,
-          json: async () => ({ success: true, matchId, url: `matches/${matchId}.json` }),
+          text: async () => JSON.stringify(mockResponse),
+          json: async () => mockResponse,
         })
         .mockResolvedValueOnce({
           ok: true,
@@ -419,12 +381,14 @@ describe('R2Service Integration Tests with Mocked Data', () => {
     it('should handle multiple concurrent uploads', async () => {
       const matchIds = ['match-1', 'match-2', 'match-3'];
       const uploads = matchIds.map(matchId => {
-        const matchRecord = createMockMatchRecord(matchId);
+        const matchRecord = createMatchRecordFromTestData(matchId);
         const matchRecordJSON = JSON.stringify(matchRecord);
 
+        const mockResponse = { success: true, matchId, url: `matches/${matchId}.json` };
         global.fetch = vi.fn().mockResolvedValue({
           ok: true,
-          json: async () => ({ success: true, matchId, url: `matches/${matchId}.json` }),
+          text: async () => JSON.stringify(mockResponse),
+          json: async () => mockResponse,
         });
 
         return r2Service.uploadMatchRecord(matchId, matchRecordJSON);
@@ -441,7 +405,7 @@ describe('R2Service Integration Tests with Mocked Data', () => {
     it('should handle concurrent read operations', async () => {
       const matchIds = ['match-1', 'match-2', 'match-3'];
       const reads = matchIds.map(matchId => {
-        const matchRecord = createMockMatchRecord(matchId);
+        const matchRecord = createMatchRecordFromTestData(matchId);
         const matchRecordJSON = JSON.stringify(matchRecord);
 
         global.fetch = vi.fn().mockResolvedValue({

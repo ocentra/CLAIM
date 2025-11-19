@@ -6,7 +6,7 @@
  * On-chain UserAccount stores aggregates for leaderboards/verification.
  */
 
-import { GameClient } from '../solana/GameClient';
+import { GameClient } from '@services/solana/GameClient';
 
 export interface TokenBalance {
   userId: string;

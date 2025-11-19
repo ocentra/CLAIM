@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getStorageConfig } from '../StorageConfig';
+import { getStorageConfig } from '@services/storage/StorageConfig';
 
 describe('StorageConfig', () => {
   it('should return config with R2 settings', () => {

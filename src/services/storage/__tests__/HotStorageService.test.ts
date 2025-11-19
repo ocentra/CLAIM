@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { HotStorageService, type IHotStorageService } from '../HotStorageService';
-import { R2Service } from '../R2Service';
+import { HotStorageService, type IHotStorageService } from '@services/storage/HotStorageService';
+import { R2Service } from '@services/storage/R2Service';
 
 describe('HotStorageService', () => {
   let mockStorageImpl: IHotStorageService;
@@ -144,9 +144,11 @@ describe('HotStorageService', () => {
       const matchId = 'test-match-123';
       const matchRecord = JSON.stringify({ match_id: matchId, version: '1.0.0', events: [] });
 
+      const mockResponse = { success: true, matchId, url: `matches/${matchId}.json` };
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: async () => ({ success: true, matchId, url: `matches/${matchId}.json` }),
+        text: async () => JSON.stringify(mockResponse),
+        json: async () => mockResponse,
       });
 
       const result = await service.uploadMatchRecord(matchId, matchRecord);

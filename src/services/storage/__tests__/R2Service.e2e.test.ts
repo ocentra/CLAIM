@@ -19,8 +19,8 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
-import { R2Service } from '../R2Service';
-import { getStorageConfig } from '../StorageConfig';
+import { R2Service } from '@services/storage/R2Service';
+import { getStorageConfig } from '@services/storage/StorageConfig';
 
 describe('R2Service E2E Tests - REAL R2 Operations', () => {
   let r2Service: R2Service;

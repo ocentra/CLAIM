@@ -2,6 +2,8 @@ import { Program, AnchorProvider } from '@coral-xyz/anchor';
 import type { Idl, Wallet } from '@coral-xyz/anchor';
 import { PublicKey, Connection } from '@solana/web3.js'; // Anchor requires web3.js types
 import type { Commitment } from '@solana/web3.js';
+import * as path from 'path';
+import * as fs from 'fs';
 
 const PROGRAM_ID = new PublicKey('Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS');
 
@@ -17,16 +19,49 @@ let IDL_LOAD_ERROR: Error | null = null;
 
 // Per critique Issue #7: Don't throw at module load time - load lazily or return error
 try {
-  // Dynamic import path, will be resolved by bundler at build time
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  IDL = require('../../../Rust/SolanaContract/target/idl/solana_games_program.json') as Idl;
+  // Resolve IDL path from project root (no relative paths!)
+  const projectRoot = process.cwd();
+  const idlPath = path.join(projectRoot, 'Rust', 'ocentra-games', 'target', 'idl', 'ocentra_games.json');
+  
+  // Check if file exists before loading
+  if (fs.existsSync(idlPath)) {
+    // Use fs.readFileSync + JSON.parse instead of require() for better reliability
+    const idlContent = fs.readFileSync(idlPath, 'utf-8');
+    IDL = JSON.parse(idlContent) as Idl;
+  } else {
+    // Fallback to old path for backwards compatibility
+    const oldIdlPath = path.join(projectRoot, 'Rust', 'SolanaContract', 'target', 'idl', 'solana_games_program.json');
+    if (fs.existsSync(oldIdlPath)) {
+      const idlContent = fs.readFileSync(oldIdlPath, 'utf-8');
+      IDL = JSON.parse(idlContent) as Idl;
+    }
+  }
   
   // Validate IDL structure
   if (!IDL || !IDL.instructions || IDL.instructions.length === 0) {
     IDL = null;
     IDL_LOAD_ERROR = new Error(
-      'IDL is invalid or has no instructions. Please run "anchor build" in Rust/SolanaContract directory.'
+      'IDL is invalid or has no instructions. Please run "anchor build" in Rust/ocentra-games directory.'
     );
+  }
+  
+  // Additional validation: check for accounts field (required by Anchor Program)
+  if (IDL && (!IDL.accounts || !Array.isArray(IDL.accounts))) {
+    IDL = null;
+    IDL_LOAD_ERROR = new Error(
+      'IDL is missing accounts field. Please run "anchor build" in Rust/ocentra-games directory.'
+    );
+  }
+  
+  // Validate accounts array doesn't have undefined/null entries
+  if (IDL && IDL.accounts && Array.isArray(IDL.accounts)) {
+    const invalidAccounts = IDL.accounts.filter(acc => !acc || !acc.name);
+    if (invalidAccounts.length > 0) {
+      IDL = null;
+      IDL_LOAD_ERROR = new Error(
+        `IDL has ${invalidAccounts.length} invalid account entries. Please rebuild with "anchor build" in Rust/ocentra-games directory.`
+      );
+    }
   }
 } catch (error) {
   // Per critique Issue #7: Store error instead of throwing
@@ -190,13 +225,34 @@ export class AnchorClient {
     // Validate IDL structure at runtime
     if (!idlToUse || !idlToUse.instructions || idlToUse.instructions.length === 0) {
       throw new Error(
-        'IDL is invalid or has no instructions. Please run "anchor build" in Rust/SolanaContract directory.'
+        'IDL is invalid or has no instructions. Please run "anchor build" in Rust/ocentra-games directory.'
       );
     }
     
+    // Validate accounts array structure
+    if (idlToUse.accounts && Array.isArray(idlToUse.accounts)) {
+      const invalidAccounts = idlToUse.accounts.filter((acc: { name?: string }) => !acc || !acc.name);
+      if (invalidAccounts.length > 0) {
+        throw new Error(
+          `IDL has ${invalidAccounts.length} invalid account entries. Please rebuild with "anchor build" in Rust/ocentra-games directory.`
+        );
+      }
+    }
+    
     // Program constructor: (idl, programId, provider)
-    // @ts-expect-error - Program constructor types may not match exactly with dynamic IDL import
-    this.program = new Program(idlToUse, PROGRAM_ID, this.provider);
+    try {
+      // @ts-expect-error - Program constructor types may not match exactly with dynamic IDL import
+      this.program = new Program(idlToUse, PROGRAM_ID, this.provider);
+    } catch (error) {
+      // Provide more context if Program construction fails
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Failed to create Anchor Program: ${errorMessage}\n` +
+        `This may indicate an IDL format mismatch. Ensure Anchor versions match between Rust and TypeScript.\n` +
+        `Rust: Run "anchor --version" in Rust/ocentra-games\n` +
+        `TypeScript: Check @coral-xyz/anchor version in package.json`
+      );
+    }
   }
 
   getProgram(): Program {

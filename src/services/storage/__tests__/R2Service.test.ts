@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { R2Service } from '../R2Service';
+import { R2Service } from '@services/storage/R2Service';
 
 describe('R2Service', () => {
   let r2Service: R2Service;
@@ -18,9 +18,11 @@ describe('R2Service', () => {
       const matchId = 'test-match-123';
       const matchRecord = JSON.stringify({ match_id: matchId, version: '1.0.0', events: [] });
 
+      const mockResponse = { success: true, matchId, url: `matches/${matchId}.json` };
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
-        json: async () => ({ success: true, matchId, url: `matches/${matchId}.json` }),
+        text: async () => JSON.stringify(mockResponse),
+        json: async () => mockResponse,
       });
 
       const result = await r2Service.uploadMatchRecord(matchId, matchRecord);
@@ -51,13 +53,15 @@ describe('R2Service', () => {
       const matchRecord = JSON.stringify({ match_id: matchId, version: '1.0.0', events: [] });
 
       // First two calls fail, third succeeds
+      const mockResponse = { success: true, matchId, url: `matches/${matchId}.json` };
       global.fetch = vi
         .fn()
         .mockRejectedValueOnce(new Error('Network error'))
         .mockRejectedValueOnce(new Error('Network error'))
         .mockResolvedValueOnce({
           ok: true,
-          json: async () => ({ success: true, matchId, url: `matches/${matchId}.json` }),
+          text: async () => JSON.stringify(mockResponse),
+          json: async () => mockResponse,
         });
 
       const result = await r2Service.uploadMatchRecord(matchId, matchRecord);

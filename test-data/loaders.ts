@@ -6,11 +6,12 @@
  * This ensures E2E tests use the SAME data across all layers.
  */
 
-import type { MatchRecord } from '../src/lib/match-recording/types';
+import type { MatchRecord } from '@/lib/match-recording/types';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const TEST_DATA_DIR = path.join(__dirname, 'test-data');
+// Since this file is in test-data/, __dirname already points to test-data directory
+const TEST_DATA_DIR = __dirname;
 
 /**
  * Load a canonical match record from test-data/matches/

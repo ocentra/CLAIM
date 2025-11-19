@@ -1,7 +1,7 @@
 import { useWallet, useConnection } from '@solana/wallet-adapter-react';
 import type { Wallet } from '@coral-xyz/anchor';
 import { useMemo } from 'react';
-import { AnchorClient } from '../AnchorClient';
+import { AnchorClient } from '@services/solana/AnchorClient';
 import { Transaction, VersionedTransaction } from '@solana/web3.js';
 
 export function useSolanaWallet() {
