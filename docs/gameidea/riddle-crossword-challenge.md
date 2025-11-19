@@ -255,3 +255,4 @@ interface Riddle {
 
 This game concept is designed to be both entertaining and educational, challenging players (human or AI) to think across cultural boundaries while solving spatial puzzles. The combination of cultural knowledge and logical reasoning creates a unique gameplay experience that promotes diversity and learning.
 
+
