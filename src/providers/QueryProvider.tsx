@@ -1,6 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { type ReactNode, useEffect } from 'react'
-import { initializeAssets } from '@/utils/assetManager'
+import { type ReactNode } from 'react'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -18,15 +17,8 @@ interface QueryProviderProps {
 }
 
 export function QueryProvider({ children }: QueryProviderProps) {
-  useEffect(() => {
-    // Initialize the asset manager when the app starts
-    initializeAssets({
-      preloadStrategy: 'high',
-      enableCaching: true
-    }).catch((error) => {
-      console.error('Failed to initialize asset manager:', error)
-    })
-  }, [])
+  // Asset initialization is handled by useAssetManager hook in MainApp
+  // No need to initialize here to avoid duplicate initialization
 
   return (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>

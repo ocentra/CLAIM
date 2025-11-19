@@ -9,6 +9,7 @@ import {
   loginWithGoogle, 
   loginWithFacebook, 
   loginAsGuest, 
+  loginWithWallet,
   logoutUser,
   sendPasswordReset,
   handleRedirectResult,
@@ -37,6 +38,7 @@ interface AuthContextType {
   loginWithFacebook: () => Promise<{ success: boolean; error?: string }>;
   loginWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   loginAsGuest: () => Promise<{ success: boolean; error?: string }>;
+  loginWithWallet: (walletPublicKey: string, signature: Uint8Array, message: Uint8Array) => Promise<{ success: boolean; error?: string }>;
   sendPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
   updateUserProfile: (updates: { displayName?: string; photoURL?: string }) => Promise<{ success: boolean; error?: string }>;
   updateUserStats: (stats: Partial<{
@@ -76,7 +78,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
     
     if (LOG_AUTH_STATE) {
-      console.log(prefix, '[useEffect] ✅ Firebase auth available, setting up onAuthStateChanged listener');
+      console.log(prefix, '[useEffect] ✅ Firebase auth available, checking for redirect result...');
+    }
+
+    // Check for redirect result FIRST (before onAuthStateChanged processes it)
+    // This handles any pending OAuth redirects (though we now use popup for Facebook/Google)
+    handleRedirectResult().then((redirectResult) => {
+      if (redirectResult.success && redirectResult.user) {
+        if (LOG_AUTH_FLOW) {
+          console.log(prefix, '[useEffect] ✅ Redirect result handled, user:', redirectResult.user.displayName);
+        }
+        setIsAuthenticated(true);
+        setUser(redirectResult.user);
+        setLoading(false);
+      } else {
+        if (LOG_AUTH_FLOW) {
+          console.log(prefix, '[useEffect] No redirect result (normal if not returning from OAuth)');
+        }
+        // Continue to set up auth state listener
+        setLoading(false);
+      }
+    }).catch((error) => {
+      if (LOG_AUTH_ERROR) {
+        console.error(prefix, '[useEffect] ❌ Error checking redirect result:', error);
+      }
+      setLoading(false);
+    });
+    
+    if (LOG_AUTH_STATE) {
+      console.log(prefix, '[useEffect] Setting up onAuthStateChanged listener');
     }
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
@@ -120,35 +150,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 });
               }
             } else {
-              // Profile doesn't exist yet - this can happen with redirect flows
-              // It will be created by handleRedirectResult or the login function
+              // Profile doesn't exist yet - create basic profile
+              // Note: Redirect result should have been handled in authStateReady above
               if (LOG_AUTH_FLOW) {
                 console.log(prefix, '[onAuthStateChanged] ⚠️ User profile not found in Firestore, creating basic profile');
               }
-              // Try to handle redirect result (for Facebook/login flows that use redirect)
-              const redirectResult = await handleRedirectResult();
-              if (redirectResult.success && redirectResult.user) {
-                setUser(redirectResult.user);
-                if (LOG_AUTH_STATE) {
-                  console.log(prefix, '[onAuthStateChanged] ✅ User profile created from redirect result');
-                }
-              } else {
-                // Fallback: create basic profile (shouldn't happen in normal flow)
-                setUser({
-                  uid: firebaseUser.uid,
-                  displayName: firebaseUser.displayName || 'Anonymous',
-                  email: firebaseUser.email || '',
-                  photoURL: firebaseUser.photoURL || '',
-                  createdAt: new Date(),
-                  lastLoginAt: new Date(),
-                  gamesPlayed: 0,
-                  wins: 0,
-                  losses: 0,
-                  winRate: 0,
-                  eloRating: 1200,
-                  achievements: []
-                });
-              }
+              // Create basic profile as fallback
+              setUser({
+                uid: firebaseUser.uid,
+                displayName: firebaseUser.displayName || 'Anonymous',
+                email: firebaseUser.email || '',
+                photoURL: firebaseUser.photoURL || '',
+                createdAt: new Date(),
+                lastLoginAt: new Date(),
+                gamesPlayed: 0,
+                wins: 0,
+                losses: 0,
+                winRate: 0,
+                eloRating: 1200,
+                achievements: []
+              });
             }
           } else {
             // Firebase not configured - use basic profile
@@ -523,6 +544,63 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return { success: result.success, error: result.error };
   };
 
+  const loginWithWalletAuth = async (
+    walletPublicKey: string,
+    signature: Uint8Array,
+    message: Uint8Array
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (LOG_AUTH_SOCIAL) {
+      console.log(prefix, '[loginWithWallet] Starting wallet login...', { walletPublicKey });
+    }
+
+    // If Firebase isn't configured, use simulated auth
+    if (!auth) {
+      if (LOG_AUTH_FLOW) {
+        console.log(prefix, '[loginWithWallet] ⚠️ Firebase not configured, using simulated auth');
+      }
+      // Simulate successful wallet login
+      setIsAuthenticated(true);
+      setUser({
+        uid: 'simulated-wallet-user',
+        displayName: `Wallet-${walletPublicKey.substring(0, 8)}`,
+        email: '',
+        photoURL: '',
+        createdAt: new Date(),
+        lastLoginAt: new Date(),
+        gamesPlayed: 0,
+        wins: 0,
+        losses: 0,
+        winRate: 0,
+        eloRating: 1200,
+        achievements: [],
+        walletAddress: walletPublicKey
+      });
+      if (LOG_AUTH_SOCIAL) {
+        console.log(prefix, '[loginWithWallet] ✅ Simulated wallet login successful');
+      }
+      return { success: true };
+    }
+    
+    const result: AuthResult = await loginWithWallet(walletPublicKey, signature, message);
+    
+    if (result.success && result.user) {
+      setIsAuthenticated(true);
+      setUser(result.user);
+      if (LOG_AUTH_SOCIAL) {
+        console.log(prefix, '[loginWithWallet] ✅ Wallet login successful, user state updated:', { 
+          uid: result.user.uid, 
+          walletAddress: walletPublicKey 
+        });
+      }
+    } else {
+      if (LOG_AUTH_ERROR) {
+        console.error(prefix, '[loginWithWallet] ❌ Wallet login failed:', result.error);
+      }
+    }
+    
+    return { success: result.success, error: result.error };
+  };
+
   // Wrapper for updateUserStats that uses the current user's UID
   const updateCurrentUserStats = async (stats: Partial<{
     gamesPlayed: number;
@@ -609,6 +687,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     loginWithFacebook: loginWithFacebookAuth,
     loginWithGoogle: loginWithGoogleAuth,
     loginAsGuest: loginAsGuestAuth,
+    loginWithWallet: loginWithWalletAuth,
     sendPasswordReset: sendPasswordResetEmail,
     updateUserProfile: updateProfile,
     updateUserStats: updateCurrentUserStats

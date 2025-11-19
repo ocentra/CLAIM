@@ -3,7 +3,8 @@ import type { UserProfile } from '@services';
 import { EventBus } from '@/lib/eventing/EventBus'
 import { ShowScreenEvent } from '@/lib/eventing/events/lobby'
 import LoginDialog from './LoginDialog';
-import { WelcomeScreen } from '@ui/components/Welcome/WelcomeScreen';
+import { Home } from '@/ui/components/Home/Home';
+import { ClaimPage, ThreeCardBragPage } from '@/ui/components/GamesPage';
 import { SettingsPage } from '@/ui/pages/Settings/SettingsPage'
 
 interface AuthScreenProps {
@@ -15,6 +16,7 @@ interface AuthScreenProps {
   onFacebookLogin: () => Promise<{ success: boolean; error?: string }>;
   onGoogleLogin: () => Promise<{ success: boolean; error?: string }>;
   onGuestLogin: () => Promise<{ success: boolean; error?: string }>;
+  onWalletLogin: () => Promise<{ success: boolean; error?: string }>;
   onLogout: () => void;
   onSendPasswordReset: (email: string) => Promise<{ success: boolean; error?: string }>;
   onLogoutClick?: () => void;
@@ -30,24 +32,56 @@ export function AuthScreen({
   onFacebookLogin,
   onGoogleLogin,
   onGuestLogin,
+  onWalletLogin,
   onLogout,
   onSendPasswordReset,
   onLogoutClick,
   onTabSwitch,
 }: AuthScreenProps) {
-  const [currentScreen, setCurrentScreen] = useState<'welcome' | 'settings'>('welcome')
+  // Initialize screen from URL if available
+  const getInitialScreen = (): 'home' | 'claim' | 'threecardbrag' | 'poker' | 'settings' => {
+    if (typeof window === 'undefined') return 'home';
+    const path = window.location.pathname;
+    if (path === '/claim') return 'claim';
+    if (path === '/threecardbrag') return 'threecardbrag';
+    if (path === '/poker') return 'poker';
+    if (path === '/settings') return 'settings';
+    return 'home';
+  };
+
+  const [currentScreen, setCurrentScreen] = useState<'home' | 'claim' | 'threecardbrag' | 'poker' | 'settings'>(getInitialScreen())
 
   useEffect(() => {
     const handleShowScreen = (event: ShowScreenEvent) => {
-      if (event.screen === 'settings' || event.screen === 'welcome') {
-        setCurrentScreen(event.screen)
+      const validScreens = ['settings', 'home', 'claim', 'threecardbrag', 'poker'];
+      if (validScreens.includes(event.screen)) {
+        setCurrentScreen(event.screen as 'home' | 'claim' | 'threecardbrag' | 'poker' | 'settings')
       }
     }
 
     EventBus.instance.subscribe(ShowScreenEvent, handleShowScreen)
 
+    // Handle browser back/forward buttons
+    const handlePopState = () => {
+      const path = window.location.pathname;
+      if (path === '/claim') {
+        setCurrentScreen('claim');
+      } else if (path === '/threecardbrag') {
+        setCurrentScreen('threecardbrag');
+      } else if (path === '/poker') {
+        setCurrentScreen('poker');
+      } else if (path === '/settings') {
+        setCurrentScreen('settings');
+      } else {
+        setCurrentScreen('home');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
     return () => {
-      EventBus.instance.unsubscribe(ShowScreenEvent, handleShowScreen)
+      EventBus.instance.unsubscribe(ShowScreenEvent, handleShowScreen);
+      window.removeEventListener('popstate', handlePopState);
     }
   }, [])
 
@@ -56,8 +90,40 @@ export function AuthScreen({
       return <SettingsPage />
     }
     
+    if (currentScreen === 'claim') {
+      return (
+        <ClaimPage
+          user={user}
+          onLogout={onLogout}
+          onLogoutClick={onLogoutClick}
+        />
+      );
+    }
+    
+    if (currentScreen === 'threecardbrag') {
+      return (
+        <ThreeCardBragPage
+          user={user}
+          onLogout={onLogout}
+          onLogoutClick={onLogoutClick}
+        />
+      );
+    }
+    
+    if (currentScreen === 'poker') {
+      return (
+        <ClaimPage
+          user={user}
+          onLogout={onLogout}
+          onLogoutClick={onLogoutClick}
+          gameName="Poker"
+        />
+      );
+    }
+    
+    // Default to home page
     return (
-      <WelcomeScreen
+      <Home
         user={user}
         onLogout={onLogout}
         onLogoutClick={onLogoutClick}
@@ -73,6 +139,7 @@ export function AuthScreen({
         onFacebookLogin={onFacebookLogin}
         onGoogleLogin={onGoogleLogin}
         onGuestLogin={onGuestLogin}
+        onWalletLogin={onWalletLogin}
         onSendPasswordReset={onSendPasswordReset}
         onTabSwitch={onTabSwitch}
       />

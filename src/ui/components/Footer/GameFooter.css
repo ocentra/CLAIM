@@ -1,8 +1,9 @@
 .game-footer {
-  position: sticky;
+  position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
+  width: 100%;
   height: 4vh;
   min-height: 30px;
   max-height: 40px;

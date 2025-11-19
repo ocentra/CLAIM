@@ -90,11 +90,20 @@ export class AssetLoader {
     const chunks = this.chunkArray(bundle.assets, concurrencyLimit)
 
     for (const chunk of chunks) {
-      await Promise.all(
+      await Promise.allSettled(
         chunk.map(async (asset) => {
           updateProgress(asset.id)
-          await this.loadAsset(asset)
-          loadedAssets++
+          try {
+            await this.loadAsset(asset)
+            loadedAssets++
+          } catch (error) {
+            // Log error but continue loading other assets
+            if (LOG_ASSETS_ERROR) {
+              logAssets(`${prefix} ❌ Failed to load asset ${asset.id}:`, error)
+            }
+            // Still increment loaded count to avoid progress getting stuck
+            loadedAssets++
+          }
           updateProgress()
         })
       )

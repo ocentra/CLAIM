@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useConnection, useWallet } from '@solana/wallet-adapter-react';
 import { SolanaEventBridge } from './SolanaEventBridge';
-import { Wallet } from '@coral-xyz/anchor';
+import type { Wallet } from '@coral-xyz/anchor';
 import { Transaction, VersionedTransaction } from '@solana/web3.js';
 
 let bridgeInstance: SolanaEventBridge | null = null;

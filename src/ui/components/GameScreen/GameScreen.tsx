@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { GameHeader } from '@ui/components/Header/GameHeader';
-import { GameFooter } from '@ui/components/Footer/GameFooter';
+import { GameHeader } from '@/ui/components/Header/GameHeader';
+import { GameFooter } from '@/ui/components/Footer/GameFooter';
 import { useAuth } from '@providers';
 import { useSolanaBridge } from '@services/solana/useSolanaBridge';
 import GameBackground from './GameBackground';

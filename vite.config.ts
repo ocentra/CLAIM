@@ -594,6 +594,7 @@ export default defineConfig({
     mcpBridgePlugin(),
   ],
   resolve: {
+    extensions: ['.mjs', '.js', '.mts', '.ts', '.jsx', '.tsx', '.json'],
     alias: {
       '@': path.resolve(__dirname, './src'),
       '@lib': path.resolve(__dirname, './src/lib'),
@@ -601,8 +602,12 @@ export default defineConfig({
       '@utils': path.resolve(__dirname, './src/utils'),
       '@services': path.resolve(__dirname, './src/services'),
       '@providers': path.resolve(__dirname, './src/providers'),
+      '@store': path.resolve(__dirname, './src/store'),
+      '@hooks': path.resolve(__dirname, './src/hooks'),
       '@constants': path.resolve(__dirname, './src/constants'),
-      '@ui': path.resolve(__dirname, './src/ui'),
+      '@ui/gameMode': path.resolve(__dirname, './src/ui/gameMode'),
+      '@ui/layout': path.resolve(__dirname, './src/ui/layout'),
+      '@ui': path.resolve(__dirname, './src/ui/components'),
       '@types': path.resolve(__dirname, './src/types'),
       '@config': path.resolve(__dirname, './src/config'),
       '@assets': path.resolve(__dirname, './src/assets'),
@@ -611,8 +616,6 @@ export default defineConfig({
   optimizeDeps: {
     include: [
       'three',
-      '@react-three/fiber',
-      '@react-three/drei',
       'zustand',
       'three-stdlib',
       '@huggingface/transformers',

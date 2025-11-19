@@ -1,16 +1,19 @@
 import './LoadingScreen.css';
 
-interface GameLoadingScreenProps {
+interface AppLoadingScreenProps {
   isBackgroundReady: boolean;
 }
 
-export function GameLoadingScreen({ isBackgroundReady }: GameLoadingScreenProps) {
+/**
+ * Initial app loading screen - shows while 3D background loads
+ * This appears before login/welcome page, not during game loading
+ */
+export function AppLoadingScreen({ isBackgroundReady }: AppLoadingScreenProps) {
   return (
     <div 
       className={`game-loading-screen ${isBackgroundReady ? 'fade-out' : ''}`}
     >
       <div className="loading-spinner"></div>
-      <p className="loading-message">Initializing game...</p>
       <div className="loading-title">CLAIM</div>
     </div>
   );

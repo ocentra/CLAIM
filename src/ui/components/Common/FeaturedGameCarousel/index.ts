@@ -1,0 +1,2 @@
+export { FeaturedGameCarousel } from './FeaturedGameCarousel';
+

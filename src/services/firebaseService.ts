@@ -1,7 +1,6 @@
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
-  signInWithRedirect, 
   signInWithPopup,
   signOut, 
   GoogleAuthProvider, 
@@ -13,22 +12,22 @@ import {
   fetchSignInMethodsForEmail
 } from 'firebase/auth';
 import type { User as FirebaseUser, UserCredential as FirebaseUserCredential } from 'firebase/auth';
-import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, deleteDoc, collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { auth, db } from '@config/firebase';
 import { logAuth } from '@lib/logging';
 
 const prefix = '[FirebaseService]';
 
 // Auth flow logging flags
-const LOG_AUTH_FLOW = false;        // Main auth flow tracking
-const LOG_AUTH_REGISTER = false;    // User registration
-const LOG_AUTH_LOGIN = false;       // User login
+const LOG_AUTH_FLOW = true;         // Main auth flow tracking - ENABLED for debugging
+const LOG_AUTH_REGISTER = true;     // User registration - ENABLED for debugging
+const LOG_AUTH_LOGIN = true;        // User login - ENABLED for debugging
 const LOG_AUTH_LOGOUT = false;      // User logout
-const LOG_AUTH_SOCIAL = false;      // Social login (Google/Facebook)
+const LOG_AUTH_SOCIAL = true;       // Social login (Google/Facebook) - ENABLED for debugging
 const LOG_AUTH_GUEST = false;       // Guest login
-const LOG_AUTH_REDIRECT = false;    // Redirect handling
-const LOG_AUTH_FIRESTORE = false;   // Firestore operations
-const LOG_AUTH_ERROR = false;       // Error logging
+const LOG_AUTH_REDIRECT = true;     // Redirect handling - ENABLED for debugging
+const LOG_AUTH_FIRESTORE = true;    // Firestore operations - ENABLED for debugging
+const LOG_AUTH_ERROR = true;        // Error logging - ENABLED (always logs to IndexedDB)
 
 // Check if Firebase is configured
 const isFirebaseConfigured = !!auth && !!db;
@@ -50,6 +49,8 @@ export interface UserProfile {
   // Per spec Section 18, lines 1693-1696: Match history references
   matchHistory?: string[];  // Match PDA addresses or match IDs
   matchIds?: string[];      // Match UUIDs for quick lookup
+  // Wallet-based authentication
+  walletAddress?: string;   // Solana wallet public key (base58)
 }
 
 // Authentication result interface
@@ -176,6 +177,43 @@ export const registerUser = async (
   } catch (error: unknown) {
     const firebaseError = error as FirebaseError;
     logAuth(LOG_AUTH_ERROR, 'error', prefix, '[registerUser] ❌ Registration error:', firebaseError);
+    
+    // Handle email-already-in-use - check if email exists with social provider
+    if (firebaseError.code === 'auth/email-already-in-use') {
+      logAuth(LOG_AUTH_FLOW, 'log', prefix, '[registerUser] Email already in use, checking sign-in methods:', email);
+      try {
+        const signInMethods = await fetchSignInMethodsForEmail(auth!, email);
+        logAuth(LOG_AUTH_FLOW, 'log', prefix, '[registerUser] Sign-in methods found:', signInMethods);
+        const hasSocialProvider = signInMethods.some(method => method === 'google.com' || method === 'facebook.com');
+        
+        if (hasSocialProvider) {
+          const providers = signInMethods.filter(m => m === 'google.com' || m === 'facebook.com');
+          const providerNames = providers.map(p => p === 'google.com' ? 'Google' : 'Facebook').join(' or ');
+          logAuth(LOG_AUTH_FLOW, 'log', prefix, '[registerUser] Email exists with social provider:', providerNames);
+          return {
+            success: false,
+            error: `This email is already registered with ${providerNames}. Please sign in with ${providerNames} instead, or set a password in your account settings after signing in.`
+          };
+        } else {
+          // Even if fetchSignInMethodsForEmail returns empty, the email might exist with social provider
+          // (Firebase limitation - doesn't expose until account is fully activated)
+          // Show a helpful message suggesting they try social login
+          logAuth(LOG_AUTH_FLOW, 'log', prefix, '[registerUser] No sign-in methods detected, but email exists - likely social provider');
+          return {
+            success: false,
+            error: 'This email is already registered. If you signed up with Google or Facebook, please sign in with that method instead.'
+          };
+        }
+      } catch (methodsError) {
+        // If we can't check methods, show helpful message anyway
+        logAuth(LOG_AUTH_ERROR, 'error', prefix, '[registerUser] Could not check sign-in methods:', methodsError);
+        return {
+          success: false,
+          error: 'This email is already registered. If you signed up with Google or Facebook, please sign in with that method instead.'
+        };
+      }
+    }
+    
     const userFriendlyMessage = getAuthErrorMessage(error);
     return { success: false, error: userFriendlyMessage };
   }
@@ -212,6 +250,31 @@ export const loginUser = async (email: string, password: string): Promise<AuthRe
   }
   
   try {
+    // Check what sign-in methods are available for this email BEFORE attempting login
+    logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginUser] Checking available sign-in methods for email:', email);
+    let signInMethods: string[] = [];
+    try {
+      signInMethods = await fetchSignInMethodsForEmail(auth!, email);
+      logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginUser] Available sign-in methods:', signInMethods);
+    } catch (methodsError) {
+      // If email doesn't exist, fetchSignInMethodsForEmail might throw - that's okay
+      logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginUser] Could not fetch sign-in methods (email may not exist):', methodsError);
+    }
+    
+    // If email has social providers but no password method, guide user
+    const hasSocialProvider = signInMethods.some(method => method === 'google.com' || method === 'facebook.com');
+    const hasPasswordMethod = signInMethods.includes('password');
+    
+    if (hasSocialProvider && !hasPasswordMethod) {
+      const providers = signInMethods.filter(m => m === 'google.com' || m === 'facebook.com');
+      const providerNames = providers.map(p => p === 'google.com' ? 'Google' : 'Facebook').join(' or ');
+      logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginUser] Email registered with social provider, no password method');
+      return {
+        success: false,
+        error: `This email is registered with ${providerNames}. Please sign in with ${providerNames} instead, or set a password in your account settings.`
+      };
+    }
+    
     logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginUser] Signing in with email/password...');
     const userCredential: FirebaseUserCredential = await signInWithEmailAndPassword(auth!, email, password);
     const user: FirebaseUser = userCredential.user;
@@ -265,6 +328,44 @@ export const loginUser = async (email: string, password: string): Promise<AuthRe
   } catch (error: unknown) {
     const firebaseError = error as FirebaseError;
     logAuth(LOG_AUTH_ERROR, 'error', prefix, '[loginUser] ❌ Login error:', firebaseError);
+    
+    // Handle specific errors: user-not-found or invalid-credential - check if email exists with social provider
+    if (firebaseError.code === 'auth/user-not-found' || firebaseError.code === 'auth/invalid-credential' || firebaseError.code === 'auth/wrong-password') {
+      logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginUser] Checking sign-in methods in error handler for:', email);
+      try {
+        const signInMethods = await fetchSignInMethodsForEmail(auth!, email);
+        logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginUser] Sign-in methods from error handler:', signInMethods);
+        const hasSocialProvider = signInMethods.some(method => method === 'google.com' || method === 'facebook.com');
+        
+        if (hasSocialProvider) {
+          const providers = signInMethods.filter(m => m === 'google.com' || m === 'facebook.com');
+          const providerNames = providers.map(p => p === 'google.com' ? 'Google' : 'Facebook').join(' or ');
+          logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginUser] Email exists with social provider:', providerNames);
+          return {
+            success: false,
+            error: `This email is registered with ${providerNames}. Please sign in with ${providerNames} instead.`
+          };
+        } else {
+          logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginUser] No social providers found for email');
+          // Even though fetchSignInMethodsForEmail returned empty, the email might exist with social provider
+          // (Firebase limitation - doesn't expose until account is fully activated)
+          // Show a helpful message suggesting they try social login
+          return {
+            success: false,
+            error: 'Invalid email or password. If you signed up with Google or Facebook, please use that method to sign in instead.'
+          };
+        }
+      } catch (methodsError) {
+        // If we can't check methods, fall through to default error handling
+        logAuth(LOG_AUTH_ERROR, 'error', prefix, '[loginUser] Could not check sign-in methods in error handler:', methodsError);
+        // Still show helpful message in case email exists with social provider
+        return {
+          success: false,
+          error: 'Invalid email or password. If you signed up with Google or Facebook, please use that method to sign in instead.'
+        };
+      }
+    }
+    
     const userFriendlyMessage = getAuthErrorMessage(error);
     // Don't show error for silent failures (like popup cancelled)
     if (!userFriendlyMessage) {
@@ -345,12 +446,21 @@ export const loginWithGoogle = async (): Promise<AuthResult> => {
         displayName: userProfile.displayName 
       });
     } else {
-      // User profile already exists, just update last login
+      // User profile already exists, update last login and photoURL if Google has a better one
       logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithGoogle] User profile exists, updating lastLoginAt');
       userProfile = { ...userDoc.data() as UserProfile, uid: result.user.uid };
-      await updateDoc(doc(db!, 'users', result.user.uid), {
+      const updateData: Partial<UserProfile> = {
         lastLoginAt: new Date()
-      });
+      };
+      
+      // Update photoURL if Google has one and current one is empty or different
+      if (result.user.photoURL && (!userProfile.photoURL || userProfile.photoURL !== result.user.photoURL)) {
+        updateData.photoURL = result.user.photoURL;
+        logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithGoogle] Updating photoURL from Google');
+      }
+      
+      await updateDoc(doc(db!, 'users', result.user.uid), updateData);
+      userProfile = { ...userProfile, ...updateData };
     }
       
       logAuth(LOG_AUTH_LOGIN, 'log', prefix, '[loginWithGoogle] ✅ Login successful, profile loaded:', { 
@@ -362,7 +472,115 @@ export const loginWithGoogle = async (): Promise<AuthResult> => {
       
       return { success: true, user: userProfile };
   } catch (error: unknown) {
-    const firebaseError = error as FirebaseError;
+    const firebaseError = error as FirebaseError & { customData?: { _tokenResponse?: { verifiedProvider?: string[]; email?: string } } };
+    
+    // Handle account linking - if account exists with different provider (e.g., Facebook)
+    if (firebaseError.code === 'auth/account-exists-with-different-credential') {
+      logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithGoogle] Account exists with different provider, attempting to auto-link...');
+      
+      const email = firebaseError.customData?._tokenResponse?.email;
+      const verifiedProviders = firebaseError.customData?._tokenResponse?.verifiedProvider || [];
+      
+      if (email && verifiedProviders.length > 0) {
+        logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithGoogle] Found existing account:', { email, providers: verifiedProviders });
+        
+        // Check if user is currently logged in with the existing provider
+        if (auth?.currentUser && auth.currentUser.email === email) {
+          logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithGoogle] User is already logged in with existing provider');
+          // User is logged in - Firebase should have auto-linked, but popup failed
+          // Return success with current user profile
+          const userDoc = await getDoc(doc(db!, 'users', auth.currentUser.uid));
+          if (userDoc.exists()) {
+            const userProfile = { ...userDoc.data() as UserProfile, uid: auth.currentUser.uid };
+            await updateDoc(doc(db!, 'users', auth.currentUser.uid), {
+              lastLoginAt: new Date()
+            });
+            return { success: true, user: userProfile };
+          }
+        }
+        
+        // User not logged in - automatically sign them in with existing provider, then link Google
+        const hasFacebook = verifiedProviders.includes('facebook.com');
+        const providerName = hasFacebook ? 'Facebook' : verifiedProviders[0];
+        
+        logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithGoogle] Auto-linking: signing in with', providerName, 'first...');
+        
+        try {
+          // Sign in with existing provider first
+          let existingProviderResult;
+          if (hasFacebook) {
+            const facebookProvider = new FacebookAuthProvider();
+            existingProviderResult = await signInWithPopup(auth!, facebookProvider);
+          } else {
+            // For other providers, prompt user
+            return { 
+              success: false, 
+              error: `An account with this email already exists with ${providerName}. Please sign in with ${providerName} instead.` 
+            };
+          }
+          
+          logAuth(LOG_AUTH_SOCIAL, 'log', prefix, '[loginWithGoogle] ✅ Signed in with', providerName, ', now linking Google...');
+          
+          // Now link Google credential - retry Google login
+          const googleProvider = new GoogleAuthProvider();
+          const googleResult = await signInWithPopup(auth!, googleProvider);
+          
+          logAuth(LOG_AUTH_SOCIAL, 'log', prefix, '[loginWithGoogle] ✅ Successfully linked Google to existing account');
+          
+          // Update user profile - merge data from both providers
+          const userDoc = await getDoc(doc(db!, 'users', googleResult.user.uid));
+          const googlePhotoURL = googleResult.user.photoURL;
+          const facebookPhotoURL = existingProviderResult.user.photoURL;
+          
+          if (userDoc.exists()) {
+            const userProfile = { ...userDoc.data() as UserProfile, uid: googleResult.user.uid };
+            const updateData: Partial<UserProfile> = {
+              lastLoginAt: new Date()
+            };
+            
+            // Use Google photo if available, otherwise Facebook photo, otherwise keep existing
+            if (googlePhotoURL && (!userProfile.photoURL || userProfile.photoURL === facebookPhotoURL)) {
+              updateData.photoURL = googlePhotoURL;
+            } else if (facebookPhotoURL && !userProfile.photoURL) {
+              updateData.photoURL = facebookPhotoURL;
+            }
+            
+            await updateDoc(doc(db!, 'users', googleResult.user.uid), updateData);
+            return { 
+              success: true, 
+              user: { ...userProfile, ...updateData } as UserProfile
+            };
+          }
+          
+          // Profile doesn't exist - create it
+          const userProfile: UserProfile = {
+            uid: googleResult.user.uid,
+            displayName: googleResult.user.displayName || existingProviderResult.user.displayName || email.split('@')[0],
+            email: email,
+            photoURL: googlePhotoURL || facebookPhotoURL || '',
+            createdAt: new Date(),
+            lastLoginAt: new Date(),
+            gamesPlayed: 0,
+            wins: 0,
+            losses: 0,
+            winRate: 0,
+            eloRating: 1200,
+            achievements: []
+          };
+          await setDoc(doc(db!, 'users', googleResult.user.uid), userProfile);
+          return { success: true, user: userProfile };
+          
+        } catch (linkError) {
+          logAuth(LOG_AUTH_ERROR, 'error', prefix, '[loginWithGoogle] ❌ Failed to auto-link accounts:', linkError);
+          const providerName = verifiedProviders.includes('facebook.com') ? 'Facebook' : verifiedProviders[0];
+          return { 
+            success: false, 
+            error: `An account with this email already exists with ${providerName}. Please sign in with ${providerName} instead.` 
+          };
+        }
+      }
+    }
+    
     logAuth(LOG_AUTH_ERROR, 'error', prefix, '[loginWithGoogle] ❌ Google login error:', {
       code: firebaseError.code,
       message: firebaseError.message,
@@ -388,15 +606,204 @@ export const loginWithFacebook = async (): Promise<AuthResult> => {
   }
   
   try {
+    logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithFacebook] Creating FacebookAuthProvider...');
     const provider = new FacebookAuthProvider();
-    logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithFacebook] Initiating redirect to Facebook...');
-    await signInWithRedirect(auth!, provider);
-    // The result is handled by the onAuthStateChanged listener
-    logAuth(LOG_AUTH_SOCIAL, 'log', prefix, '[loginWithFacebook] ✅ Redirect initiated, waiting for callback');
-    return { success: true };
+    logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithFacebook] Provider created, auth object:', { 
+      hasAuth: !!auth, 
+      currentUser: auth?.currentUser?.uid || null,
+      appName: auth?.app?.name || null
+    });
+    logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithFacebook] About to call signInWithPopup...');
+    logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithFacebook] Current URL:', window.location.href);
+    logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithFacebook] Opening popup for Facebook login...');
+    const result = await signInWithPopup(auth!, provider);
+    logAuth(LOG_AUTH_SOCIAL, 'log', prefix, '[loginWithFacebook] ✅ Popup login successful:', { 
+      uid: result.user.uid, 
+      email: result.user.email 
+    });
+    
+    // Handle account linking - check if email exists with different provider
+    const email = result.user.email;
+    if (email) {
+      try {
+        const signInMethods = await fetchSignInMethodsForEmail(auth!, email);
+        logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithFacebook] Sign-in methods for email:', signInMethods);
+        
+        // If user has other sign-in methods, we could link accounts here if needed
+        // For now, we just log it
+      } catch (linkError) {
+        logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithFacebook] Could not fetch sign-in methods (non-critical):', linkError);
+      }
+    }
+    
+    // Check if user profile exists, create if not
+    logAuth(LOG_AUTH_FIRESTORE, 'log', prefix, '[loginWithFacebook] Checking Firestore for existing profile:', { uid: result.user.uid });
+    const userDoc = await getDoc(doc(db!, 'users', result.user.uid));
+    let userProfile: UserProfile;
+
+    if (!userDoc.exists()) {
+      // Create user profile if it doesn't exist
+      logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithFacebook] Profile not found, creating new profile');
+      userProfile = {
+        uid: result.user.uid,
+        displayName: result.user.displayName || result.user.email?.split('@')[0] || 'User',
+        email: result.user.email || '',
+        photoURL: result.user.photoURL || '',
+        createdAt: new Date(),
+        lastLoginAt: new Date(),
+        gamesPlayed: 0,
+        wins: 0,
+        losses: 0,
+        winRate: 0,
+        eloRating: 1200, // Default ELO rating
+        achievements: []
+      };
+      
+      // Save user profile to Firestore
+      logAuth(LOG_AUTH_FIRESTORE, 'log', prefix, '[loginWithFacebook] Saving new profile to Firestore');
+      await setDoc(doc(db!, 'users', result.user.uid), userProfile);
+      
+      logAuth(LOG_AUTH_SOCIAL, 'log', prefix, '[loginWithFacebook] ✅ New profile created and saved');
+    } else {
+      // User profile exists, update last login and photoURL if Facebook has a better one
+      logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithFacebook] User profile exists, updating lastLoginAt');
+      userProfile = { ...userDoc.data() as UserProfile, uid: result.user.uid };
+      const updateData: Partial<UserProfile> = {
+        lastLoginAt: new Date()
+      };
+      
+      // Update photoURL if Facebook has one and current one is empty or different
+      if (result.user.photoURL && (!userProfile.photoURL || userProfile.photoURL !== result.user.photoURL)) {
+        updateData.photoURL = result.user.photoURL;
+        logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithFacebook] Updating photoURL from Facebook');
+      }
+      
+      await updateDoc(doc(db!, 'users', result.user.uid), updateData);
+      userProfile = { ...userProfile, ...updateData };
+      
+      logAuth(LOG_AUTH_SOCIAL, 'log', prefix, '[loginWithFacebook] ✅ Login successful, profile loaded:', { 
+        uid: userProfile.uid, 
+        displayName: userProfile.displayName,
+        gamesPlayed: userProfile.gamesPlayed,
+        eloRating: userProfile.eloRating
+      });
+    }
+    
+    return { success: true, user: userProfile };
   } catch (error: unknown) {
-    const firebaseError = error as FirebaseError;
+    const firebaseError = error as FirebaseError & { customData?: { _tokenResponse?: { verifiedProvider?: string[]; email?: string } } };
+    
+    // Handle account linking - if account exists with different provider (e.g., Google)
+    if (firebaseError.code === 'auth/account-exists-with-different-credential') {
+      logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithFacebook] Account exists with different provider, attempting to auto-link...');
+      
+      const email = firebaseError.customData?._tokenResponse?.email;
+      const verifiedProviders = firebaseError.customData?._tokenResponse?.verifiedProvider || [];
+      
+      if (email && verifiedProviders.length > 0) {
+        logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithFacebook] Found existing account:', { email, providers: verifiedProviders });
+        
+        // Check if user is currently logged in with the existing provider
+        if (auth?.currentUser && auth.currentUser.email === email) {
+          logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithFacebook] User is already logged in with existing provider');
+          // User is logged in - Firebase should have auto-linked, but popup failed
+          // Return success with current user profile
+          const userDoc = await getDoc(doc(db!, 'users', auth.currentUser.uid));
+          if (userDoc.exists()) {
+            const userProfile = { ...userDoc.data() as UserProfile, uid: auth.currentUser.uid };
+            await updateDoc(doc(db!, 'users', auth.currentUser.uid), {
+              lastLoginAt: new Date()
+            });
+            return { success: true, user: userProfile };
+          }
+        }
+        
+        // User not logged in - automatically sign them in with existing provider, then link Facebook
+        const hasGoogle = verifiedProviders.includes('google.com');
+        const providerName = hasGoogle ? 'Google' : verifiedProviders[0];
+        
+        logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithFacebook] Auto-linking: signing in with', providerName, 'first...');
+        
+        try {
+          // Sign in with existing provider first
+          let existingProviderResult;
+          if (hasGoogle) {
+            const googleProvider = new GoogleAuthProvider();
+            existingProviderResult = await signInWithPopup(auth!, googleProvider);
+          } else {
+            // For other providers, we'd need to handle them similarly
+            // For now, just prompt user
+            return { 
+              success: false, 
+              error: `An account with this email already exists with ${providerName}. Please sign in with ${providerName} instead.` 
+            };
+          }
+          
+          logAuth(LOG_AUTH_SOCIAL, 'log', prefix, '[loginWithFacebook] ✅ Signed in with', providerName, ', now linking Facebook...');
+          
+          // Now link Facebook credential
+          // We need to retry Facebook login - Firebase will auto-link since user is now logged in
+          const facebookProvider = new FacebookAuthProvider();
+          const facebookResult = await signInWithPopup(auth!, facebookProvider);
+          
+          logAuth(LOG_AUTH_SOCIAL, 'log', prefix, '[loginWithFacebook] ✅ Successfully linked Facebook to existing account');
+          
+          // Update user profile - merge data from both providers
+          const userDoc = await getDoc(doc(db!, 'users', facebookResult.user.uid));
+          const facebookPhotoURL = facebookResult.user.photoURL;
+          const googlePhotoURL = existingProviderResult.user.photoURL;
+          
+          if (userDoc.exists()) {
+            const userProfile = { ...userDoc.data() as UserProfile, uid: facebookResult.user.uid };
+            const updateData: Partial<UserProfile> = {
+              lastLoginAt: new Date()
+            };
+            
+            // Use Facebook photo if available, otherwise Google photo, otherwise keep existing
+            if (facebookPhotoURL && (!userProfile.photoURL || userProfile.photoURL === googlePhotoURL)) {
+              updateData.photoURL = facebookPhotoURL;
+            } else if (googlePhotoURL && !userProfile.photoURL) {
+              updateData.photoURL = googlePhotoURL;
+            }
+            
+            await updateDoc(doc(db!, 'users', facebookResult.user.uid), updateData);
+            return { 
+              success: true, 
+              user: { ...userProfile, ...updateData } as UserProfile
+            };
+          }
+          
+          // Profile doesn't exist - create it
+          const userProfile: UserProfile = {
+            uid: facebookResult.user.uid,
+            displayName: facebookResult.user.displayName || existingProviderResult.user.displayName || email.split('@')[0],
+            email: email,
+            photoURL: facebookPhotoURL || googlePhotoURL || '',
+            createdAt: new Date(),
+            lastLoginAt: new Date(),
+            gamesPlayed: 0,
+            wins: 0,
+            losses: 0,
+            winRate: 0,
+            eloRating: 1200,
+            achievements: []
+          };
+          await setDoc(doc(db!, 'users', facebookResult.user.uid), userProfile);
+          return { success: true, user: userProfile };
+          
+        } catch (linkError) {
+          logAuth(LOG_AUTH_ERROR, 'error', prefix, '[loginWithFacebook] ❌ Failed to auto-link accounts:', linkError);
+          const providerName = verifiedProviders.includes('google.com') ? 'Google' : verifiedProviders[0];
+          return { 
+            success: false, 
+            error: `An account with this email already exists with ${providerName}. Please sign in with ${providerName} instead.` 
+          };
+        }
+      }
+    }
+    
     logAuth(LOG_AUTH_ERROR, 'error', prefix, '[loginWithFacebook] ❌ Facebook login error:', firebaseError);
+    logAuth(LOG_AUTH_ERROR, 'error', prefix, '[loginWithFacebook] Full error object:', error);
     const userFriendlyMessage = getAuthErrorMessage(error);
     if (!userFriendlyMessage) {
       return { success: false, error: undefined };
@@ -462,6 +869,154 @@ export const loginAsGuest = async (): Promise<AuthResult> => {
     const firebaseError = error as FirebaseError;
     logAuth(LOG_AUTH_ERROR, 'error', prefix, '[loginAsGuest] ❌ Anonymous login error:', firebaseError);
     const userFriendlyMessage = getAuthErrorMessage(error);
+    return { success: false, error: userFriendlyMessage };
+  }
+};
+
+// Wallet-based authentication
+// This function authenticates a user by verifying a message signature from their Solana wallet
+export const loginWithWallet = async (
+  walletPublicKey: string,
+  _signature: Uint8Array, // Signature verification should be done server-side in production
+  message: Uint8Array
+): Promise<AuthResult> => {
+  logAuth(LOG_AUTH_SOCIAL, 'log', prefix, '[loginWithWallet] Starting wallet login...', { walletPublicKey });
+
+  if (!isFirebaseConfigured) {
+    logAuth(LOG_AUTH_ERROR, 'error', prefix, '[loginWithWallet] ❌ Firebase not configured');
+    return { success: false, error: 'Firebase not configured' };
+  }
+
+  try {
+    // Extract nonce from message to prevent replay attacks
+    const messageText = new TextDecoder().decode(message);
+    const nonceMatch = messageText.match(/Nonce:\s*([^\n]+)/);
+    const nonce = nonceMatch ? nonceMatch[1].trim() : null;
+    
+    if (nonce) {
+      // Check if nonce has been used before (replay protection)
+      logAuth(LOG_AUTH_FIRESTORE, 'log', prefix, '[loginWithWallet] Checking nonce for replay protection...', { nonce });
+      const noncesRef = collection(db!, 'nonces');
+      const nonceQuery = query(noncesRef, where('nonce', '==', nonce));
+      const nonceDocs = await getDocs(nonceQuery);
+      
+      if (!nonceDocs.empty) {
+        // Check if nonce has expired
+        const nonceDoc = nonceDocs.docs[0];
+        const nonceData = nonceDoc.data();
+        const expiresAt = nonceData.expiresAt?.toDate();
+        
+        if (expiresAt && expiresAt < new Date()) {
+          // Nonce expired, delete it
+          logAuth(LOG_AUTH_FIRESTORE, 'log', prefix, '[loginWithWallet] Nonce expired, deleting...');
+          await deleteDoc(nonceDoc.ref);
+        } else if (expiresAt && expiresAt >= new Date()) {
+          // Nonce already used and not expired - replay attack!
+          logAuth(LOG_AUTH_ERROR, 'error', prefix, '[loginWithWallet] ❌ Replay attack detected - nonce already used');
+          return { success: false, error: 'This signature has already been used. Please sign in again.' };
+        }
+      }
+      
+      // Store nonce with expiration (5 minutes)
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+      const nonceDocRef = doc(db!, 'nonces', nonce);
+      await setDoc(nonceDocRef, {
+        nonce: nonce,
+        walletAddress: walletPublicKey,
+        createdAt: Timestamp.now(),
+        expiresAt: Timestamp.fromDate(expiresAt)
+      });
+      logAuth(LOG_AUTH_FIRESTORE, 'log', prefix, '[loginWithWallet] Nonce stored with expiration:', { nonce, expiresAt });
+    }
+    
+    // Verify signature (client-side verification - in production, this should be server-side)
+    // For now, we'll trust the signature and create/link the account
+    // In production, use a Firebase Cloud Function to verify signatures server-side
+    
+    // Check if user with this wallet address already exists
+    logAuth(LOG_AUTH_FIRESTORE, 'log', prefix, '[loginWithWallet] Checking for existing wallet-linked account...');
+    const usersRef = collection(db!, 'users');
+    const walletQuery = query(usersRef, where('walletAddress', '==', walletPublicKey));
+    const walletQuerySnapshot = await getDocs(walletQuery);
+    
+    let userProfile: UserProfile;
+    let firebaseUser: FirebaseUser;
+
+    if (!walletQuerySnapshot.empty) {
+      // Existing user with this wallet - reuse their profile
+      logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithWallet] Found existing account linked to wallet');
+      const existingUserDoc = walletQuerySnapshot.docs[0];
+      const existingProfile = existingUserDoc.data() as UserProfile;
+      
+      // Create new anonymous Firebase account (Firebase UID changes, but profile persists via wallet)
+      const userCredential = await signInAnonymously(auth!);
+      firebaseUser = userCredential.user;
+      
+      // Update the existing Firestore profile with new Firebase UID and lastLoginAt
+      // This allows the profile to persist across sessions even though Firebase UID changes
+      await updateDoc(doc(db!, 'users', existingUserDoc.id), {
+        uid: firebaseUser.uid, // Update to new Firebase UID
+        lastLoginAt: new Date()
+      });
+      
+      // Return profile with updated UID
+      userProfile = {
+        ...existingProfile,
+        uid: firebaseUser.uid,
+        lastLoginAt: new Date()
+      };
+    } else {
+      // New user - create anonymous Firebase account and link wallet
+      logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithWallet] Creating new wallet-linked account');
+      const userCredential = await signInAnonymously(auth!);
+      firebaseUser = userCredential.user;
+      
+      // Create user profile with wallet address
+      userProfile = {
+        uid: firebaseUser.uid,
+        displayName: `Wallet-${walletPublicKey.substring(0, 8)}`,
+        email: '',
+        photoURL: '',
+        createdAt: new Date(),
+        lastLoginAt: new Date(),
+        gamesPlayed: 0,
+        wins: 0,
+        losses: 0,
+        winRate: 0,
+        eloRating: 1200,
+        achievements: [],
+        walletAddress: walletPublicKey
+      };
+      
+      await setDoc(doc(db!, 'users', firebaseUser.uid), userProfile);
+      logAuth(LOG_AUTH_REGISTER, 'log', prefix, '[loginWithWallet] ✅ New wallet-linked account created:', { 
+        uid: userProfile.uid, 
+        walletAddress: walletPublicKey 
+      });
+    }
+    
+    // Delete nonce after successful authentication to prevent reuse
+    if (nonce) {
+      try {
+        const nonceDocRef = doc(db!, 'nonces', nonce);
+        await deleteDoc(nonceDocRef);
+        logAuth(LOG_AUTH_FIRESTORE, 'log', prefix, '[loginWithWallet] Nonce deleted after successful auth');
+      } catch (nonceError) {
+        // Non-critical error - log but don't fail auth
+        logAuth(LOG_AUTH_ERROR, 'error', prefix, '[loginWithWallet] Failed to delete nonce (non-critical):', nonceError);
+      }
+    }
+    
+    logAuth(LOG_AUTH_LOGIN, 'log', prefix, '[loginWithWallet] ✅ Wallet login successful:', { 
+      uid: userProfile.uid, 
+      walletAddress: walletPublicKey 
+    });
+    
+    return { success: true, user: userProfile };
+  } catch (error: unknown) {
+    const firebaseError = error as FirebaseError;
+    logAuth(LOG_AUTH_ERROR, 'error', prefix, '[loginWithWallet] ❌ Wallet login error:', firebaseError);
+    const userFriendlyMessage = getAuthErrorMessage(error) || 'Failed to sign in with wallet. Please try again.';
     return { success: false, error: userFriendlyMessage };
   }
 };

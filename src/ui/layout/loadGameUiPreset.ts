@@ -2,7 +2,7 @@ import {
   PLAYER_UI_SERIALIZABLE_FIELDS,
   sanitizePlayerUIOverrides,
   type SerializablePlayerUIKey,
-} from '@ui/components/GameScreen/PlayerUI';
+} from '@/ui/components/GameScreen/PlayerUI';
 import type {
   SerializedGameAsset,
   SerializedLayoutPreset,
@@ -153,13 +153,12 @@ const normalizeSeat = (input: SerializedSeatLayout | undefined, fallback?: SeatL
   };
 
   const overrides: Partial<Record<SerializablePlayerUIKey, number>> = {};
-  PLAYER_UI_SERIALIZABLE_FIELDS.forEach(({ key }) => {
-    const normalizedKey = key as SerializablePlayerUIKey;
-    const incomingValue = input && typeof input[normalizedKey] === 'number' ? Number(input[normalizedKey]) : undefined;
-    const fallbackValue =
-      fallbackSeat && typeof fallbackSeat.playerOverrides?.[normalizedKey] === 'number'
-        ? Number(fallbackSeat.playerOverrides?.[normalizedKey])
-        : undefined;
+  PLAYER_UI_SERIALIZABLE_FIELDS.forEach((field: { key: string }) => {
+    const normalizedKey = field.key as SerializablePlayerUIKey;
+    const inputValue = input?.[normalizedKey];
+    const incomingValue = typeof inputValue === 'number' ? Number(inputValue) : undefined;
+    const fallbackOverrideValue = fallbackSeat?.playerOverrides?.[normalizedKey];
+    const fallbackValue = typeof fallbackOverrideValue === 'number' ? Number(fallbackOverrideValue) : undefined;
     const resolved = incomingValue ?? fallbackValue;
     if (resolved !== undefined && Number.isFinite(resolved)) {
       overrides[normalizedKey] = resolved;

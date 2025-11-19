@@ -1,23 +1,21 @@
 import React, { useState, useRef } from 'react';
-import { useGameStore } from '../store/gameStore';
-import { useAssetManager } from '../utils/useAssetManager';
-import { useAuth } from '../providers/AuthProvider';
-import DynamicBackground3D from '../ui/components/Background/DynamicBackground3D';
-import type { RotationControlAPI } from '../ui/components/Background/DynamicBackground3D';
-import { AssetLoadingScreen } from '../ui/components/Loading/AssetLoadingScreen';
-import { GameLoadingScreen } from '../ui/components/Loading/GameLoadingScreen';
-import { ErrorScreen } from '../ui/components/Error/ErrorScreen';
-import { AuthScreen } from '../ui/components/Auth/AuthScreen';
-import { useAuthHandlers } from '../hooks/useAuthHandlers';
-import { useMainAppLogger } from '../hooks/useMainAppLogger';
-import { useLoadingState } from '../hooks/useLoadingState';
-import GameScreen from '../ui/components/GameScreen/GameScreen';
+import { useGameStore } from '@store';
+import { useAssetManager } from '@utils/useAssetManager';
+import { useAuth } from '@providers';
+import { DynamicBackground3D, AssetLoadingScreen, AppLoadingScreen, ErrorScreen, AuthScreen, GameScreen, type RotationControlAPI } from '@ui';
+import { useAuthHandlers, useMainAppLogger, useLoadingState } from '@hooks';
 
-const workOngameScene = true; // toggle while iterating on the dedicated game scene workbench
+const workOngameScene = false; // toggle while iterating on the dedicated game scene workbench
 
 const AuthenticatedApp: React.FC = () => {
   const { isAuthenticated, user, login, signUp, logout, loginWithFacebook, loginWithGoogle, loginAsGuest, sendPasswordReset } = useAuth();
-  const authHandlers = useAuthHandlers(login, signUp, loginWithFacebook, loginWithGoogle, loginAsGuest);
+  // Wallet login is handled directly in LoginDialog component
+  const handleWalletLogin = async (): Promise<{ success: boolean; error?: string }> => {
+    // This will be handled in LoginDialog with actual wallet connection
+    return { success: false, error: 'Please connect your wallet in the login dialog' };
+  };
+  
+  const authHandlers = useAuthHandlers(login, signUp, loginWithFacebook, loginWithGoogle, loginAsGuest, handleWalletLogin);
   const logger = useMainAppLogger();
   const { error } = useGameStore();
   const { isInitialized, isLoading, error: assetError } = useAssetManager({ autoInitialize: true });
@@ -72,7 +70,8 @@ const AuthenticatedApp: React.FC = () => {
         }} 
       />
       
-      {shouldShowLoading && <GameLoadingScreen isBackgroundReady={isBackgroundReady} />}
+      {/* Initial app loading - shows while 3D background loads, before login/welcome page */}
+      {shouldShowLoading && !isAuthenticated && <AppLoadingScreen isBackgroundReady={isBackgroundReady} />}
       
       <AuthScreen
         isAuthenticated={isAuthenticated}
@@ -83,6 +82,7 @@ const AuthenticatedApp: React.FC = () => {
         onFacebookLogin={authHandlers.facebookLogin}
         onGoogleLogin={authHandlers.googleLogin}
         onGuestLogin={authHandlers.guestLogin}
+        onWalletLogin={authHandlers.walletLogin}
         onLogout={logout}
         onSendPasswordReset={sendPasswordReset}
         onLogoutClick={() => logger.logUI('[onClick] Logout button clicked')}

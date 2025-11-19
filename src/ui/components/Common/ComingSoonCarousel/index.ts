@@ -1,0 +1,2 @@
+export { ComingSoonCarousel } from './ComingSoonCarousel';
+

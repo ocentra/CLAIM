@@ -10,9 +10,127 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
+  padding: 0.5rem 0;
+  margin: 0;
+  margin-bottom: 0.5rem;
   z-index: 1000;
   background: transparent;
+}
+
+/* Welcome variant - centered circular logo */
+.game-header--welcome .header-container--welcome {
+  width: 100%;
+  max-width: 1400px;
+  height: 100%;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  position: relative;
+  box-sizing: border-box;
+}
+
+/* Logo unit - groups Ocentra, Circle, Games as single unit */
+.header-logo-unit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex: 0 1 auto;
+  min-width: 0;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+}
+
+.header-text-image {
+  height: 37.5%;
+  max-height: 26px;
+  width: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+  flex-shrink: 1;
+  min-width: 0;
+  display: block;
+}
+
+.header-text-left {
+  order: 1;
+  margin-right: 0.75rem;
+}
+
+.header-text-right {
+  order: 3;
+  margin-left: 0.4rem;
+}
+
+
+/* Circular logo wrapper - centered */
+.header-logo-circle-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  order: 2;
+  margin: 0;
+}
+
+.header-logo-circle {
+  width: 80px;
+  height: 80px;
+  min-width: 60px;
+  min-height: 60px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.header-logo-circle:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 6px 30px rgba(0, 0, 0, 0.4);
+  transform: scale(1.05);
+}
+
+.header-logo-circle-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+/* Right side for welcome variant - break out of container to go edge-to-edge */
+.game-header--welcome .header-right--welcome {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 26px;
+  background: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0;
+  margin: 0;
+  width: 100vw;
+  margin-left: calc(-50vw + 50%);
+  z-index: 1;
 }
 
 /* Parent container - fully transparent */
@@ -24,27 +142,122 @@
   background: transparent;
 }
 
-/* Left child - half of parent, semi-transparent */
-.header-left {
+/* Left child - empty space for game variant */
+.game-header--game .header-left {
   flex: 1;
   height: 40%;
   background: rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  padding-right: 2rem;
+  justify-content: flex-start;
+  padding-left: 0;
+  min-width: 0;
+  position: relative;
+}
+
+/* Home button in header */
+.header-home-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.2rem 1rem 0.2rem 0.2rem;
+  background: rgba(255, 255, 255, 0.08);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  border-radius: 25px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.95);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  font-family: inherit;
+  margin-left: 0.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  height: 38px;
+}
+
+.header-home-button:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.header-home-button .home-icon {
+  font-size: 1.2rem;
+  line-height: 1;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.header-home-button .home-text {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Logo Section */
+.header-logo-section {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+}
+
+.header-logo-section:hover {
+  opacity: 0.9;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.header-logo {
+  height: 40px;
+  width: auto;
+  object-fit: contain;
+}
+
+.header-brand-text {
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 1.1rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 /* Center child - just a border */
 .header-center {
-  padding: 0.3rem 2rem;
+  padding: 0.5rem 2rem;
   border: 2px solid rgba(255, 255, 255, 0.4);
   background: rgba(255, 255, 255, 0.05);
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 25px;
-  height: 38px;
+  min-height: 38px;
+}
+
+.header-center-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+.header-tagline {
+  font-size: clamp(0.75rem, 1.5vw, 0.9rem);
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0;
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+  white-space: nowrap;
 }
 
 /* Right child - half of parent, semi-transparent */
@@ -54,8 +267,8 @@
   background: rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  padding-left: 2rem;
+  justify-content: flex-end;
+  padding-right: 0;
 }
 
 .game-title {
@@ -95,6 +308,18 @@
 .user-profile-section {
   position: relative;
   margin-left: auto;
+  margin-right: 0.5rem;
+}
+
+/* Welcome variant - profile positioned at right edge */
+.game-header--welcome .user-profile-section {
+  position: absolute;
+  right: calc(-50vw + 50%);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  margin: 0;
+  padding-right: 0.5rem;
 }
 
 .user-profile-compact {
@@ -328,8 +553,14 @@
 }
 
 /* Responsive */
+@media (max-width: 1400px) {
+  .game-header--welcome .header-container--welcome {
+    max-width: 100%;
+  }
+}
+
 @media (max-width: 768px) {
-  .game-header {
+  .game-header--welcome .header-container--welcome {
     padding: 0 1rem;
   }
   
@@ -351,8 +582,69 @@
     display: none;
   }
   
+  .header-logo-section {
+    gap: 0.5rem;
+  }
+  
+  .header-logo {
+    height: 32px;
+  }
+  
+  .header-brand-text {
+    font-size: 0.9rem;
+  }
+  
+  .header-logo-unit {
+    gap: 0.5rem;
+    transform: translate(-50%, -50%) scale(0.85);
+  }
+
+  .header-logo-circle {
+    width: 60px;
+    height: 60px;
+    min-width: 50px;
+    min-height: 50px;
+  }
+  
+  .header-logo-circle-image {
+    width: 100%;
+    height: 100%;
+  }
+
+  .header-text-image {
+    max-height: 19px;
+    height: 30%;
+  }
+
+  .header-text-right {
+    margin-left: 0.3rem;
+  }
+  
   .decoration-line {
     display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .header-logo-unit {
+    gap: 0.4rem;
+    transform: translate(-50%, -50%) scale(0.75);
+  }
+
+  .header-logo-circle {
+    width: 50px;
+    height: 50px;
+    min-width: 45px;
+    min-height: 45px;
+  }
+
+  .header-text-image {
+    max-height: 15px;
+    height: 28%;
+  }
+
+  .header-text-right {
+    margin-left: 0.25rem;
   }
 }
 

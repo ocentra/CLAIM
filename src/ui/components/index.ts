@@ -4,6 +4,7 @@ export { default as LoginDialog } from './Auth/LoginDialog'
 
 // Background
 export { default as DynamicBackground3D } from './Background/DynamicBackground3D'
+export type { RotationControlAPI } from './Background/DynamicBackground3D'
 
 // Error handling
 export { ErrorScreen } from './Error/ErrorScreen'
@@ -28,10 +29,31 @@ export { ProfilePictureModal } from './Header/ProfilePictureModal'
 
 // Loading states
 export { AssetLoadingScreen } from './Loading/AssetLoadingScreen'
-export { GameLoadingScreen } from './Loading/GameLoadingScreen'
+export { AppLoadingScreen } from './Loading/GameLoadingScreen'
 
-// Welcome / onboarding
-export { WelcomeScreen } from './Welcome/WelcomeScreen'
-export { GameModeSelector } from './Welcome/GameModeSelector'
-export { GameInfoTabs } from './Welcome/GameInfoTabs'
+// Welcome folder deleted - use Home/Claim instead
+
+// Home (main welcome/store page)
+export { Home } from './Home/Home'
+// GameCard moved to Common - use GameCard from Common instead
+export type { GameInfo } from './Home/Home'
+
+// Games Pages (all game-specific pages)
+export {
+  ClaimPage,
+  ClaimGameModeSelector,
+  ClaimGameInfoTabs,
+  ThreeCardBragPage,
+  ThreeCardBragGameModeSelector,
+  ThreeCardBragGameInfoTabs,
+} from './GamesPage'
+
+// Common/Shared components
+export { FeaturedGameCarousel } from './Common/FeaturedGameCarousel'
+export { ComingSoonCarousel } from './Common/ComingSoonCarousel'
+export { GameCard } from './Common/GameCard'
+export { GameBadgesOverlay } from './Common/GameBadgesOverlay'
+export type { GameBadgesOverlayProps } from './Common/GameBadgesOverlay'
+
+// Game Store (deleted - use Home instead)
 

@@ -5,6 +5,7 @@
   width: 100%;
   height: 100%;
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
   z-index: 2000;
@@ -364,4 +365,118 @@
 
 .guest-button {
   /* background: linear-gradient(45deg, #4285f4, #5a95f5); */
+}
+
+/* Logo Section - Outside dialog */
+.login-logo-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+  gap: 10px;
+}
+
+.login-logo {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  animation: logoGlow 2s ease-in-out infinite alternate;
+}
+
+@keyframes logoGlow {
+  from {
+    filter: drop-shadow(0 0 5px rgba(0, 238, 255, 0.5));
+  }
+  to {
+    filter: drop-shadow(0 0 15px rgba(0, 238, 255, 0.8));
+  }
+}
+
+.login-brand-text {
+  color: #00eeff;
+  font-size: 24px;
+  font-weight: bold;
+  margin: 0;
+  text-shadow: 0 0 10px rgba(0, 238, 255, 0.5);
+  letter-spacing: 2px;
+}
+
+/* Footer wrapper - Fixed at bottom of viewport */
+.login-footer-wrapper {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  width: 100%;
+  z-index: 1999; /* Just below dialog overlay */
+}
+
+/* Hidden file input */
+#avatar-upload {
+  display: none;
+}
+
+/* Validation error messages */
+.validation-error {
+  color: #c33;
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+/* Forgot password link */
+.forgot-password-link {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 0.875rem;
+  margin-top: 0.5rem;
+  text-align: right;
+  width: 100%;
+  text-decoration: underline;
+}
+
+/* Forgot password section */
+.forgot-password-section {
+  margin-top: 1rem;
+}
+
+.forgot-password-section p {
+  margin-bottom: 1rem;
+  color: #666;
+  font-size: 0.875rem;
+}
+
+.forgot-password-section .sign-in-button {
+  margin-bottom: 0.5rem;
+}
+
+.back-to-signin-button {
+  background: none;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  font-size: 0.875rem;
+  width: 100%;
+  text-decoration: underline;
+}
+
+/* Message display (error/success) */
+.message-display {
+  padding: 0.75rem;
+  border-radius: 4px;
+  margin-top: 1rem;
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+.message-display.error {
+  background-color: #fee;
+  color: #c33;
+}
+
+.message-display.success {
+  background-color: #efe;
+  color: #3c3;
 }

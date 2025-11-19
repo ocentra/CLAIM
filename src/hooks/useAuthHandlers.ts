@@ -12,6 +12,7 @@ interface AuthHandlers {
   facebookLogin: () => Promise<{ success: boolean; error?: string }>;
   googleLogin: () => Promise<{ success: boolean; error?: string }>;
   guestLogin: () => Promise<{ success: boolean; error?: string }>;
+  walletLogin: () => Promise<{ success: boolean; error?: string }>;
 }
 
 export function useAuthHandlers(
@@ -19,7 +20,8 @@ export function useAuthHandlers(
   signUp: (userData: { alias: string; avatar: string; username: string; password: string }) => Promise<{ success: boolean; error?: string }>,
   loginWithFacebook: () => Promise<{ success: boolean; error?: string }>,
   loginWithGoogle: () => Promise<{ success: boolean; error?: string }>,
-  loginAsGuest: () => Promise<{ success: boolean; error?: string }>
+  loginAsGuest: () => Promise<{ success: boolean; error?: string }>,
+  loginWithWallet: () => Promise<{ success: boolean; error?: string }>
 ): AuthHandlers {
   return {
     login: async (username: string, password: string) => {
@@ -101,6 +103,22 @@ export function useAuthHandlers(
         return { success: result.success, error: result.error };
       } catch (error) {
         logAuth(LOG_AUTH_ERROR, 'error', prefix, '[onGuestLogin] ❌ Exception in Guest login callback:', error);
+        return { success: false, error: 'An unexpected error occurred' };
+      }
+    },
+
+    walletLogin: async () => {
+      try {
+        logAuth(LOG_AUTH_CALLBACKS, 'log', prefix, '[onWalletLogin] Wallet login callback called');
+        const result = await loginWithWallet();
+        if (result.success) {
+          logAuth(LOG_AUTH_CALLBACKS, 'log', prefix, '[onWalletLogin] ✅ Wallet login callback successful');
+        } else {
+          logAuth(LOG_AUTH_ERROR, 'error', prefix, '[onWalletLogin] ❌ Wallet login callback failed:', result.error);
+        }
+        return { success: result.success, error: result.error };
+      } catch (error) {
+        logAuth(LOG_AUTH_ERROR, 'error', prefix, '[onWalletLogin] ❌ Exception in Wallet login callback:', error);
         return { success: false, error: 'An unexpected error occurred' };
       }
     },

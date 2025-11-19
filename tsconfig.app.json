@@ -17,8 +17,13 @@
       "@services/*": ["src/services/*"],
       "@providers": ["src/providers/index.ts"],
       "@providers/*": ["src/providers/*"],
+      "@store": ["src/store/index.ts"],
+      "@store/*": ["src/store/*"],
+      "@hooks": ["src/hooks/index.ts"],
+      "@hooks/*": ["src/hooks/*"],
       "@constants/*": ["src/constants/*"],
       "@types": ["src/types/index.ts"],
+      "@ui": ["src/ui/components"],
       "@ui/*": ["src/ui/*"],
       "@config/*": ["src/config/*"],
       "@assets/*": ["src/assets/*"]

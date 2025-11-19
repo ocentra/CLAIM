@@ -5,7 +5,7 @@ import { StartLobbyAsHostEvent } from '@lib/eventing/events/lobby/StartLobbyAsHo
 import { DecisionTakenEvent } from '@lib/eventing/events/game/DecisionTakenEvent';
 import { GameClient } from './GameClient';
 import { Connection } from '@solana/web3.js';
-import { Wallet } from '@coral-xyz/anchor';
+import type { Wallet } from '@coral-xyz/anchor';
 import { AnchorClient } from './AnchorClient';
 
 export class SolanaEventBridge {
