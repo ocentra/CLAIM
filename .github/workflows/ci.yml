@@ -96,6 +96,12 @@ jobs:
           cargo install --git https://github.com/coral-xyz/anchor avm --locked --force
           avm install latest
           avm use latest
+          # Anchor should install Solana CLI, but if not, install it manually
+          if ! command -v solana &> /dev/null; then
+            echo "Solana CLI not found after Anchor install, installing manually..."
+            sh -c "$(curl -sSfL https://release.solana.com/stable/install)"
+            echo "$HOME/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
+          fi
       
       - name: Build Solana contract
         working-directory: Rust/ocentra-games
