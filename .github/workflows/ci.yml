@@ -17,7 +17,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
       
       - name: Install dependencies
@@ -91,12 +91,12 @@ jobs:
           avm use latest
       
       - name: Build Solana contract
-        working-directory: Rust/SolanaContract
+        working-directory: Rust/ocentra-games
         run: |
           anchor build
       
       - name: Run Rust tests
-        working-directory: Rust/SolanaContract
+        working-directory: Rust/ocentra-games
         run: |
           anchor test || echo "Rust tests require Solana validator"
       
@@ -105,7 +105,7 @@ jobs:
         if: always()
         with:
           name: solana-idl
-          path: Rust/SolanaContract/target/idl/*.json
+          path: Rust/ocentra-games/target/idl/*.json
 
   build-typescript:
     name: Build TypeScript
@@ -117,7 +117,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
       
       - name: Install dependencies
@@ -145,7 +145,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
       
       - name: Install dependencies
@@ -176,7 +176,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
       
       - name: Install dependencies
