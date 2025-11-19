@@ -24,6 +24,8 @@ jobs:
         run: |
           npm ci
           npm install --no-save --include=optional || true
+          # Ensure sharp is properly installed (needed for image processing in Vite)
+          npm rebuild sharp || echo "Sharp rebuild failed, continuing..."
       
       - name: Run linter
         run: npm run lint
@@ -34,7 +36,7 @@ jobs:
         continue-on-error: false
       
       - name: Run unit tests
-        run: npm test -- --exclude='**/integration/**' --exclude='**/load/**' --exclude='**/e2e/**' --exclude='**/__tests__/integration/**' --exclude='**/__tests__/load/**' --exclude='**/__tests__/e2e/**'
+        run: npm test -- --exclude='**/integration/**' --exclude='**/load/**' --exclude='**/e2e/**' --exclude='**/__tests__/integration/**' --exclude='**/__tests__/load/**' --exclude='**/__tests__/e2e/**' --exclude='Rust/**'
         continue-on-error: false
         env:
           SKIP_SOLANA_TESTS: 'true'
@@ -61,7 +63,7 @@ jobs:
           SKIP_SOLANA_TESTS: 'true'
       
       - name: Generate test coverage
-        run: npm test -- --coverage --exclude='**/integration/**' --exclude='**/load/**' --exclude='**/e2e/**' || echo "Coverage generation failed"
+        run: npm test -- --coverage --exclude='**/integration/**' --exclude='**/load/**' --exclude='**/e2e/**' --exclude='Rust/**' || echo "Coverage generation failed"
         continue-on-error: true
         env:
           SKIP_SOLANA_TESTS: 'true'
@@ -87,9 +89,9 @@ jobs:
           override: true
       
       - name: Install Solana CLI
-        uses: nick-fields/action-solana@v2
-        with:
-          solana-version: stable
+        run: |
+          sh -c "$(curl -sSfL https://release.anza.xyz/stable/install)"
+          echo "/home/runner/.local/share/solana/install/active_release/bin" >> $GITHUB_PATH
       
       - name: Install Anchor
         run: |

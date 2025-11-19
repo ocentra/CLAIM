@@ -27,6 +27,7 @@ export default defineConfig(({ mode = 'test' }) => {
         '**/dist/**',
         '**/e2e/**', // Exclude Playwright E2E tests
         '**/*.e2e.spec.ts',
+        'Rust/**', // Exclude Rust TypeScript tests (run via anchor test in build-rust job)
         // Exclude R2Service.e2e.test.ts from regular test runs (requires Worker to be running)
         // Run it explicitly with: npm run test:storage:e2e
         // Only exclude if NOT explicitly running this specific file
