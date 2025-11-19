@@ -1,0 +1,49 @@
+[1mdiff --git a/Rust/ocentra-games/Anchor.toml b/Rust/ocentra-games/Anchor.toml[m
+[1mnew file mode 100644[m
+[1mindex 0000000..5aa5a59[m
+[1m--- /dev/null[m
+[1m+++ b/Rust/ocentra-games/Anchor.toml[m
+[36m@@ -0,0 +1,23 @@[m
+[32m+[m[32m[toolchain][m
+[32m+[m
+[32m+[m[32m[features][m
+[32m+[m[32mresolution = true[m
+[32m+[m[32mskip-lint = false[m
+[32m+[m
+[32m+[m[32m[programs.devnet][m
+[32m+[m[32mocentra_games = "7eWx3H8bXMif7SDyPS1j5LZw1yUGDNZY592WzEKNf696"[m
+[32m+[m
+[32m+[m[32m[programs.mainnet][m
+[32m+[m[32mocentra_games = "7eWx3H8bXMif7SDyPS1j5LZw1yUGDNZY592WzEKNf696"[m
+[32m+[m
+[32m+[m[32m[registry][m
+[32m+[m[32murl = "https://api.apr.dev"[m
+[32m+[m
+[32m+[m[32m[provider][m
+[32m+[m[32mcluster = "localnet"  # Use local validator for tests (faster, no airdrop limits)[m
+[32m+[m[32mwallet = "~/.config/solana/id.json"[m
+[32m+[m
+[32m+[m[32m[scripts][m
+[32m+[m[32mtest = "find tests -name '*.test.ts' -type f | xargs yarn run ts-mocha -p ./tsconfig.json -t 1000000 --require tsconfig-paths/register --require ./tests/root-hooks.ts"[m
+[32m+[m[32m# Run individual test by ID: TEST_ID=test-id anchor test[m
+[32m+[m[32m# Run tests matching pattern: yarn run ts-mocha -p ./tsconfig.json -t 1000000 --require tsconfig-paths/register --require ./tests/root-hooks.ts --grep 'pattern'[m
+[1mdiff --git a/Rust/ocentra-games/Cargo.toml b/Rust/ocentra-games/Cargo.toml[m
+[1mnew file mode 100644[m
+[1mindex 0000000..f397704[m
+[1m--- /dev/null[m
+[1m+++ b/Rust/ocentra-games/Cargo.toml[m
+[36m@@ -0,0 +1,14 @@[m
+[32m+[m[32m[workspace][m
+[32m+[m[32mmembers = [[m
+[32m+[m[32m    "programs/*"[m
+[32m+[m[32m][m
+[32m+[m[32mresolver = "2"[m
+[32m+[m
+[32m+[m[32m[profile.release][m
+[32m+[m[32moverflow-checks = true[m
+[32m+[m[32mlto = "fat"[m
+[32m+[m[32mcodegen-units = 1[m
+[32m+[m[32m[profile.release.build-override][m
+[32m+[m[32mopt-level = 3[m
+[32m+[m[32mincremental = false[m
+[32m+[m[32mcodegen-units = 1[m
