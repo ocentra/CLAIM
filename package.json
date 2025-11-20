@@ -29,7 +29,7 @@
     "test:e2e:debug": "playwright test --debug",
     "test:firebase": "node scripts/test-firebase.cjs",
     "debug:auth": "node scripts/debug-auth.cjs",
-    "verify:matches": "tsx scripts/verify-matches.ts"
+    "verify:matches": "tsx --tsconfig tsconfig.node.json scripts/verify-matches.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",
