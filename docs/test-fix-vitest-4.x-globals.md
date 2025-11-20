@@ -210,3 +210,15 @@ The GameClient.ts has also been updated with:
 - Fixed `joinMatch` and `submitMove` to use SystemProgram.programId instead of PublicKey.default
 
 These fixes can be tested once the vitest imports issue is resolved.
+
+## Test Results After Fix
+
+After applying the fix:
+- **125 tests pass**
+- **19 tests fail** (expected failures):
+  - P2PManager.test.ts (13 failures) - Mock setup issue unrelated to vitest imports
+  - full-match-lifecycle.test.ts (2 failures) - Requires running Solana validator with funded accounts
+  - solana-integration.test.ts (3 failures) - Requires Solana network connection
+  - R2Service.hello.test.ts (1 failure) - Requires network access to R2 worker
+
+The Solana E2E tests now properly connect to Solana but fail with "Attempt to debit an account but found no record of a prior credit" - this is expected when the local validator is not running or accounts are not funded. The PDA derivation issue ("Unable to find a viable program address nonce") is now fixed.

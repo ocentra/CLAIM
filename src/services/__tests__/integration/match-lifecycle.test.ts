@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+// Using globals from vitest.config.ts (globals: true)
 import { R2Service } from '@services/storage/R2Service';
 import { BatchManager } from '@services/solana/BatchManager';
 import { CanonicalSerializer } from '@lib/match-recording/canonical/CanonicalSerializer';
@@ -78,14 +78,8 @@ describe.skipIf(SKIP_SOLANA_TESTS)('Match Lifecycle Integration', () => {
     expect(hash.length).toBe(64); // SHA-256 hex string
   });
 
-  it('should handle batch creation and manifest generation', async () => {
-    // Skip if R2 is not configured (test requires R2 for persistence)
-    const r2WorkerUrl = process.env.VITE_R2_WORKER_URL;
-    if (!r2WorkerUrl) {
-      console.warn('Skipping test - VITE_R2_WORKER_URL not set');
-      return;
-    }
-
+  it.skipIf(!process.env.VITE_R2_WORKER_URL)('should handle batch creation and manifest generation', async () => {
+    // This test requires R2 for persistence
     // Real test - creates actual batch
     const matchIds: string[] = [];
     const matchHashes: string[] = [];

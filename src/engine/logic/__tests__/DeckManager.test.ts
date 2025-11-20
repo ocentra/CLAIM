@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+// Using globals from vitest.config.ts (globals: true)
 import { DeckManager } from '../DeckManager'
 import { Suit } from '@/types'
 

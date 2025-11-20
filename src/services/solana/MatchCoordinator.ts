@@ -9,7 +9,7 @@ import { CoordinatorWalletPool } from './CoordinatorWalletPool';
 import { RateLimiter, RateLimiterKV } from './RateLimiter';
 import { CircuitBreaker } from './CircuitBreaker';
 import type { MatchRecord, SignatureRecord } from '@lib/match-recording/types';
-import { Connection, type TransactionSignature, PublicKey, Transaction, VersionedTransaction } from '@solana/web3.js';
+import { Connection, type TransactionSignature, PublicKey, Transaction, VersionedTransaction, Keypair } from '@solana/web3.js';
 import type { PlayerAction } from '@types';
 import { AIDecisionRecorder } from '@/ai/match-recording/AIDecisionRecorder';
 import type { ChainOfThoughtSegment } from '@/ai/match-recording/types';
@@ -228,7 +228,9 @@ export class MatchCoordinator {
     matchId: string,
     action: PlayerAction,
     userId: string,  // Per critique Issue #16: Required for rate limiting and audit trail
-    wallet?: { publicKey: PublicKey; signTransaction: (tx: unknown) => Promise<unknown> }
+    wallet?: { publicKey: PublicKey; signTransaction: (tx: unknown) => Promise<unknown> },
+    signer?: Keypair, // Optional keypair signer (like Rust tests use .signers([player]))
+    nonce?: number // Optional nonce for replay protection (must be incrementing per player)
   ): Promise<TransactionSignature> {
     // Per critique Issue #16: userId is REQUIRED for rate limiting and security
     if (!userId || userId.trim().length === 0) {
@@ -276,8 +278,22 @@ export class MatchCoordinator {
     }
 
     // 2. Update off-chain state (optimistic update)
+    // Increment moveCount optimistically to match what will happen on-chain
+    // Only advance currentPlayer for moves that advance turn (pick_up, decline) - matches Rust logic
     const stateBefore = { ...matchState };
-    this.offChainState.set(matchId, matchState);
+    
+    // Rust: Only pick_up (0) and decline (1) advance turn; reveal_floor_card (5) and others don't
+    const advancesTurn = action.type === 'pick_up' || action.type === 'decline';
+    const nextPlayer = advancesTurn 
+      ? (matchState.currentPlayer + 1) % matchState.playerCount
+      : matchState.currentPlayer;
+    
+    const optimisticState = {
+      ...matchState,
+      moveCount: matchState.moveCount + 1, // Optimistically increment move count
+      currentPlayer: nextPlayer, // Only advance if this move type advances turn
+    };
+    this.offChainState.set(matchId, optimisticState);
 
     // 3. Submit Solana transaction with circuit breaker protection
     // Per critique Issue #19: Use circuit breaker to prevent spam failures
@@ -287,7 +303,8 @@ export class MatchCoordinator {
         await this.walletPool.recordTransaction();
       }
       
-      return await this.gameClient.submitMove(matchId, action, signingWallet);
+      // Capture nonce from outer scope - note: submitMove expects (matchId, action, wallet, nonce, signer)
+      return await this.gameClient.submitMove(matchId, action, signingWallet, nonce, signer);
     };
 
     const txPromise = this.circuitBreaker 

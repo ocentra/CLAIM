@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+// Using globals from vitest.config.ts (globals: true)
 import { configureSerialization, deserialize, serialize, serializable } from '../Serializable';
 
 class ChildConfig {

@@ -1,5 +1,5 @@
 import { AnchorClient } from './AnchorClient';
-import { PublicKey, SystemProgram, type TransactionSignature } from '@solana/web3.js';
+import { PublicKey, SystemProgram, type TransactionSignature, Keypair } from '@solana/web3.js';
 import { BN } from '@coral-xyz/anchor';
 import type { PlayerAction } from '@types';
 import { EventBus } from '@lib/eventing';
@@ -48,16 +48,22 @@ export class GameClient {
    * Note: Solana seeds have a 32-byte limit per seed.
    * We use "m" (1 byte) + first 31 bytes of matchId = 32 bytes total.
    * This matches the Rust implementation in tests/common/pda.ts
+   * Uses async findProgramAddress (like Rust tests) instead of findProgramAddressSync
+   * to avoid "Unable to find a viable program address nonce" errors
    */
-  private getMatchPDA(matchId: string): [PublicKey, number] {
+  private async getMatchPDA(matchId: string): Promise<[PublicKey, number]> {
     const matchIdBytes = Buffer.from(matchId, 'utf-8');
-    // Use Math.min to match Rust implementation: 31.min(match_id.len())
-    const truncated = matchIdBytes.slice(0, Math.min(31, matchIdBytes.length));
+    // Match Rust implementation exactly: &match_id.as_bytes()[..31.min(match_id.len())]
+    // For UUID (36 bytes), this takes first 31 bytes
+    // Use slice directly - it already creates a new Buffer with the right length
+    const truncated = matchIdBytes.slice(0, 31);
+    
     const programId = this.getProgramId();
     const seedM = Buffer.from('m');
 
     try {
-      const result = PublicKey.findProgramAddressSync(
+      // Use async version like Rust tests - findProgramAddressSync has issues
+      const result = await PublicKey.findProgramAddress(
         [seedM, truncated],
         programId
       );
@@ -66,9 +72,18 @@ export class GameClient {
       }
       return result;
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
       console.error(`[getMatchPDA] Failed to derive PDA for matchId: ${matchId}`);
       console.error(`[getMatchPDA] Program ID: ${programId.toString()}`);
       console.error(`[getMatchPDA] Seeds: ["m" (${seedM.length} bytes), matchId[0:${truncated.length}] (${truncated.length} bytes)]`);
+      console.error(`[getMatchPDA] MatchId bytes length: ${matchIdBytes.length}, truncated length: ${truncated.length}`);
+      console.error(`[getMatchPDA] Truncated buffer hex: ${truncated.toString('hex')}`);
+      console.error(`[getMatchPDA] SeedM buffer hex: ${seedM.toString('hex')}`);
+      console.error(`[getMatchPDA] Error: ${errorMessage}`);
+      if (errorStack) {
+        console.error(`[getMatchPDA] Stack: ${errorStack}`);
+      }
       throw error;
     }
   }
@@ -94,7 +109,7 @@ export class GameClient {
     const program = this.anchorClient.getProgram();
     const matchId = crypto.randomUUID();
 
-    const [matchPda] = this.getMatchPDA(matchId);
+    const [matchPda] = await this.getMatchPDA(matchId);
     const [registryPda] = this.getRegistryPDA();
 
     if (DEBUG_SOLANA) {
@@ -141,27 +156,77 @@ export class GameClient {
 
   async joinMatch(
     matchId: string,
-    wallet: { publicKey: PublicKey; signTransaction: (tx: unknown) => Promise<unknown> }
+    wallet: { publicKey: PublicKey; signTransaction: (tx: unknown) => Promise<unknown> },
+    userId?: string,
+    signer?: Keypair // Optional keypair signer (like Rust tests use .signers([player]))
   ): Promise<TransactionSignature> {
     this.validateWallet(wallet);
     const program = this.anchorClient.getProgram();
-    
-    const [matchPda] = this.getMatchPDA(matchId);
+
+    const [matchPda] = await this.getMatchPDA(matchId);
+    const [registryPda] = this.getRegistryPDA();
+
+    // Match Rust pattern: For paid matches/tournaments, use PublicKey; for free matches, use Firebase UID
+    // Check match type to determine which identifier to use
+    let effectiveUserId: string;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const matchAccount = await (program.account as any).match.fetch(matchPda);
+      const matchType = matchAccount.matchType || matchAccount.match_type || 0;
+      const isPaidMatch = matchType === 1; // 1 = PAID, 0 = FREE
+      
+      if (isPaidMatch) {
+        // For paid matches/tournaments: Use PublicKey as userId (matches Rust pattern for money matches)
+        effectiveUserId = wallet.publicKey.toString();
+        if (DEBUG_SOLANA) {
+          console.log(`[joinMatch] Paid match detected - using PublicKey as userId: ${effectiveUserId}`);
+        }
+      } else {
+        // For free matches: Use Firebase UID if provided, otherwise use PublicKey as fallback
+        effectiveUserId = userId || wallet.publicKey.toString();
+        if (DEBUG_SOLANA) {
+          console.log(`[joinMatch] Free match - using Firebase UID: ${effectiveUserId}`);
+        }
+      }
+    } catch {
+      // If we can't fetch match account, default to userId if provided, otherwise PublicKey
+      effectiveUserId = userId || wallet.publicKey.toString();
+      if (DEBUG_SOLANA) {
+        console.log(`[joinMatch] Could not fetch match account, using fallback userId: ${effectiveUserId}`);
+      }
+    }
 
     if (DEBUG_SOLANA) {
       console.log(`[joinMatch] Joining match: ${matchId}`);
       console.log(`[joinMatch] Match PDA: ${matchPda.toString()}`);
+      console.log(`[joinMatch] Registry PDA: ${registryPda.toString()}`);
       console.log(`[joinMatch] Player: ${wallet.publicKey.toString()}`);
+      console.log(`[joinMatch] Effective User ID: ${effectiveUserId}`);
     }
+    const userIdParam = userId || '';
 
-    const tx = await program.methods
-      .joinMatch(matchId)
+    // Build the transaction - same pattern as Rust tests
+    // Provider wallet is fee payer, player keypair is additional signer
+    const methodBuilder = program.methods
+      .joinMatch(matchId, userIdParam)
       .accounts({
         matchAccount: matchPda,
+        registry: registryPda,
+        escrowAccount: null, // Not needed for free matches
+        userDepositAccount: null, // Not needed for free matches
+        playerWallet: null, // Not needed for free matches
         player: wallet.publicKey,
         systemProgram: SystemProgram.programId,
-      })
-      .rpc();
+      } as never);
+
+    // Use signer if provided (like Rust tests: .signers([player]).rpc())
+    let tx: string;
+    if (signer) {
+      tx = await methodBuilder.signers([signer]).rpc();
+    } else {
+      // No signer - provider wallet must be the player
+      tx = await methodBuilder.rpc();
+    }
 
     if (DEBUG_SOLANA) {
       console.log(`[joinMatch] Transaction: ${tx}`);
@@ -177,15 +242,18 @@ export class GameClient {
   ): Promise<TransactionSignature> {
     this.validateWallet(wallet);
     const program = this.anchorClient.getProgram();
-    
-    const [matchPda] = this.getMatchPDA(matchId);
+
+    const [matchPda] = await this.getMatchPDA(matchId);
+    const [registryPda] = this.getRegistryPDA();
 
     const tx = await program.methods
       .startMatch(matchId)
       .accounts({
         matchAccount: matchPda,
+        registry: registryPda,
+        escrowAccount: null, // Not needed for free matches
         authority: wallet.publicKey,
-      })
+      } as never)
       .rpc();
 
     await this.confirmTransactionWithRetry(tx);
@@ -196,7 +264,8 @@ export class GameClient {
     matchId: string,
     action: PlayerAction,
     wallet?: { publicKey: PublicKey; signTransaction: (tx: unknown) => Promise<unknown> },
-    nonce?: number // Per critique: nonce for replay protection
+    nonce?: number, // Per critique: nonce for replay protection
+    signer?: Keypair // Optional keypair signer (like Rust tests use .signers([player]))
   ): Promise<TransactionSignature> {
     // Per critique Issue #6: Wallet is optional - coordinator submits on behalf of players
     if (!wallet) {
@@ -205,7 +274,8 @@ export class GameClient {
     this.validateWallet(wallet);
     const program = this.anchorClient.getProgram();
     
-    const [matchPda] = this.getMatchPDA(matchId);
+    const [matchPda] = await this.getMatchPDA(matchId);
+    const [registryPda] = this.getRegistryPDA();
 
     // Fetch current match state to verify match exists
     const matchState = await this.getMatchState(matchId);
@@ -214,48 +284,131 @@ export class GameClient {
     }
 
     const actionType = this.mapActionTypeToU8(action.type);
-    const payload = this.serializeAction(action);
+    
+    // For reveal_floor_card and pick_up, payload should be raw hash bytes (32 bytes), not JSON
+    // Rust validation: pick_up requires payload.len() >= 32 and card hash must match floor card hash
+    let payload: Buffer;
+    if ((action.type === 'reveal_floor_card' || action.type === 'pick_up') && action.data && typeof action.data === 'object' && 'hash' in action.data) {
+      // Extract hash from data and convert to Buffer
+      const hashArray = Array.isArray(action.data.hash) ? action.data.hash : [];
+      if (hashArray.length === 32) {
+        payload = Buffer.from(hashArray);
+      } else {
+        throw new Error(`${action.type} requires 32-byte hash in data.hash, got ${hashArray.length} bytes`);
+      }
+    } else {
+      // For other actions, serialize as JSON
+      payload = this.serializeAction(action);
+    }
     
     // Per critique Issue #5: Use cryptographically secure nonce generation
     // Generate secure random nonce if not provided
     const moveNonce = nonce ?? this.generateSecureNonce();
+    
+    // Validate nonce is a valid number (BN requires valid number)
+    if (moveNonce === undefined || moveNonce === null || isNaN(moveNonce) || !isFinite(moveNonce)) {
+      throw new Error(`Invalid nonce value: ${moveNonce}. Expected a valid number.`);
+    }
+    
+    // Ensure nonce is within safe integer range for BN
+    const safeNonce = Number(moveNonce);
+    if (!Number.isSafeInteger(safeNonce) || safeNonce < 0) {
+      throw new Error(`Nonce ${safeNonce} is out of safe integer range or negative.`);
+    }
 
-    // Derive move PDA matching Rust implementation:
-    // seeds = [b"move", match_id[0..32], match_id[32..], player.key(), nonce.to_le_bytes()]
+    // Derive move PDA matching Rust implementation EXACTLY:
+    // Rust: seeds = [b"move", match_id[0..32], match_id[32..], player.key(), nonce.to_le_bytes()]
     // Note: matchId (UUID) is 36 bytes, so we split it: first 32 bytes + remaining 4 bytes
     const matchIdBytes = Buffer.from(matchId, 'utf-8');
-    const matchIdFirst32 = matchIdBytes.slice(0, 32); // First 32 bytes
-    const matchIdRemaining = matchIdBytes.slice(32); // Remaining bytes (4 for UUID)
-    const nonceBytes = Buffer.from(new Uint8Array(new BN(moveNonce).toArray('le', 8))); // u64 = 8 bytes
-
-    const [movePda] = PublicKey.findProgramAddressSync(
+    // Rust: first32 = matchIdBytes.slice(0, Math.min(32, matchIdBytes.length))
+    const matchIdFirst32 = matchIdBytes.slice(0, Math.min(32, matchIdBytes.length));
+    // Rust: rest = matchIdBytes.slice(Math.min(32, matchIdBytes.length))
+    const matchIdRemaining = matchIdBytes.slice(Math.min(32, matchIdBytes.length));
+    
+    // Match Rust pattern: For paid matches/tournaments, use PublicKey; for free matches, use Firebase UID
+    // Check match type to determine which identifier to use
+    let effectiveUserId: string;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const matchAccount = await (program.account as any).match.fetch(matchPda);
+      const matchType = matchAccount.matchType || matchAccount.match_type || 0;
+      const isPaidMatch = matchType === 1; // 1 = PAID, 0 = FREE
+      
+      if (isPaidMatch) {
+        // For paid matches/tournaments: Use PublicKey as userId (matches Rust pattern for money matches)
+        effectiveUserId = wallet.publicKey.toString();
+        if (DEBUG_SOLANA) {
+          console.log(`[submitMove] Paid match detected - using PublicKey as userId: ${effectiveUserId}`);
+        }
+      } else {
+        // For free matches: Use Firebase UID from action, fallback to PublicKey
+        effectiveUserId = action.playerId || wallet.publicKey.toString();
+        if (DEBUG_SOLANA) {
+          console.log(`[submitMove] Free match - using Firebase UID: ${effectiveUserId}`);
+        }
+      }
+    } catch {
+      // If we can't fetch match account, use Firebase UID from action, fallback to PublicKey
+      effectiveUserId = action.playerId || wallet.publicKey.toString();
+      if (DEBUG_SOLANA) {
+        console.log(`[submitMove] Could not fetch match account, using fallback userId: ${effectiveUserId}`);
+      }
+    }
+    
+    const userId = effectiveUserId;
+    
+    // Rust: nonceBuffer.writeBigUInt64LE(BigInt(nonce.toString()), 0)
+    // Use signer's publicKey for PDA derivation (matches Rust: player.key())
+    const playerPubkey = signer ? signer.publicKey : wallet.publicKey;
+    const nonceBuffer = Buffer.allocUnsafe(8);
+    nonceBuffer.writeBigUInt64LE(BigInt(safeNonce.toString()), 0);
+    
+    // Match Rust test pattern: use async findProgramAddress
+    // Rust: await anchor.web3.PublicKey.findProgramAddress([...], program.programId)
+    const [movePda] = await PublicKey.findProgramAddress(
       [
         Buffer.from('move'),
         matchIdFirst32,
         matchIdRemaining,
-        wallet.publicKey.toBuffer(),
-        nonceBytes
+        playerPubkey.toBuffer(), // Use signer's publicKey (matches Rust pattern)
+        nonceBuffer
       ],
       program.programId
     );
 
-    if (DEBUG_SOLANA) {
-      console.log(`[submitMove] Match: ${matchId}`);
-      console.log(`[submitMove] Match PDA: ${matchPda.toString()}`);
-      console.log(`[submitMove] Move PDA: ${movePda.toString()}`);
-      console.log(`[submitMove] Player: ${wallet.publicKey.toString()}`);
-      console.log(`[submitMove] Action type: ${actionType}, Nonce: ${moveNonce}`);
+    // Always log for debugging (matching Rust test pattern)
+    console.log(`[submitMove] Match: ${matchId}`);
+    console.log(`[submitMove] Match PDA: ${matchPda.toString()}`);
+    console.log(`[submitMove] Registry PDA: ${registryPda.toString()}`);
+    console.log(`[submitMove] Move PDA: ${movePda.toString()}`);
+    console.log(`[submitMove] Player (signer): ${playerPubkey.toString()}, Wallet: ${wallet.publicKey.toString()}`);
+    console.log(`[submitMove] Action type: ${actionType}, Nonce: ${moveNonce}, userId: ${userId}`);
+    console.log(`[submitMove] Payload length: ${payload.length} bytes`);
+    if (action.type === 'pick_up' || action.type === 'reveal_floor_card') {
+      console.log(`[submitMove] Hash payload (first 8 bytes): ${payload.slice(0, 8).toString('hex')}`);
     }
-
-    const tx = await program.methods
-      .submitMove(matchId, actionType, payload, new BN(moveNonce))
+    
+    // Match Rust test pattern EXACTLY: submitMove(matchId, userId, actionType, payload, nonce)
+    // Accounts: matchAccount, registry, moveAccount, player, systemProgram
+    // ALWAYS use .signers([player]) - Rust tests always pass player keypair as signer
+    if (!signer) {
+      throw new Error('Signer keypair is required for submitMove (Rust tests always use .signers([player]))');
+    }
+    
+    // CRITICAL: Use signer's publicKey for player account, not wallet.publicKey
+    // Rust: player: player.publicKey (from signer keypair)
+    const methodBuilder = program.methods
+      .submitMove(matchId, userId, actionType, payload, new BN(safeNonce))
       .accounts({
         matchAccount: matchPda,
+        registry: registryPda,
         moveAccount: movePda,
-        player: wallet.publicKey,
+        player: signer.publicKey, // Use signer's publicKey, not wallet.publicKey (matches Rust pattern)
         systemProgram: SystemProgram.programId,
-      })
-      .rpc();
+      } as never);
+    
+    // Rust tests ALWAYS use .signers([player])
+    const tx = await methodBuilder.signers([signer]).rpc();
 
     if (DEBUG_SOLANA) {
       console.log(`[submitMove] Transaction: ${tx}`);
@@ -293,54 +446,177 @@ export class GameClient {
     }
     const program = this.anchorClient.getProgram();
     
-    const [matchPda] = this.getMatchPDA(matchId);
+    const [matchPda] = await this.getMatchPDA(matchId);
 
     const authority = wallet?.publicKey || program.provider.publicKey;
     if (!authority) {
       throw new Error('Authority (wallet or program provider) is required');
     }
     
+    // Match Rust pattern: Check if match is paid to determine if escrow is needed
+    // For free matches, escrowAccount should be null (matches Rust test pattern)
+    let escrowAccount: PublicKey | null = null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const matchAccount = await (program.account as any).match.fetch(matchPda);
+      const matchType = matchAccount.matchType || matchAccount.match_type || 0;
+      const isPaidMatch = matchType === 1; // 1 = PAID, 0 = FREE
+      
+      if (isPaidMatch) {
+        // For paid matches, derive escrow PDA (matches Rust pattern)
+        // Rust: seeds = [b"escrow", match_account.key().as_ref()]
+        const [escrowPda] = PublicKey.findProgramAddressSync(
+          [Buffer.from('escrow'), matchPda.toBuffer()],
+          this.getProgramId()
+        );
+        escrowAccount = escrowPda;
+        if (DEBUG_SOLANA) {
+          console.log(`[endMatch] Paid match - using escrow account: ${escrowAccount.toString()}`);
+        }
+      } else {
+        if (DEBUG_SOLANA) {
+          console.log(`[endMatch] Free match - escrow account is null`);
+        }
+      }
+    } catch {
+      // If we can't fetch match account, assume free match (null escrow)
+      if (DEBUG_SOLANA) {
+        console.log(`[endMatch] Could not fetch match account, assuming free match (null escrow)`);
+      }
+    }
+    
     const tx = await program.methods
       .endMatch(matchId, matchHash ? Array.from(matchHash) : null, hotUrl || null)
       .accounts({
         matchAccount: matchPda,
+        escrowAccount: escrowAccount, // null for free matches, escrow PDA for paid matches (matches Rust pattern)
         authority,
-      })
+      } as never)
       .rpc();
 
     await this.confirmTransactionWithRetry(tx);
     return tx;
   }
 
-  async getMatchState(matchId: string): Promise<MatchState | null> {
+  async getMatchState(matchId: string, retries: number = 3): Promise<MatchState | null> {
     const program = this.anchorClient.getProgram();
     
-    const [matchPda] = this.getMatchPDA(matchId);
+    const [matchPda] = await this.getMatchPDA(matchId);
 
-    try {
-      // Type assertion needed because Anchor IDL types aren't fully inferred
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const matchAccount = await (program.account as any).match.fetch(matchPda);
+    // Retry logic: account might not be immediately available after transaction confirmation
+    for (let attempt = 0; attempt < retries; attempt++) {
+      try {
+        // Type assertion needed because Anchor IDL types aren't fully inferred
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const matchAccount = await (program.account as any).match.fetch(matchPda);
+        
+        if (!matchAccount) {
+          if (attempt < retries - 1) {
+            // Wait a bit before retrying (exponential backoff)
+            await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)));
+            continue;
+          }
+          console.log(`[getMatchState] Account not found for matchId: ${matchId}, PDA: ${matchPda.toString()}`);
+          return null;
+        }
+      
+        // matchId is stored as fixed-size array [u8; 36] in Rust (exactly 36 bytes, no padding)
+        // Rust: pub match_id: [u8; 36], // UUID v4 (fixed 36 bytes, no length prefix)
+        // Use EXACT same pattern as Rust tests (see create-claim-match.test.ts, rapid-sequential-creation.test.ts)
+        let matchIdStr: string;
+        if (Array.isArray(matchAccount.matchId)) {
+          // Rust test pattern: Array.from(matchAccount.matchId).map(b => String.fromCharCode(b)).join('').replace(/\0/g, '').substring(0, 36)
+          const matchIdArray = matchAccount.matchId as number[];
+          console.log(`[getMatchState] Raw matchId array length: ${matchIdArray.length}`);
+          console.log(`[getMatchState] First 10 bytes: [${matchIdArray.slice(0, 10).join(', ')}]`);
+          console.log(`[getMatchState] Expected matchId: "${matchId}"`);
+          
+          // Convert byte array to string using Rust test pattern
+          matchIdStr = Array.from(matchIdArray)
+            .map(b => String.fromCharCode(b))
+            .join('')
+            .replace(/\0/g, '')
+            .substring(0, 36);
+          
+          console.log(`[getMatchState] Decoded matchId: "${matchIdStr}" (length: ${matchIdStr.length})`);
+          
+          // Validate decoded matchId matches expected
+          if (matchIdStr !== matchId) {
+            console.log(`[getMatchState] WARNING: Decoded matchId "${matchIdStr}" doesn't match expected "${matchId}"`);
+            // Still use decoded value (Rust tests assert equality, so this should match)
+          }
+        } else if (typeof matchAccount.matchId === 'string') {
+          console.log(`[getMatchState] matchId is already a string: "${matchAccount.matchId}"`);
+          matchIdStr = matchAccount.matchId;
+        } else {
+          console.log(`[getMatchState] matchId is unexpected type: ${typeof matchAccount.matchId}, using parameter`);
+          matchIdStr = matchId;
+        }
+      
+      // Handle seed - can be u32 (number) or BN
+      const seed = typeof matchAccount.seed === 'number'
+        ? matchAccount.seed
+        : matchAccount.seed.toNumber();
+
+      // Handle timestamps - can be i64 (BN) or number
+      const createdAt = typeof matchAccount.createdAt === 'number'
+        ? matchAccount.createdAt
+        : matchAccount.createdAt.toNumber();
+
+      const endedAt = matchAccount.endedAt
+        ? (typeof matchAccount.endedAt === 'number'
+            ? matchAccount.endedAt
+            : matchAccount.endedAt.toNumber())
+        : undefined;
+
+      // Rust struct uses player_ids: [[u8; 64]; 10] (Firebase UIDs, not PublicKeys)
+      // Anchor exposes it as playerIds: flat byte array [u8; 640] (10 players × 64 bytes each)
+      // Logs show: playerIds is a flat array of bytes, not PublicKeys
+      // Since Rust stores Firebase UIDs (not PublicKeys), we return empty array
+      // Players are tracked by playerCount field instead
+      const playersArray: PublicKey[] = []; // Empty - Rust doesn't store PublicKeys, only Firebase UIDs
       
       return {
-        matchId: matchAccount.matchId,
-        gameName: matchAccount.gameName,
-        gameType: matchAccount.gameType,
-        seed: matchAccount.seed.toNumber(),
+        matchId: matchIdStr,
+        gameName: matchAccount.gameName || matchAccount.game_name,
+        gameType: matchAccount.gameType || matchAccount.game_type,
+        seed,
         phase: matchAccount.phase,
-        currentPlayer: matchAccount.currentPlayer,
-        players: matchAccount.players.filter((p: PublicKey) => !p.equals(PublicKey.default)),
-        playerCount: matchAccount.playerCount,
-        moveCount: matchAccount.moveCount,
-        createdAt: matchAccount.createdAt.toNumber(),
-        endedAt: matchAccount.endedAt ? matchAccount.endedAt.toNumber() : undefined,
-        matchHash: matchAccount.matchHash ? new Uint8Array(matchAccount.matchHash) : undefined,
-        hotUrl: matchAccount.hotUrl || undefined,  // Changed from archiveTxid to hotUrl
+        currentPlayer: matchAccount.currentPlayer !== undefined ? matchAccount.currentPlayer : (matchAccount.current_player !== undefined ? matchAccount.current_player : 0),
+        players: playersArray,
+        playerCount: matchAccount.playerCount || matchAccount.player_count || 0,
+        moveCount: matchAccount.moveCount || matchAccount.move_count || 0,
+        createdAt,
+        endedAt,
+        matchHash: matchAccount.matchHash || matchAccount.match_hash ? new Uint8Array(matchAccount.matchHash || matchAccount.match_hash) : undefined,
+        hotUrl: matchAccount.hotUrl || matchAccount.hot_url || undefined,
       };
-    } catch (error) {
-      console.error('Failed to fetch match state:', error);
-      return null;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        const isAccountNotFound = errorMessage.includes('Account does not exist') || 
+                                  errorMessage.includes('account not found') ||
+                                  errorMessage.includes('Invalid account data');
+        
+        if (attempt < retries - 1 && isAccountNotFound) {
+          // Wait a bit before retrying (exponential backoff)
+          await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)));
+          continue;
+        }
+        
+        if (DEBUG_SOLANA || isAccountNotFound) {
+          console.log(`[getMatchState] Match not found (attempt ${attempt + 1}/${retries}): ${matchId}, PDA: ${matchPda.toString()}, Error: ${errorMessage}`);
+        } else {
+          console.error(`[getMatchState] Failed to fetch match state for ${matchId} (attempt ${attempt + 1}/${retries}):`, error);
+        }
+        
+        // If this was the last attempt, return null
+        if (attempt === retries - 1) {
+          return null;
+        }
+      }
     }
+    
+    return null; // Should never reach here, but TypeScript needs it
   }
 
   pollMatchState(
@@ -373,6 +649,7 @@ export class GameClient {
       'declare_intent': 2,
       'call_showdown': 3,
       'rebuttal': 4,
+      'reveal_floor_card': 5, // REVEAL_FLOOR_CARD (from Rust: CLAIM_ACTIONS.REVEAL_FLOOR_CARD = 5)
     };
     return mapping[actionType] ?? 0;
   }
@@ -535,7 +812,7 @@ export class GameClient {
     this.validateWallet(wallet);
     const program = this.anchorClient.getProgram();
     
-    const [matchPda] = this.getMatchPDA(matchId);
+    const [matchPda] = await this.getMatchPDA(matchId);
 
     const tx = await program.methods
       .anchorMatchRecord(
@@ -712,12 +989,16 @@ export class GameClient {
   /**
    * Generates a cryptographically secure nonce for replay protection.
    * Per critique Issue #5: Use crypto.getRandomValues instead of Date.now()
+   * Returns a safe integer (within Number.MAX_SAFE_INTEGER) for BN compatibility
    */
   private generateSecureNonce(): number {
     const randomBytes = new Uint32Array(2);
     crypto.getRandomValues(randomBytes);
-    // Combine two 32-bit values into a 64-bit number (using 53 bits for JS number safety)
-    return Number(randomBytes[0]) * 0x100000000 + randomBytes[1];
+    // Use only 26 bits from each Uint32 to ensure safe integer (26 + 26 = 52 bits < 53 bit safe limit)
+    // This ensures the result fits in Number.MAX_SAFE_INTEGER (2^53 - 1)
+    const high26 = randomBytes[0] & 0x3FFFFFF; // 26 bits
+    const low26 = randomBytes[1] & 0x3FFFFFF;  // 26 bits
+    return high26 * 0x4000000 + low26; // 26 + 26 = 52 bits total, safe for BN
   }
 
   /**

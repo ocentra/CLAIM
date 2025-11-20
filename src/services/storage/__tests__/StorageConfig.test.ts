@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+// Using globals from vitest.config.ts (globals: true)
 import { getStorageConfig } from '@services/storage/StorageConfig';
 
 describe('StorageConfig', () => {

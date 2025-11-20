@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+// Using globals from vitest.config.ts (globals: true)
 import { EventBus, type EventBusOptions } from '../EventBus';
 import { EventArgsBase } from '../base/EventArgsBase';
 

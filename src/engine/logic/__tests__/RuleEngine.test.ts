@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+// Using globals from vitest.config.ts (globals: true)
 import { RuleEngine } from '../RuleEngine'
 import { type GameState, type Player, type PlayerAction, GamePhase, Suit } from '@/types'
 

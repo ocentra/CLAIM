@@ -9,7 +9,7 @@
  * - Set VITE_R2_WORKER_URL in .env or environment
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+// Using globals from vitest.config.ts (globals: true)
 import { getStorageConfig } from '@services/storage/StorageConfig';
 import { R2Service } from '@services/storage/R2Service';
 

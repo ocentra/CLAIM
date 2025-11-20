@@ -62,7 +62,7 @@ export interface GameState {
 }
 
 export interface PlayerAction {
-  type: 'pick_up' | 'decline' | 'declare_intent' | 'call_showdown' | 'rebuttal'
+  type: 'pick_up' | 'decline' | 'declare_intent' | 'call_showdown' | 'rebuttal' | 'reveal_floor_card'
   playerId: string
   data?: unknown
   timestamp: Date

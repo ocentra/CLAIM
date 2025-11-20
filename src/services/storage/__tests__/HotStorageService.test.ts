@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+// Using globals from vitest.config.ts (globals: true)
+import { vi } from 'vitest' // vi is NOT a global, must be imported
 import { HotStorageService, type IHotStorageService } from '@services/storage/HotStorageService';
 import { R2Service } from '@services/storage/R2Service';
 

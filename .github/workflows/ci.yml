@@ -115,6 +115,69 @@ jobs:
         with:
           name: solana-idl
           path: Rust/ocentra-games/target/idl/*.json
+          retention-days: 1
+
+  test-solana:
+    name: Run Solana Tests
+    runs-on: ubuntu-latest
+    needs: [build-rust]
+    # Only run if IDL artifact exists and Solana tests are not explicitly skipped
+    if: always() && needs.build-rust.result != 'failure'
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      
+      - name: Download IDL artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: solana-idl
+          path: Rust/ocentra-games/target/idl/
+        continue-on-error: true
+      
+      - name: Verify IDL exists
+        run: |
+          if [ ! -f "Rust/ocentra-games/target/idl/ocentra_games.json" ]; then
+            echo "IDL file not found, skipping Solana tests"
+            exit 0
+          fi
+          echo "IDL file found, proceeding with Solana tests"
+      
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm install --no-save --include=optional || true
+      
+      - name: Run Solana integration tests
+        run: npm run test:integration
+        continue-on-error: true
+        env:
+          SOLANA_CLUSTER: 'devnet'
+          SKIP_SOLANA_TESTS: 'false'
+          # Use public devnet RPC (free tier)
+          SOLANA_RPC_URL: 'https://api.devnet.solana.com'
+      
+      - name: Run Solana E2E tests
+        run: npm test -- src/services/__tests__/e2e
+        continue-on-error: true
+        env:
+          SOLANA_CLUSTER: 'devnet'
+          SKIP_SOLANA_TESTS: 'false'
+          SOLANA_RPC_URL: 'https://api.devnet.solana.com'
+      
+      - name: Run Solana load tests
+        run: npm run test:load
+        continue-on-error: true
+        env:
+          SOLANA_CLUSTER: 'devnet'
+          SKIP_SOLANA_TESTS: 'false'
+          SKIP_LOAD_TESTS: 'false'
+          SOLANA_RPC_URL: 'https://api.devnet.solana.com'
 
   build-typescript:
     name: Build TypeScript

@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+// Using globals from vitest.config.ts (globals: true)
+import { vi } from 'vitest' // vi is NOT a global, must be imported
 import { WebRTCHandler } from '@/network/connection/WebRTCHandler'
 import type { PeerMessage } from '@/network/types'
 

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+// Using globals from vitest.config.ts (globals: true)
 import { CanonicalSerializer } from '../CanonicalSerializer';
 import type { MatchRecord, MoveRecord } from '@lib/match-recording/types';
 

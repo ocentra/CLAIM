@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+// Using globals from vitest.config.ts (globals: true)
 import { ScoreCalculator } from '../ScoreCalculator'
 import { type Player, type GameState, type CardValue, Suit, GamePhase } from '@/types'
 

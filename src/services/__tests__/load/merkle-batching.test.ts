@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+// Using globals from vitest.config.ts (globals: true)
 import { BatchManager } from '@services/solana/BatchManager';
 import { R2Service } from '@services/storage/R2Service';
 import { MerkleBatching } from '@services/solana/MerkleBatching';
@@ -51,16 +51,10 @@ describe.skipIf(SKIP_SOLANA_TESTS)('Merkle Batching Load Tests', () => {
     expect(isValid).toBe(true);
   });
 
-  it('should benchmark batch creation cost', async () => {
-    // Use real R2Service if configured
-    const r2WorkerUrl = process.env.VITE_R2_WORKER_URL;
-    if (!r2WorkerUrl) {
-      console.warn('VITE_R2_WORKER_URL not set - skipping R2-dependent test');
-      return;
-    }
-    
+  it.skipIf(!process.env.VITE_R2_WORKER_URL)('should benchmark batch creation cost', async () => {
+    // This test requires R2 for persistence
     const r2Service = new R2Service({
-      workerUrl: r2WorkerUrl,
+      workerUrl: process.env.VITE_R2_WORKER_URL!,
       bucketName: process.env.VITE_R2_BUCKET_NAME || 'claim-matches-test',
     });
 

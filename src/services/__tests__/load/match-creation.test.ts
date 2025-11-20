@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+// Using globals from vitest.config.ts (globals: true)
 import { GameClient } from '@services/solana/GameClient';
 import { AnchorClient } from '@services/solana/AnchorClient';
 import { Connection, Keypair } from '@solana/web3.js';

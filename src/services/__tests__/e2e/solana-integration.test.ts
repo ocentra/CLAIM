@@ -1,7 +1,7 @@
 /**
  * @vitest-environment node
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+// Using globals from vitest.config.ts (globals: true)
 import { Connection, Keypair, LAMPORTS_PER_SOL, Transaction, VersionedTransaction } from '@solana/web3.js';
 import { AnchorClient } from '@services/solana/AnchorClient';
 import { GameClient } from '@services/solana/GameClient';
@@ -109,14 +109,15 @@ describe('Solana Integration E2E', () => {
       },
     };
 
-    const tx = await gameClient.createMatch(gameType, seed, gameWallet);
+    const matchId = await gameClient.createMatch(gameType, seed, gameWallet);
     
-    expect(tx).toBeDefined();
-    expect(typeof tx).toBe('string');
+    expect(matchId).toBeDefined();
+    expect(typeof matchId).toBe('string');
     
-    // Verify transaction confirmed
-    const status = await connection.getSignatureStatus(tx);
-    expect(status.value?.confirmationStatus).toBeDefined();
+    // Verify match was created by checking match state
+    const matchState = await gameClient.getMatchState(matchId);
+    expect(matchState).toBeDefined();
+    expect(matchState?.matchId).toBe(matchId);
   }, 60000); // 60 second timeout
 
   it('should submit a move and verify nonce protection', async () => {

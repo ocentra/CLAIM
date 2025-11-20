@@ -73,7 +73,7 @@ if (typeof process !== 'undefined') {
     try {
       const outputPath = path.join(process.cwd(), 'test-results', 'test-collected-results.json');
       reportGenerator.exportToJson(outputPath);
-    } catch (err) {
+    } catch {
       // Silently fail - don't break tests if export fails
     }
   });
@@ -82,7 +82,7 @@ if (typeof process !== 'undefined') {
     try {
       const outputPath = path.join(process.cwd(), 'test-results', 'test-collected-results.json');
       reportGenerator.exportToJson(outputPath);
-    } catch (err) {
+    } catch {
       // Silently fail
     }
     process.exit(0);

@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+// Using globals from vitest.config.ts (globals: true)
+import { vi } from 'vitest' // vi is NOT a global, must be imported
 
 // Mock Three.js before importing - define classes inside factory to avoid hoisting issues
 vi.mock('three', () => {

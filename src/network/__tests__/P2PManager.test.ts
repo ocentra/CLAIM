@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+// Using globals from vitest.config.ts (globals: true)
+import { vi } from 'vitest' // vi is NOT a global, must be imported
 import { P2PManager } from '@/network/P2PManager'
 import { ConnectionStatus } from '@/network/types'
 

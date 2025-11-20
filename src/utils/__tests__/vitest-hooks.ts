@@ -3,10 +3,16 @@
  * 
  * This file hooks into Vitest's test lifecycle to automatically record
  * test results in the report generator, similar to Rust's mocha-hooks.ts
+ * 
+ * Note: Using globals from vitest.config.ts (globals: true)
+ * beforeEach and afterEach are available as globals, not imported
  */
 
-import { beforeEach, afterEach } from 'vitest';
+import type { TestContext } from 'vitest';
 import { reportGenerator, type TestReportData } from './test-report-generator';
+
+// Type for Vitest task (from TestContext)
+type VitestTask = TestContext['task'];
 
 // Track test start times
 const testStartTimes = new Map<string, number>();
@@ -60,12 +66,12 @@ function detachConsoleCapture() {
 }
 
 // Get suite name from test context
-function getSuiteName(test: any): string {
+function getSuiteName(test: VitestTask | undefined): string {
   if (!test) return 'Unknown Suite';
   
   // Try to get suite from test's file path or name
-  const filePath = test.file?.name || test.filepath || '';
-  const suiteName = test.suite?.name || test.task?.suite?.name || '';
+  const filePath = test.file?.name || '';
+  const suiteName = test.suite?.name || '';
   
   if (suiteName) {
     return `${filePath} > ${suiteName}`;
@@ -74,12 +80,12 @@ function getSuiteName(test: any): string {
 }
 
 // Use a WeakMap to track test keys per task (cleaner than global)
-const taskKeyMap = new WeakMap<any, string>();
+const taskKeyMap = new WeakMap<VitestTask, string>();
 
 // Hook into Vitest's beforeEach
-beforeEach((ctx) => {
+beforeEach((ctx: TestContext) => {
     // In Vitest, we can access the task from context in beforeEach
-    const task = (ctx as any).task;
+    const task = ctx.task;
     if (task) {
       const testName = task.name || task.id || 'unknown';
       const fileName = task.file?.name || 'unknown';
@@ -91,19 +97,21 @@ beforeEach((ctx) => {
     } else {
       // Fallback: use timestamp-based key
       const fallbackKey = `test-${Date.now()}-${Math.random()}`;
-      (ctx as any).__testKey = fallbackKey;
+      // Store fallback key in a way that's accessible in afterEach
+      // Using a WeakMap keyed by the context object itself
+      (ctx as TestContext & { __testKey?: string }).__testKey = fallbackKey;
       testStartTimes.set(fallbackKey, Date.now());
       attachConsoleCapture(fallbackKey);
     }
   });
 
   // Hook into Vitest's afterEach
-  afterEach((ctx) => {
+  afterEach((ctx: TestContext) => {
     // Get test info from context - Vitest provides task in afterEach
     const task = ctx.task;
     if (!task) {
       // Try fallback key
-      const fallbackKey = (ctx as any).__testKey;
+      const fallbackKey = (ctx as TestContext & { __testKey?: string }).__testKey;
       if (fallbackKey) {
         testStartTimes.delete(fallbackKey);
         testLogs.delete(fallbackKey);
@@ -129,7 +137,7 @@ beforeEach((ctx) => {
       status = 'passed';
     } else if (task.result?.state === 'fail') {
       status = 'failed';
-    } else if (task.mode === 'skip' || task.skip) {
+    } else if (task.mode === 'skip') {
       status = 'skipped';
     }
 
@@ -140,9 +148,9 @@ beforeEach((ctx) => {
       status,
       duration,
       logs,
-      error: task.result?.error ? {
-        message: task.result.error.message || String(task.result.error),
-        stack: task.result.error.stack,
+      error: task.result?.errors && task.result.errors.length > 0 ? {
+        message: task.result.errors[0]?.message || String(task.result.errors[0]),
+        stack: task.result.errors[0]?.stack,
       } : undefined,
     };
 
