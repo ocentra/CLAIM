@@ -47,6 +47,7 @@ jobs:
         with:
           status: ${{ job.status }}
           text: 'Match verification failed!'
-          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
         continue-on-error: true
 
