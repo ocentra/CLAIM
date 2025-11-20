@@ -1,0 +1,7 @@
+error: Found argument '' which wasn't expected, or isn't valid in this context
+
+USAGE:
+    solana-test-validator [FLAGS] [OPTIONS] --ledger <DIR>
+
+For more information try --help
+bash: line 1: solana-test-validator: command not found

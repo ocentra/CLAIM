@@ -90,45 +90,216 @@ try {
             $setupInfo += "Validator not running, starting it..."
             Write-Host "   Validator not running, starting it in WSL..." -ForegroundColor Yellow
 
-            # Start validator in background in WSL
-            Write-Host "   Starting solana-test-validator..." -ForegroundColor Gray
-
-            # Kill any existing validator first
+            # Step 1: Kill any existing validator
+            Write-Host "   Step 1: Killing any existing validator..." -ForegroundColor Gray
             wsl bash -c "pkill -f solana-test-validator 2>/dev/null || true"
-            Start-Sleep -Seconds 1
+            Start-Sleep -Seconds 2
 
-            # Start validator in background with nohup
-            # Explicitly set ledger location to avoid path issues
-            # Note: --log is a flag (not --log <file>), validator creates validator.log in the ledger directory
-            # Use login shell to ensure Solana is in PATH
-            $validatorCmd = "cd $wslProjectRoot && nohup solana-test-validator --reset --ledger test-ledger --log > /tmp/validator-startup.log 2>&1 &"
-            wsl bash -l -c $validatorCmd
+            # Step 2: Check if solana-test-validator is available
+            Write-Host "   Step 2: Checking solana-test-validator..." -ForegroundColor Gray
+            $solanaCheck = wsl bash -l -c "which solana-test-validator"
+            if ($LASTEXITCODE -ne 0) {
+                $setupInfo += "ERROR: solana-test-validator not found in PATH"
+                Write-Host "   ERROR: solana-test-validator not found in PATH" -ForegroundColor Red
+                Write-Host "   Make sure Solana CLI is installed in WSL" -ForegroundColor Yellow
+                exit 1
+            }
+            Write-Host "   Found at: $solanaCheck" -ForegroundColor Gray
 
-            # Wait for validator to start
-            Write-Host "   Waiting for validator to start..." -ForegroundColor Gray
-            $maxWait = 30
+            # Step 3: Clean up old ledger
+            Write-Host "   Step 3: Cleaning up old ledger..." -ForegroundColor Gray
+            # Use the correct directory path where you manually ran the command
+            $rustProjectRoot = "$wslProjectRoot/rust/ocentra-games"
+            wsl bash -c "cd $rustProjectRoot && rm -rf test-ledger"
+
+            # Step 4: Try different approaches to start the validator
+            Write-Host "   Step 4: Starting validator..." -ForegroundColor Gray
+            $solanaPath = $solanaCheck.Trim()
+            
+            # First, let's try running it manually to see the full error with different configurations
+            Write-Host "   Testing validator startup with different configurations..." -ForegroundColor Gray
+            
+            # Try without bind-address first (default localhost)
+            Write-Host "   Testing 1: Default settings (localhost)..." -ForegroundColor Gray
+            $simpleCmd = "cd $rustProjectRoot && RUST_BACKTRACE=full timeout 15s $solanaPath --reset --ledger test-ledger 2>&1"
+            $simpleOutput = wsl bash -l -c $simpleCmd
+            $simpleWorks = ($simpleOutput -notmatch "panicked" -and $simpleOutput -notmatch "Error:") -and ($simpleOutput -match "Initializing" -or $simpleOutput -match "Ledger location")
+            
+            if ($simpleWorks) {
+                Write-Host "   SUCCESS: Default settings work!" -ForegroundColor Green
+                
+                # Kill any processes from the test
+                wsl bash -c "pkill -f solana-test-validator 2>/dev/null || true"
+                Start-Sleep -Seconds 2
+                
+                # Try with just --rpc-port (should still use default bind-address)
+                Write-Host "   Testing 2: With --rpc-port 8899..." -ForegroundColor Gray
+                $rpcOnlyCmd = "cd $rustProjectRoot && RUST_BACKTRACE=full timeout 15s $solanaPath --reset --ledger test-ledger --rpc-port 8899 2>&1"
+                $rpcOnlyOutput = wsl bash -l -c $rpcOnlyCmd
+                $rpcOnlyWorks = ($rpcOnlyOutput -notmatch "panicked" -and $rpcOnlyOutput -notmatch "Error:") -and ($rpcOnlyOutput -match "Initializing" -or $rpcOnlyOutput -match "Ledger location")
+                
+                if ($rpcOnlyWorks) {
+                    Write-Host "   SUCCESS: --rpc-port works! Starting validator in background..." -ForegroundColor Green
+                    
+                    # Kill any processes from the test
+                    wsl bash -c "pkill -f solana-test-validator 2>/dev/null || true"
+                    Start-Sleep -Seconds 2
+                    
+                    # Track which method we're using
+                    $usingTmux = $false
+                    $usingScreen = $false
+                    $sessionName = "nohup"
+                    
+                    # Start with tmux/screen/nohup using --rpc-port only
+                    $tmuxCheck = wsl bash -c "which tmux"
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Host "   Using tmux to run validator..." -ForegroundColor Gray
+                        $usingTmux = $true
+                        $validatorCmd = "cd $rustProjectRoot && tmux new-session -d -s solana-validator '$solanaPath --reset --ledger test-ledger --rpc-port 8899'"
+                        Write-Host "   Running: $validatorCmd" -ForegroundColor Gray
+                        wsl bash -l -c $validatorCmd
+                        $sessionName = "tmux: solana-validator"
+                    } else {
+                        # Fallback to nohup
+                        Write-Host "   Using nohup to run validator..." -ForegroundColor Gray
+                        $validatorCmd = "cd $rustProjectRoot && nohup $solanaPath --reset --ledger test-ledger --rpc-port 8899 > validator.log 2>&1 &"
+                        Write-Host "   Running: $validatorCmd" -ForegroundColor Gray
+                        wsl bash -l -c $validatorCmd
+                        $sessionName = "nohup"
+                    }
+                    
+                } else {
+                    Write-Host "   WARNING: --rpc-port test failed, using default settings..." -ForegroundColor Yellow
+                    Write-Host "   Output: $rpcOnlyOutput" -ForegroundColor Yellow
+                    
+                    # Kill any processes from the test
+                    wsl bash -c "pkill -f solana-test-validator 2>/dev/null || true"
+                    Start-Sleep -Seconds 2
+                    
+                    # Use default settings (no --rpc-port)
+                    $usingTmux = $false
+                    $tmuxCheck = wsl bash -c "which tmux"
+                    if ($LASTEXITCODE -eq 0) {
+                        $usingTmux = $true
+                        $validatorCmd = "cd $rustProjectRoot && tmux new-session -d -s solana-validator '$solanaPath --reset --ledger test-ledger'"
+                        wsl bash -l -c $validatorCmd
+                        $sessionName = "tmux: solana-validator"
+                    } else {
+                        $validatorCmd = "cd $rustProjectRoot && nohup $solanaPath --reset --ledger test-ledger > validator.log 2>&1 &"
+                        wsl bash -l -c $validatorCmd
+                        $sessionName = "nohup"
+                    }
+                }
+            } else {
+                Write-Host "   ERROR: Default settings failed!" -ForegroundColor Red
+                Write-Host "   Output:" -ForegroundColor Yellow
+                $simpleOutput | ForEach-Object { Write-Host "     $_" -ForegroundColor Yellow }
+                
+                $setupInfo += "ERROR: Validator fails even with default settings"
+                Write-Host "   ERROR: Validator fails even with default settings" -ForegroundColor Red
+                Write-Host "   This might be a Solana installation or system issue" -ForegroundColor Yellow
+                exit 1
+            }
+
+            # Step 5: Wait for validator to initialize (longer wait time)
+            Write-Host "   Step 5: Waiting for validator to initialize..." -ForegroundColor Gray
+            Write-Host "   NOTE: 'Unable to connect to validator' errors are normal during startup" -ForegroundColor Yellow
+            
+            $maxWait = 60  # Increased wait time to 60 seconds
             $waited = 0
-            while ($waited -lt $maxWait) {
-                Start-Sleep -Seconds 1
-                $waited++
+            $validatorAccessible = $false
+            
+            while ($waited -lt $maxWait -and -not $validatorAccessible) {
+                Start-Sleep -Seconds 2
+                $waited += 2
+                
                 try {
-                    $response = Invoke-WebRequest -Uri $rpcUrl -Method Post -Body $healthCheck -ContentType "application/json" -TimeoutSec 2 -ErrorAction Stop
+                    # Try to connect to the RPC endpoint
+                    $response = Invoke-WebRequest -Uri $rpcUrl -Method Post -Body $healthCheck -ContentType "application/json" -TimeoutSec 3 -ErrorAction Stop
                     $validatorAccessible = $true
+                    Write-Host "   SUCCESS: Validator is now accessible after ${waited}s" -ForegroundColor Green
                     break
                 } catch {
-                    if ($waited % 5 -eq 0) {
-                        Write-Host "   Still waiting... ($waited/$maxWait seconds)" -ForegroundColor Gray
+                    if ($waited % 10 -eq 0) {
+                        Write-Host "   Still waiting for validator to start... ($waited/$maxWait seconds)" -ForegroundColor Gray
+                        
+                        # Check if the process is running
+                        $processCheck = wsl bash -c "ps aux | grep '[s]olana-test-validator' | wc -l"
+                        if ($processCheck -gt 0) {
+                            Write-Host "   Validator process is running, waiting for RPC to be ready..." -ForegroundColor Gray
+                            
+                            # Show the process details
+                            $processDetails = wsl bash -c "ps aux | grep '[s]olana-test-validator'"
+                            Write-Host "   Process details: $processDetails" -ForegroundColor Gray
+                            
+                            # Check if the validator is listening on the right port
+                            $portCheck = wsl bash -c "netstat -tlnp 2>/dev/null | grep 8899 || echo 'Port not yet listening'"
+                            Write-Host "   Port status: $portCheck" -ForegroundColor Gray
+                        } else {
+                            Write-Host "   WARNING: Validator process not found" -ForegroundColor Yellow
+                            
+                            # Check if there are any logs
+                            $logCheck = wsl bash -c "ls -la $rustProjectRoot/test-ledger/validator.log 2>/dev/null || echo 'Log not found'"
+                            Write-Host "   Log file: $logCheck" -ForegroundColor Yellow
+                            
+                            if ($logCheck -notlike "*Log not found*") {
+                                $logTail = wsl bash -c "tail -n 5 $rustProjectRoot/test-ledger/validator.log"
+                                Write-Host "   Last 5 lines of log:" -ForegroundColor Yellow
+                                $logTail | ForEach-Object { Write-Host "     $_" -ForegroundColor Yellow }
+                            }
+                        }
                     }
                 }
             }
 
             if ($validatorAccessible) {
-                $setupInfo += "SUCCESS: Validator started"
-                Write-Host "   SUCCESS: Validator started" -ForegroundColor Green
+                $setupInfo += "SUCCESS: Validator started and accessible"
+                Write-Host "   SUCCESS: Validator started and accessible" -ForegroundColor Green
+                
+                # Show how to check validator logs
+                Write-Host "   Validator is running in background ($sessionName)" -ForegroundColor Gray
+                Write-Host "   To check validator logs:" -ForegroundColor Gray
+                if ($usingTmux) {
+                    Write-Host "     wsl tmux attach -t solana-validator" -ForegroundColor Gray
+                } elseif ($usingScreen) {
+                    Write-Host "     wsl screen -r solana-validator" -ForegroundColor Gray
+                } else {
+                    Write-Host "     wsl cat $rustProjectRoot/test-ledger/validator.log" -ForegroundColor Gray
+                }
             } else {
                 $setupInfo += "ERROR: Validator failed to start after ${maxWait}s"
                 Write-Host "   ERROR: Validator failed to start" -ForegroundColor Red
-                Write-Host "   Check logs: wsl cat /tmp/validator.log" -ForegroundColor Yellow
+                
+                # Try to get more information
+                Write-Host "   Checking what happened..." -ForegroundColor Yellow
+                
+                # Check if the process is running
+                $processCheck = wsl bash -c "ps aux | grep '[s]olana-test-validator'"
+                if (-not [string]::IsNullOrWhiteSpace($processCheck)) {
+                    Write-Host "   Process is running:" -ForegroundColor Yellow
+                    $processCheck | ForEach-Object { Write-Host "     $_" -ForegroundColor Yellow }
+                } else {
+                    Write-Host "   Process is not running" -ForegroundColor Yellow
+                }
+                
+                # Check if we can see any logs
+                $logCheck = wsl bash -c "ls -la $rustProjectRoot/test-ledger/validator.log 2>/dev/null || echo 'Log not found'"
+                Write-Host "   Log file: $logCheck" -ForegroundColor Yellow
+                
+                if ($logCheck -notlike "*Log not found*") {
+                    $logTail = wsl bash -c "tail -n 20 $rustProjectRoot/test-ledger/validator.log"
+                    Write-Host "   Last 20 lines of log:" -ForegroundColor Yellow
+                    $logTail | ForEach-Object { Write-Host "     $_" -ForegroundColor Yellow }
+                }
+                
+                # Try to run the validator manually to see the error
+                Write-Host "   Trying to run validator manually to see the error..." -ForegroundColor Yellow
+                $manualCmd = "cd $rustProjectRoot && timeout 10s $solanaPath --reset --ledger test-ledger --bind-address 0.0.0.0 --rpc-port 8899 2>&1"
+                Write-Host "   Running: $manualCmd" -ForegroundColor Gray
+                $manualOutput = wsl bash -l -c $manualCmd
+                Write-Host "   Manual output:" -ForegroundColor Yellow
+                $manualOutput | ForEach-Object { Write-Host "     $_" -ForegroundColor Yellow }
+                
                 exit 1
             }
         }

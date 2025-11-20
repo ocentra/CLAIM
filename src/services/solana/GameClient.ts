@@ -1,13 +1,23 @@
 import { AnchorClient } from './AnchorClient';
 import { PublicKey, SystemProgram, type TransactionSignature, Keypair } from '@solana/web3.js';
-import { BN } from '@coral-xyz/anchor';
+import BN from 'bn.js';
+import { Buffer } from 'buffer';
 import type { PlayerAction } from '@types';
 import { EventBus } from '@lib/eventing';
 import { UpdateGameStateEvent } from '@lib/eventing/events/game/UpdateGameStateEvent';
 import { GamePhase } from '@types';
 
-// Debug flag - set to false in production
-const DEBUG_SOLANA = process.env.NODE_ENV !== 'production' && process.env.DEBUG_SOLANA === 'true';
+const NODE_ENV =
+  (typeof process !== 'undefined' && process.env?.NODE_ENV) ||
+  (typeof import.meta !== 'undefined' && import.meta.env?.MODE) ||
+  'development';
+
+const DEBUG_FLAG =
+  (typeof process !== 'undefined' && process.env?.DEBUG_SOLANA) ||
+  (typeof import.meta !== 'undefined' && import.meta.env?.VITE_DEBUG_SOLANA) ||
+  'false';
+
+const DEBUG_SOLANA = NODE_ENV !== 'production' && DEBUG_FLAG === 'true';
 
 export interface MatchState {
   matchId: string;

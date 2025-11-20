@@ -53,6 +53,17 @@ function connectWS(): void {
   if (!isLeader) return;
   if (wsState === 'connecting' || wsState === 'connected') return;
 
+  // Only connect in development mode (localhost or when port is explicitly set)
+  const isDevelopment = window.location.hostname === 'localhost' || 
+                        window.location.hostname === '127.0.0.1' ||
+                        window.location.port !== '';
+  
+  if (!isDevelopment) {
+    if (LOG_MCP_BRIDGE) console.log('[LogBridge] Skipping connection in production');
+    wsState = 'disconnected';
+    return;
+  }
+
   wsState = 'connecting';
 
   try {
