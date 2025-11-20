@@ -19,3 +19,6 @@ logs.db
 Rust/SolanaContract/target/
 **/target/
 /.claude
+
+# Solana test validator ledger (local test data, large files)
+test-ledger/
