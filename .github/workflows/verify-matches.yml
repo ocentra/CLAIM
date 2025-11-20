@@ -22,7 +22,12 @@ jobs:
           cache: 'npm'
       
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm ci
+          npm install --no-save --include=optional || true
+          # Ensure sharp is properly installed (needed for GameEngine in verification)
+          # Install sharp with platform-specific binaries for Linux
+          npm install --os=linux --cpu=x64 sharp || npm rebuild sharp || echo "Sharp rebuild failed, continuing..."
       
       - name: Run verification
         run: |
