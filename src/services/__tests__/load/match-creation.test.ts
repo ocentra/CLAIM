@@ -1,9 +1,4 @@
 // Using globals from vitest.config.ts (globals: true)
-import { GameClient } from '@services/solana/GameClient';
-import { AnchorClient } from '@services/solana/AnchorClient';
-import { Connection, Keypair } from '@solana/web3.js';
-import type { Wallet } from '@coral-xyz/anchor';
-
 /**
  * Load test for match creation per spec Section 23.3.
  * Per critique: real load test for 1000 match creation.
@@ -13,9 +8,30 @@ import type { Wallet } from '@coral-xyz/anchor';
  */
 describe('Match Creation Load Test', () => {
   const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
-  const SKIP_LOAD_TESTS = process.env.SKIP_LOAD_TESTS === 'true';
+  const SKIP_LOAD_TESTS = process.env.SKIP_LOAD_TESTS === 'true' || process.env.SKIP_SOLANA_TESTS === 'true';
+  
+  // Conditionally import Solana modules only when tests are not skipped
+  // This prevents IDL loading errors when SKIP_SOLANA_TESTS is true
+  let GameClient: typeof import('@services/solana/GameClient').GameClient | null = null;
+  let AnchorClient: typeof import('@services/solana/AnchorClient').AnchorClient | null = null;
+  let Connection: typeof import('@solana/web3.js').Connection | null = null;
+  let Keypair: typeof import('@solana/web3.js').Keypair | null = null;
+  type Wallet = import('@coral-xyz/anchor').Wallet;
+  
+  beforeAll(async () => {
+    if (!SKIP_LOAD_TESTS) {
+      const solanaModule = await import('@services/solana/GameClient');
+      const anchorModule = await import('@services/solana/AnchorClient');
+      const web3Module = await import('@solana/web3.js');
+      GameClient = solanaModule.GameClient;
+      AnchorClient = anchorModule.AnchorClient;
+      Connection = web3Module.Connection;
+      Keypair = web3Module.Keypair;
+    }
+  });
 
   it.skipIf(SKIP_LOAD_TESTS)('should handle creating 1000 matches', async () => {
+    if (SKIP_LOAD_TESTS || !Connection || !Keypair || !GameClient || !AnchorClient) return; // Early return if skipped
     const connection = new Connection(SOLANA_RPC_URL);
     const wallet = new Keypair();
     
@@ -80,6 +96,7 @@ describe('Match Creation Load Test', () => {
   }, 120000); // 2 minute timeout for load test
 
   it.skipIf(SKIP_LOAD_TESTS)('should measure match creation throughput', async () => {
+    if (SKIP_LOAD_TESTS || !Connection || !Keypair || !GameClient || !AnchorClient) return; // Early return if skipped
     const connection = new Connection(SOLANA_RPC_URL);
     const wallet = new Keypair();
     
