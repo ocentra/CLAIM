@@ -10,6 +10,9 @@ import type { PlayerAction } from '@types';
  * End-to-end match lifecycle test.
  * Per critique: Comprehensive test covering full match flow.
  * Tests: create → join → start → moves → end → verify
+ * 
+ * Uses localnet by default (like Rust tests). Set SOLANA_CLUSTER=devnet for devnet testing.
+ * For localnet: Start validator and deploy program first.
  */
 describe('Full Match Lifecycle E2E', () => {
   let coordinator: MatchCoordinator;
@@ -21,8 +24,20 @@ describe('Full Match Lifecycle E2E', () => {
   let coordinatorKeypair: Keypair;
 
   beforeEach(() => {
-    // Setup real connection (devnet for testing)
-    connection = new Connection('https://api.devnet.solana.com', 'confirmed');
+    // Connect to localnet by default (like Rust tests), or devnet if SOLANA_CLUSTER=devnet
+    // For localnet: Start validator with "solana-test-validator" or "anchor localnet"
+    const cluster = process.env.SOLANA_CLUSTER || 'localnet';
+    let rpcUrl: string;
+    
+    if (cluster === 'devnet') {
+      rpcUrl = 'https://api.devnet.solana.com';
+    } else {
+      // For WSL: Use WSL IP if SOLANA_RPC_URL is set, otherwise try localhost
+      // From Windows PowerShell, you may need: $env:SOLANA_RPC_URL="http://<WSL_IP>:8899"
+      rpcUrl = process.env.SOLANA_RPC_URL || 'http://localhost:8899';
+    }
+    
+    connection = new Connection(rpcUrl, 'confirmed');
     
     // Create test wallets
     player1Keypair = Keypair.generate();

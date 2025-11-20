@@ -4,6 +4,41 @@ Use this README as the entry point for the paid-match initiative. It summarizes 
 
 ---
 
+## Quick Start (Local Development)
+
+**New here? Start with [`local-development-guide.md`](local-development-guide.md) for complete setup instructions.**
+
+### TL;DR - Running Tests
+
+```bash
+# WSL - Start validator and deploy
+cd /mnt/e/ocentra-games/Rust/ocentra-games
+solana-test-validator --reset   # Terminal 1
+anchor deploy                    # Terminal 2
+```
+
+```powershell
+# Windows - Run tests (auto-initializes GameRegistry)
+.\run-tests.ps1
+```
+
+### System Overview
+
+```text
+┌─────────────────┐         ┌─────────────────┐
+│      WSL        │  RPC    │    Windows      │
+│  (Solana)       │◄───────►│   (Game)        │
+├─────────────────┤  :8899  ├─────────────────┤
+│ • Validator     │         │ • TypeScript    │
+│ • Anchor Deploy │         │ • Game Client   │
+│ • Rust Tests    │         │ • E2E Tests     │
+└─────────────────┘         └─────────────────┘
+```
+
+**Key Point:** Deploying the program uploads code only. You must also initialize the GameRegistry (once per network) before creating matches. The `run-tests.ps1` script handles this automatically.
+
+---
+
 ## Guiding Principles
 
 - **⚠️ CRITICAL: Ask Before Assuming** - If you (AI assistant) encounter anything confusing, ambiguous, or unclear, STOP and ask the user (master) for clarification. Do not make assumptions that could lead to incorrect implementation.
@@ -45,18 +80,27 @@ Use this README as the entry point for the paid-match initiative. It summarizes 
 
 ## 2. Core Specs & References
 
+### Getting Started (Read First!)
+
+- [`local-development-guide.md`](local-development-guide.md): **🚀 START HERE** - Step-by-step guide for setting up local development, running tests, and understanding the WSL/Windows workflow. Includes troubleshooting and deployment instructions.
+
+### Architecture & Design
+
 - [`decisions.md`](decisions.md): **Architecture Decision Records (ADR)** - All major architectural decisions including state authority, token storage, payment methods, and system design choices.
 - [`MultiplayerAndSolana.md`](MultiplayerAndSolana.md): authoritative end-to-end multiplayer + Solana spec that seeded this plan (canonical serialization, batching, anti-cheat, economic guardrails).
 - [`architecture.md`](architecture.md): narrative on/off-chain split, responsibilities, and data flows.
 - [`architecture-diagram.md`](architecture-diagram.md): ASCII diagram and flow walkthrough used in design/briefings.
 - [`rfc-onchain-offchain-system.md`](rfc-onchain-offchain-system.md): requirements-level RFC describing trust model, APIs, and failure modes.
+
+### Implementation Details
+
 - [`cloudflare-worker.md`](cloudflare-worker.md): Worker/DO runtime responsibilities, APIs, lifecycle, fraud controls.
 - [`cloudflare-db-schema.md`](cloudflare-db-schema.md): D1 schema + DO shard layouts backing the Worker.
 - [`leaderboard-anchor.md`](leaderboard-anchor.md): Anchor account/instruction layout for on-chain leaderboard storage.
 - [`solana-anchor-leaderboard-snapshots.md`](solana-anchor-leaderboard-snapshots.md): snapshot-focused Anchor project variant.
 - [`state-layouts.md`](state-layouts.md): sizing table for match, escrow, deposits, and config PDAs used across phases.
 
-Read these once to understand the system boundaries, then jump into the phase you’re implementing.
+Read these once to understand the system boundaries, then jump into the phase you're implementing.
 
 ---
 

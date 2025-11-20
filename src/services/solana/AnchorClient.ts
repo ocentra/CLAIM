@@ -5,7 +5,7 @@ import type { Commitment } from '@solana/web3.js';
 import * as path from 'path';
 import * as fs from 'fs';
 
-const PROGRAM_ID = new PublicKey('Fg6PaFpoGXkYsidMpWTK6W2BeZ7FEfcYkg476zPFsLnS');
+const PROGRAM_ID = new PublicKey('7eWx3H8bXMif7SDyPS1j5LZw1yUGDNZY592WzEKNf696');
 
 /**
  * Attempts to import the generated IDL from anchor build.
@@ -241,16 +241,42 @@ export class AnchorClient {
     
     // Program constructor: (idl, programId, provider)
     try {
-      // @ts-expect-error - Program constructor types may not match exactly with dynamic IDL import
-      this.program = new Program(idlToUse, PROGRAM_ID, this.provider);
+      // Ensure IDL is a plain object (not a class instance) - this helps with serialization issues
+      const idlJson = JSON.parse(JSON.stringify(idlToUse)) as Idl;
+
+      // Validate that accounts array has valid entries
+      if (idlJson.accounts && Array.isArray(idlJson.accounts)) {
+        const invalidAccounts = idlJson.accounts.filter((acc: { name?: string }) => !acc || !('name' in acc));
+        if (invalidAccounts.length > 0) {
+          throw new Error(`Found ${invalidAccounts.length} invalid account entries in IDL`);
+        }
+      }
+
+      // Anchor 0.30+ uses (idl, provider) signature - program ID comes from idl.address
+      this.program = new Program(idlJson, this.provider);
     } catch (error) {
       // Provide more context if Program construction fails
       const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      
+      // Log IDL structure for debugging
+      const idlKeys = Object.keys(idlToUse);
+      const accountsInfo = idlToUse.accounts && Array.isArray(idlToUse.accounts)
+        ? `Accounts count: ${idlToUse.accounts.length}, First account: ${('name' in (idlToUse.accounts[0] || {})) ? (idlToUse.accounts[0] as { name?: string }).name : 'N/A'}`
+        : 'No accounts field';
+      const instructionsInfo = idlToUse.instructions && Array.isArray(idlToUse.instructions)
+        ? `Instructions count: ${idlToUse.instructions.length}`
+        : 'No instructions field';
+      
       throw new Error(
         `Failed to create Anchor Program: ${errorMessage}\n` +
         `This may indicate an IDL format mismatch. Ensure Anchor versions match between Rust and TypeScript.\n` +
         `Rust: Run "anchor --version" in Rust/ocentra-games\n` +
-        `TypeScript: Check @coral-xyz/anchor version in package.json`
+        `TypeScript: Check @coral-xyz/anchor version in package.json\n` +
+        `IDL keys: ${idlKeys.join(', ')}\n` +
+        `${accountsInfo}\n` +
+        `${instructionsInfo}\n` +
+        (errorStack ? `Stack trace: ${errorStack.split('\n').slice(0, 5).join('\n')}` : '')
       );
     }
   }

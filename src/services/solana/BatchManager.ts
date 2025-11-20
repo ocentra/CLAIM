@@ -7,6 +7,7 @@ export interface BatchConfig {
   maxBatchSize: number;     // 1000
   flushIntervalMs: number;  // 60000 (1 minute)
   maxWaitTimeMs: number;    // 300000 (5 minutes)
+  persistenceKey?: string;  // Optional custom key for state persistence (default: 'batch_manager_state')
 }
 
 export interface PendingMatch {
@@ -55,8 +56,8 @@ export class BatchManager {
   private anchoringOptions?: BatchAnchoringOptions;
 
   constructor(
-    config: BatchConfig, 
-    r2Service?: R2Service, 
+    config: BatchConfig,
+    r2Service?: R2Service,
     coordinatorPrivateKey?: string,
     anchoringOptions?: BatchAnchoringOptions
   ) {
@@ -64,7 +65,12 @@ export class BatchManager {
     this.r2Service = r2Service;
     this.coordinatorPrivateKey = coordinatorPrivateKey;
     this.anchoringOptions = anchoringOptions;
-    
+
+    // Use custom persistence key if provided (useful for testing)
+    if (config.persistenceKey) {
+      this.persistenceKey = config.persistenceKey;
+    }
+
     // Per critique Phase 7.3: Load persisted state on startup
     this.loadPersistedState();
     
@@ -91,7 +97,12 @@ export class BatchManager {
     try {
       const stateJson = await this.r2Service.getMatchRecord(this.persistenceKey);
       if (stateJson) {
-        const state = JSON.parse(stateJson);
+        const parsed = JSON.parse(stateJson);
+        
+        // Extract batch state from match record wrapper
+        // The state is stored in batch_state field when wrapped
+        const state = parsed.batch_state || parsed;
+        
         this.pendingMatches = state.pendingMatches || [];
         this.batchCounter = state.batchCounter || 0;
         
@@ -127,9 +138,24 @@ export class BatchManager {
         batchCounter: this.batchCounter,
         timestamp: Date.now(),
       };
-      const stateJson = JSON.stringify(state);
+      
+      // Wrap batch state in a valid match record format for R2Service validation
+      // The Worker expects a match record with match_id/matchId, events array, etc.
+      const matchRecordWrapper = {
+        match_id: this.persistenceKey,
+        version: '1.0.0',
+        batch_state: state, // Store actual batch state here
+        players: [], // Required field
+        moves: [], // Required field
+        events: [], // Required field - Worker validation requires events array
+        signatures: [],
+      };
+      
+      const stateJson = JSON.stringify(matchRecordWrapper);
       await this.r2Service.uploadMatchRecord(this.persistenceKey, stateJson);
     } catch (error) {
+      // Don't throw - persistence failures shouldn't break batch operations
+      // Log error but continue execution
       console.error('Failed to persist batch state:', error);
     }
   }
@@ -223,7 +249,20 @@ export class BatchManager {
       if (this.r2Service) {
         try {
           const manifestPath = `manifests/${batchId}.json`;
-          const manifestJSON = JSON.stringify(manifest, null, 2);
+          
+          // Wrap manifest in a valid match record format for R2Service validation
+          // The Worker expects a match record with match_id/matchId, events array, etc.
+          const matchRecordWrapper = {
+            match_id: manifestPath, // Use manifest path as match_id
+            version: '1.0.0',
+            batch_manifest: manifest, // Store actual manifest here
+            players: [], // Required field
+            moves: [], // Required field
+            events: [], // Required field - Worker validation requires events array
+            signatures: manifest.signature ? [{ signer: 'coordinator', signature: manifest.signature }] : [],
+          };
+          
+          const manifestJSON = JSON.stringify(matchRecordWrapper, null, 2);
           await this.r2Service.uploadMatchRecord(manifestPath, manifestJSON);
           manifestUrl = manifestPath; // In production, this would be a full URL
         } catch (error) {
@@ -259,7 +298,19 @@ export class BatchManager {
           if (this.r2Service) {
             try {
               const manifestPath = `manifests/${batchId}.json`;
-              const manifestJSON = JSON.stringify(manifest, null, 2);
+              
+              // Wrap updated manifest in a valid match record format
+              const matchRecordWrapper = {
+                match_id: manifestPath,
+                version: '1.0.0',
+                batch_manifest: manifest, // Store actual manifest here
+                players: [], // Required field
+                moves: [], // Required field
+                events: [], // Required field
+                signatures: manifest.signature ? [{ signer: 'coordinator', signature: manifest.signature }] : [],
+              };
+              
+              const manifestJSON = JSON.stringify(matchRecordWrapper, null, 2);
               await this.r2Service.uploadMatchRecord(manifestPath, manifestJSON);
             } catch (error) {
               console.error('Failed to update batch manifest with anchor info:', error);
@@ -286,6 +337,25 @@ export class BatchManager {
       this.resetFlushTimer();
       throw error;
     }
+  }
+
+  /**
+   * Resets the batch manager state, clearing all pending matches and persisted state.
+   * Useful for testing to ensure clean state between test runs.
+   */
+  async reset(): Promise<void> {
+    // Clear pending matches
+    this.pendingMatches = [];
+    this.batchCounter = 0;
+
+    // Clear flush timer
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = undefined;
+    }
+
+    // Clear persisted state
+    await this.persistState();
   }
 
   /**

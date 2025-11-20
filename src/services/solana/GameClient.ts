@@ -1,10 +1,13 @@
 import { AnchorClient } from './AnchorClient';
-import { PublicKey, type TransactionSignature } from '@solana/web3.js';
+import { PublicKey, SystemProgram, type TransactionSignature } from '@solana/web3.js';
 import { BN } from '@coral-xyz/anchor';
 import type { PlayerAction } from '@types';
 import { EventBus } from '@lib/eventing';
 import { UpdateGameStateEvent } from '@lib/eventing/events/game/UpdateGameStateEvent';
 import { GamePhase } from '@types';
+
+// Debug flag - set to false in production
+const DEBUG_SOLANA = process.env.NODE_ENV !== 'production' && process.env.DEBUG_SOLANA === 'true';
 
 export interface MatchState {
   matchId: string;
@@ -30,6 +33,58 @@ export class GameClient {
     this.anchorClient = anchorClient;
   }
 
+  /**
+   * Gets the program ID from the Anchor program.
+   */
+  private getProgramId(): PublicKey {
+    const program = this.anchorClient.getProgram();
+    return program.idl.address
+      ? new PublicKey(program.idl.address)
+      : program.programId;
+  }
+
+  /**
+   * Derives the match PDA address.
+   * Note: Solana seeds have a 32-byte limit per seed.
+   * We use "m" (1 byte) + first 31 bytes of matchId = 32 bytes total.
+   * This matches the Rust implementation in tests/common/pda.ts
+   */
+  private getMatchPDA(matchId: string): [PublicKey, number] {
+    const matchIdBytes = Buffer.from(matchId, 'utf-8');
+    // Use Math.min to match Rust implementation: 31.min(match_id.len())
+    const truncated = matchIdBytes.slice(0, Math.min(31, matchIdBytes.length));
+    const programId = this.getProgramId();
+    const seedM = Buffer.from('m');
+
+    try {
+      const result = PublicKey.findProgramAddressSync(
+        [seedM, truncated],
+        programId
+      );
+      if (DEBUG_SOLANA) {
+        console.log(`[getMatchPDA] matchId: ${matchId}, PDA: ${result[0].toString()}, bump: ${result[1]}`);
+      }
+      return result;
+    } catch (error) {
+      console.error(`[getMatchPDA] Failed to derive PDA for matchId: ${matchId}`);
+      console.error(`[getMatchPDA] Program ID: ${programId.toString()}`);
+      console.error(`[getMatchPDA] Seeds: ["m" (${seedM.length} bytes), matchId[0:${truncated.length}] (${truncated.length} bytes)]`);
+      throw error;
+    }
+  }
+
+  /**
+   * Derives the GameRegistry PDA address.
+   * Seeds: ["game_registry"]
+   */
+  private getRegistryPDA(): [PublicKey, number] {
+    const programId = this.getProgramId();
+    return PublicKey.findProgramAddressSync(
+      [Buffer.from('game_registry')],
+      programId
+    );
+  }
+
   async createMatch(
     gameType: number,
     seed: number,
@@ -38,21 +93,43 @@ export class GameClient {
     this.validateWallet(wallet);
     const program = this.anchorClient.getProgram();
     const matchId = crypto.randomUUID();
-    
-    const [matchPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from('match'), Buffer.from(matchId)],
-      program.programId
-    );
+
+    const [matchPda] = this.getMatchPDA(matchId);
+    const [registryPda] = this.getRegistryPDA();
+
+    if (DEBUG_SOLANA) {
+      console.log(`[createMatch] Creating match: ${matchId}`);
+      console.log(`[createMatch] Match PDA: ${matchPda.toString()}`);
+      console.log(`[createMatch] Registry PDA: ${registryPda.toString()}`);
+      console.log(`[createMatch] Authority: ${wallet.publicKey.toString()}`);
+      console.log(`[createMatch] Game type: ${gameType}, Seed: ${seed}`);
+    }
 
     try {
+      // For free matches, we don't need escrow or config accounts
+      // Use 'as never' to bypass TypeScript strict typing for optional Anchor accounts
       const tx = await program.methods
-        .createMatch(matchId, gameType, new BN(seed))
+        .createMatch(
+          matchId,
+          gameType,
+          new BN(seed),
+          null, // entry_fee (null for free match)
+          null, // payment_method (null for free match)
+          null, // match_type (null for free match)
+          null  // tournament_id (null for non-tournament)
+        )
         .accounts({
           matchAccount: matchPda,
+          registry: registryPda,
+          escrowAccount: null, // Not needed for free matches
           authority: wallet.publicKey,
-          systemProgram: PublicKey.default,
-        })
+          systemProgram: SystemProgram.programId,
+        } as never)
         .rpc();
+
+      if (DEBUG_SOLANA) {
+        console.log(`[createMatch] Transaction: ${tx}`);
+      }
 
       await this.confirmTransactionWithRetry(tx);
       return matchId;
@@ -69,19 +146,26 @@ export class GameClient {
     this.validateWallet(wallet);
     const program = this.anchorClient.getProgram();
     
-    const [matchPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from('match'), Buffer.from(matchId)],
-      program.programId
-    );
+    const [matchPda] = this.getMatchPDA(matchId);
+
+    if (DEBUG_SOLANA) {
+      console.log(`[joinMatch] Joining match: ${matchId}`);
+      console.log(`[joinMatch] Match PDA: ${matchPda.toString()}`);
+      console.log(`[joinMatch] Player: ${wallet.publicKey.toString()}`);
+    }
 
     const tx = await program.methods
       .joinMatch(matchId)
       .accounts({
         matchAccount: matchPda,
         player: wallet.publicKey,
-        systemProgram: PublicKey.default,
+        systemProgram: SystemProgram.programId,
       })
       .rpc();
+
+    if (DEBUG_SOLANA) {
+      console.log(`[joinMatch] Transaction: ${tx}`);
+    }
 
     await this.confirmTransactionWithRetry(tx);
     return tx;
@@ -94,10 +178,7 @@ export class GameClient {
     this.validateWallet(wallet);
     const program = this.anchorClient.getProgram();
     
-    const [matchPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from('match'), Buffer.from(matchId)],
-      program.programId
-    );
+    const [matchPda] = this.getMatchPDA(matchId);
 
     const tx = await program.methods
       .startMatch(matchId)
@@ -124,25 +205,13 @@ export class GameClient {
     this.validateWallet(wallet);
     const program = this.anchorClient.getProgram();
     
-    const [matchPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from('match'), Buffer.from(matchId)],
-      program.programId
-    );
+    const [matchPda] = this.getMatchPDA(matchId);
 
-    // Fetch current match state to get moveCount (prevents PDA collisions)
+    // Fetch current match state to verify match exists
     const matchState = await this.getMatchState(matchId);
     if (!matchState) {
       throw new Error(`Match ${matchId} not found`);
     }
-
-    // Use moveCount as move_index (matches Rust implementation)
-    const moveIndex = matchState.moveCount;
-    const moveIndexBytes = Buffer.from(new Uint8Array(new BN(moveIndex).toArray('le', 4)));
-
-    const [movePda] = PublicKey.findProgramAddressSync(
-      [Buffer.from('move'), Buffer.from(matchId), moveIndexBytes],
-      program.programId
-    );
 
     const actionType = this.mapActionTypeToU8(action.type);
     const payload = this.serializeAction(action);
@@ -151,15 +220,46 @@ export class GameClient {
     // Generate secure random nonce if not provided
     const moveNonce = nonce ?? this.generateSecureNonce();
 
+    // Derive move PDA matching Rust implementation:
+    // seeds = [b"move", match_id[0..32], match_id[32..], player.key(), nonce.to_le_bytes()]
+    // Note: matchId (UUID) is 36 bytes, so we split it: first 32 bytes + remaining 4 bytes
+    const matchIdBytes = Buffer.from(matchId, 'utf-8');
+    const matchIdFirst32 = matchIdBytes.slice(0, 32); // First 32 bytes
+    const matchIdRemaining = matchIdBytes.slice(32); // Remaining bytes (4 for UUID)
+    const nonceBytes = Buffer.from(new Uint8Array(new BN(moveNonce).toArray('le', 8))); // u64 = 8 bytes
+
+    const [movePda] = PublicKey.findProgramAddressSync(
+      [
+        Buffer.from('move'),
+        matchIdFirst32,
+        matchIdRemaining,
+        wallet.publicKey.toBuffer(),
+        nonceBytes
+      ],
+      program.programId
+    );
+
+    if (DEBUG_SOLANA) {
+      console.log(`[submitMove] Match: ${matchId}`);
+      console.log(`[submitMove] Match PDA: ${matchPda.toString()}`);
+      console.log(`[submitMove] Move PDA: ${movePda.toString()}`);
+      console.log(`[submitMove] Player: ${wallet.publicKey.toString()}`);
+      console.log(`[submitMove] Action type: ${actionType}, Nonce: ${moveNonce}`);
+    }
+
     const tx = await program.methods
       .submitMove(matchId, actionType, payload, new BN(moveNonce))
       .accounts({
         matchAccount: matchPda,
         moveAccount: movePda,
         player: wallet.publicKey,
-        systemProgram: PublicKey.default,
+        systemProgram: SystemProgram.programId,
       })
       .rpc();
+
+    if (DEBUG_SOLANA) {
+      console.log(`[submitMove] Transaction: ${tx}`);
+    }
 
     await this.confirmTransactionWithRetry(tx);
     
@@ -193,10 +293,7 @@ export class GameClient {
     }
     const program = this.anchorClient.getProgram();
     
-    const [matchPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from('match'), Buffer.from(matchId)],
-      program.programId
-    );
+    const [matchPda] = this.getMatchPDA(matchId);
 
     const authority = wallet?.publicKey || program.provider.publicKey;
     if (!authority) {
@@ -218,10 +315,7 @@ export class GameClient {
   async getMatchState(matchId: string): Promise<MatchState | null> {
     const program = this.anchorClient.getProgram();
     
-    const [matchPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from('match'), Buffer.from(matchId)],
-      program.programId
-    );
+    const [matchPda] = this.getMatchPDA(matchId);
 
     try {
       // Type assertion needed because Anchor IDL types aren't fully inferred
@@ -441,10 +535,7 @@ export class GameClient {
     this.validateWallet(wallet);
     const program = this.anchorClient.getProgram();
     
-    const [matchPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from('match'), Buffer.from(matchId)],
-      program.programId
-    );
+    const [matchPda] = this.getMatchPDA(matchId);
 
     const tx = await program.methods
       .anchorMatchRecord(

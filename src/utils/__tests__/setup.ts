@@ -1,6 +1,10 @@
 import { vi } from 'vitest'
 import { config } from 'dotenv'
 import { resolve } from 'path'
+// Import Vitest hooks to capture console logs and test results
+// Disabled: vitest-hooks uses beforeEach/afterEach which causes "Vitest failed to find the runner" error in Vitest 4.x
+// TODO: Migrate to Vitest reporter API instead
+// import './vitest-hooks'
 
 // Load .env file for tests (if it exists)
 // This allows tests to use environment variables from .env without manual setup

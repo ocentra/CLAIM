@@ -1,3 +1,6 @@
+/**
+ * @vitest-environment node
+ */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { Connection, Keypair, LAMPORTS_PER_SOL, Transaction, VersionedTransaction } from '@solana/web3.js';
 import { AnchorClient } from '@services/solana/AnchorClient';
@@ -5,13 +8,14 @@ import { GameClient } from '@services/solana/GameClient';
 import { Wallet } from '@coral-xyz/anchor';
 
 /**
- * E2E tests with real Solana devnet connection.
- * Per critique: Tests actual match lifecycle on devnet.
+ * E2E tests with real Solana connection (localnet by default, devnet optional).
+ * Per critique: Tests actual match lifecycle.
  * 
  * These tests require:
- * - Solana devnet access
+ * - Localnet: Start validator with "solana-test-validator" or "anchor localnet"
+ *   Then deploy program: "cd Rust/ocentra-games && anchor deploy"
+ * - Devnet: Set SOLANA_CLUSTER=devnet env var and ensure program is deployed to devnet
  * - SOL in test wallets (will airdrop if needed)
- * - Anchor program deployed to devnet
  */
 describe('Solana Integration E2E', () => {
   let connection: Connection;
@@ -22,8 +26,20 @@ describe('Solana Integration E2E', () => {
   let gameClient: GameClient;
 
   beforeAll(async () => {
-    // Connect to devnet
-    connection = new Connection('https://api.devnet.solana.com', 'confirmed');
+    // Connect to localnet by default (like Rust tests), or devnet if SOLANA_CLUSTER=devnet
+    // For localnet: Start validator with "solana-test-validator" or "anchor localnet"
+    const cluster = process.env.SOLANA_CLUSTER || 'localnet';
+    let rpcUrl: string;
+    
+    if (cluster === 'devnet') {
+      rpcUrl = 'https://api.devnet.solana.com';
+    } else {
+      // For WSL: Use WSL IP if SOLANA_RPC_URL is set, otherwise try localhost
+      // From Windows PowerShell, you may need: $env:SOLANA_RPC_URL="http://<WSL_IP>:8899"
+      rpcUrl = process.env.SOLANA_RPC_URL || 'http://localhost:8899';
+    }
+    
+    connection = new Connection(rpcUrl, 'confirmed');
     
     // Create test keypairs
     authority = Keypair.generate();
