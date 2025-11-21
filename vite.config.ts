@@ -5,7 +5,7 @@ import type { Plugin } from 'vite'
 import { WebSocketServer } from 'ws'
 import type { WebSocket } from 'ws'
 import { writeFile, mkdir } from 'fs/promises'
-import { existsSync } from 'fs'
+import { existsSync, readdirSync, statSync } from 'fs'
 
 // Logging flag - set to true to enable console logging for MCP Bridge
 const LOG_MCP_BRIDGE = false
@@ -573,6 +573,306 @@ function mcpBridgePlugin(): Plugin {
             },
             tools: [{ name: 'hello', description: 'Say hello' }],
           }))
+        } else {
+          next()
+        }
+      })
+
+      // Dev-only: Scan Resources directory: GET /__dev/api/scan-resources
+      server.middlewares.use('/__dev/api/scan-resources', async (req, res, next) => {
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+        
+        if (req.method === 'OPTIONS') {
+          res.writeHead(200)
+          res.end()
+          return
+        }
+        
+        if (req.method === 'GET') {
+          try {
+            const resourcesDir = path.join(process.cwd(), 'public', 'Resources')
+            
+            interface TreeNode {
+              name: string
+              path: string
+              type: 'folder' | 'asset'
+              children?: TreeNode[]
+            }
+            
+            const scanDirectory = (dirPath: string, relativePath: string): TreeNode[] => {
+              const nodes: TreeNode[] = []
+              
+              if (!existsSync(dirPath)) {
+                return nodes
+              }
+              
+              const entries = readdirSync(dirPath, { withFileTypes: true })
+              
+              for (const entry of entries) {
+                const fullPath = path.join(dirPath, entry.name)
+                const nodePath = path.join(relativePath, entry.name).replace(/\\/g, '/')
+                
+                if (entry.isDirectory()) {
+                  const children = scanDirectory(fullPath, nodePath)
+                  if (children.length > 0) {
+                    nodes.push({
+                      name: entry.name,
+                      path: nodePath,
+                      type: 'folder',
+                      children,
+                    })
+                  }
+                } else if (entry.isFile() && entry.name.endsWith('.asset')) {
+                  nodes.push({
+                    name: entry.name,
+                    path: nodePath,
+                    type: 'asset',
+                  })
+                }
+              }
+              
+              // Sort: folders first, then assets, both alphabetically
+              nodes.sort((a, b) => {
+                if (a.type !== b.type) {
+                  return a.type === 'folder' ? -1 : 1
+                }
+                return a.name.localeCompare(b.name)
+              })
+              
+              return nodes
+            }
+            
+            const tree = scanDirectory(resourcesDir, '/Resources')
+            
+            res.writeHead(200, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ tree }))
+          } catch (error) {
+            console.error('[vite-dev] Failed to scan Resources:', error)
+            res.writeHead(500, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ 
+              status: 'error', 
+              message: error instanceof Error ? error.message : 'Unknown error',
+              tree: []
+            }))
+          }
+        } else {
+          next()
+        }
+      })
+
+      // Dev-only: Save asset endpoint: POST /__dev/api/save-asset
+      server.middlewares.use('/__dev/api/save-asset', async (req, res, next) => {
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+        
+        if (req.method === 'OPTIONS') {
+          res.writeHead(200)
+          res.end()
+          return
+        }
+        
+        if (req.method === 'POST') {
+          let body = ''
+          req.on('data', (chunk: Buffer) => {
+            body += chunk.toString()
+          })
+          
+          req.on('end', async () => {
+            try {
+              const payload = JSON.parse(body) as { assetPath: string; asset: Record<string, unknown> }
+              
+              if (!payload.assetPath || !payload.asset) {
+                res.writeHead(400, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify({ status: 'error', message: 'Missing assetPath or asset in payload' }))
+                return
+              }
+              
+              // Normalize path: remove leading slash, ensure .asset extension
+              let normalizedPath = payload.assetPath.replace(/^\/+/, '')
+              if (!normalizedPath.startsWith('Resources/')) {
+                normalizedPath = `Resources/${normalizedPath}`
+              }
+              if (!normalizedPath.endsWith('.asset')) {
+                normalizedPath = `${normalizedPath}.asset`
+              }
+              
+              // Build full file path
+              const filePath = path.join(process.cwd(), 'public', normalizedPath)
+              
+              // Ensure directory exists
+              const dirPath = path.dirname(filePath)
+              if (!existsSync(dirPath)) {
+                await mkdir(dirPath, { recursive: true })
+              }
+              
+              // Validate JSON structure
+              const assetJson = JSON.stringify(payload.asset, null, 2)
+              
+              // Write file
+              await writeFile(filePath, assetJson, 'utf8')
+              
+              console.log(`[vite-dev] Saved asset: ${filePath}`)
+              
+              res.writeHead(200, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ status: 'ok', path: normalizedPath }))
+            } catch (error) {
+              console.error('[vite-dev] Failed to save asset:', error)
+              res.writeHead(500, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ 
+                status: 'error', 
+                message: error instanceof Error ? error.message : 'Unknown error' 
+              }))
+            }
+          })
+        } else {
+          next()
+        }
+      })
+
+      // Dev-only: Save card asset endpoint: POST /__dev/api/save-card-asset
+      server.middlewares.use('/__dev/api/save-card-asset', async (req, res, next) => {
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+        
+        if (req.method === 'OPTIONS') {
+          res.writeHead(200)
+          res.end()
+          return
+        }
+        
+        if (req.method === 'POST') {
+          let body = ''
+          req.on('data', (chunk: Buffer) => {
+            body += chunk.toString()
+          })
+          
+          req.on('end', async () => {
+            try {
+              const payload = JSON.parse(body) as { cardId: string; card: Record<string, unknown>; targetFolder?: string }
+              
+              if (!payload.cardId || !payload.card) {
+                res.writeHead(400, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify({ status: 'error', message: 'Missing cardId or card in payload' }))
+                return
+              }
+              
+              // Determine target folder
+              const targetFolder = payload.targetFolder || '/Resources/Cards'
+              const normalizedFolder = targetFolder.replace(/^\/+/, '').replace(/\/+$/, '')
+              
+              // Build asset path
+              const assetPath = `${normalizedFolder}/${payload.cardId}.asset`
+              
+              // Use save-asset logic
+              const filePath = path.join(process.cwd(), 'public', assetPath)
+              
+              // Ensure directory exists
+              const dirPath = path.dirname(filePath)
+              if (!existsSync(dirPath)) {
+                await mkdir(dirPath, { recursive: true })
+              }
+              
+              // Validate JSON structure
+              const assetJson = JSON.stringify(payload.card, null, 2)
+              
+              // Write file
+              await writeFile(filePath, assetJson, 'utf8')
+              
+              console.log(`[vite-dev] Saved card asset: ${filePath}`)
+              
+              res.writeHead(200, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ status: 'ok', path: assetPath }))
+            } catch (error) {
+              console.error('[vite-dev] Failed to save card asset:', error)
+              res.writeHead(500, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ 
+                status: 'error', 
+                message: error instanceof Error ? error.message : 'Unknown error' 
+              }))
+            }
+          })
+        } else {
+          next()
+        }
+      })
+
+      // Dev-only: Upload image endpoint: POST /__dev/api/upload-image
+      server.middlewares.use('/__dev/api/upload-image', async (req, res, next) => {
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+        
+        if (req.method === 'OPTIONS') {
+          res.writeHead(200)
+          res.end()
+          return
+        }
+        
+        if (req.method === 'POST') {
+          let body = ''
+          req.on('data', (chunk: Buffer) => {
+            body += chunk.toString()
+          })
+          
+          req.on('end', async () => {
+            try {
+              const payload = JSON.parse(body) as { 
+                fileName?: string
+                fileData: string // base64 encoded
+                targetPath?: string // optional, defaults to /Resources/Cards/Images/
+              }
+              
+              if (!payload.fileData) {
+                res.writeHead(400, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify({ status: 'error', message: 'Missing fileData in payload' }))
+                return
+              }
+              
+              // Decode base64 to buffer
+              const base64Data = payload.fileData.replace(/^data:image\/\w+;base64,/, '')
+              const buffer = Buffer.from(base64Data, 'base64')
+              
+              // Determine target path
+              const targetPath = payload.targetPath || '/Resources/Cards/Images'
+              const normalizedPath = targetPath.replace(/^\/+/, '').replace(/\/+$/, '')
+              
+              // Determine filename
+              const fileName = payload.fileName || `image-${Date.now()}.png`
+              
+              // Build full file path
+              const filePath = path.join(process.cwd(), 'public', normalizedPath, fileName)
+              
+              // Ensure directory exists
+              const dirPath = path.dirname(filePath)
+              if (!existsSync(dirPath)) {
+                await mkdir(dirPath, { recursive: true })
+              }
+              
+              // Write file
+              await writeFile(filePath, buffer)
+              
+              const relativePath = `/${normalizedPath}/${fileName}`
+              console.log(`[vite-dev] Uploaded image: ${filePath}`)
+              
+              res.writeHead(200, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ 
+                status: 'ok', 
+                path: relativePath,
+                fileName 
+              }))
+            } catch (error) {
+              console.error('[vite-dev] Failed to upload image:', error)
+              res.writeHead(500, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ 
+                status: 'error', 
+                message: error instanceof Error ? error.message : 'Unknown error' 
+              }))
+            }
+          })
         } else {
           next()
         }

@@ -1,0 +1,45 @@
+{
+  "__schemaVersion": 1,
+  "__assetType": "PageContentAsset",
+  "__assetId": "info",
+  "__guid": "claim-page-content-001",
+  "metadata": {
+    "guid": "claim-page-content-001",
+    "assetId": "info",
+    "assetType": "PageContentAsset",
+    "gameId": "Claim",
+    "createdAt": "2025-11-21T17:00:00.000Z",
+    "updatedAt": "2025-11-21T17:00:00.000Z"
+  },
+  "hero": {
+    "title": "⚔️ CLAIM ⚔️",
+    "subtitle": "Simple Rules. Deadly Game.",
+    "ctaButtons": []
+  },
+  "sections": [
+    {
+      "type": "about",
+      "title": "The Soul of the Game",
+      "content": "<div class=\"content-section\"><p>Imagine a game so simple, you can learn it in three minutes. But a game so brutal, it can end in thirty seconds. A game where a single card can be a triumph or a trap, and hesitation is the deadliest sin of all.</p><p>This is <strong>CLAIM</strong>.</p><p>It's a high-stakes duel of wits and nerve played with a standard deck of cards. You are dealt a mere three cards, and in that hand could be the key to a triumphant victory or a crippling, debt-ridden loss.</p><p>The goal is to accumulate points by hoarding cards of a single suit. But to score, you must publicly <strong>Declare</strong> that suit, painting a target on your back for every other player to see.</p></div>"
+    },
+    {
+      "type": "rules",
+      "title": "Game Flow Overview",
+      "subtitle": "The two main phases",
+      "content": "<div class=\"content-section\"><div class=\"rule-block\"><h4>Phase 1: Initial Declaration (Simultaneous)</h4><p>All players simultaneously decide whether to declare a suit:</p><ul><li><strong>Declare:</strong> Choose a suit and optionally place face-up cards</li><li><strong>Don't Declare:</strong> Take an immediate penalty based on your highest card</li></ul><p><strong>Timing:</strong> 30-second countdown → \"3, 2, 1\" count → simultaneous reveal</p></div><div class=\"rule-block\"><h4>Phase 2: Floor Card Rounds</h4><ol><li>Dealer reveals one card face-up as the <strong>Floor Card</strong></li><li>Starting with a randomly selected player, each takes one action</li><li>Unused Floor Cards go to bottom of draw pile</li></ol><p><strong>Dealer Rotation:</strong> New random dealer each round for fairness</p></div></div>"
+    },
+    {
+      "type": "strategy",
+      "title": "Core Tactics",
+      "subtitle": "Master these to win",
+      "content": "<div class=\"content-section\"><div class=\"strategy-block\"><h4>🎯 The High Card Gambit</h4><p>An all-in strategy using high-value cards (A, K, Q) to win a Blitz Showdown, even without a run. It's a statement of pure aggression.</p><p class=\"example\"><strong>Example:</strong> A♦, K♦<br/>(14 + 13) × 2 = <strong>54 points</strong><br/>Declare immediately and call Showdown!</p></div><div class=\"strategy-block\"><h4>💥 The Ambush & Rebuttal</h4><p>The core offensive/defensive dynamic. An aggressive player calls a Showdown with a weak but legal hand, hoping no one can counter. A defensive player holds a strong 3-card run, waiting to survive the ambush and turn the tables.</p></div></div>"
+    },
+    {
+      "type": "scoring",
+      "title": "Hoarder's Multiplier",
+      "subtitle": "The core scoring system",
+      "content": "<div class=\"content-section\"><div class=\"scoring-block\"><h4>For Players Who Declared a Suit</h4><ol class=\"scoring-steps\"><li><strong>Find all sequences</strong> of consecutive cards in your declared suit</li><li><strong>For each sequence:</strong><div class=\"formula\">(Sum of card values) × (Number of cards)</div></li><li><strong>Total Positive Points</strong> = Sum of all sequence scores</li><li><strong>Subtract penalties</strong> from non-declared suit cards</li><li><strong>Final Score</strong> = Positive Points - Penalty</li></ol></div><div class=\"rule-block\"><h4>Key Rules</h4><ul><li>Sequences can wrap around (A-K or 3-2-A)</li><li>Each sequence calculated separately</li><li>Only cards of your declared suit count as positive</li></ul></div></div>"
+    }
+  ]
+}
+

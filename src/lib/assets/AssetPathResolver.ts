@@ -14,6 +14,10 @@ export const AssetType = {
   CardRanking: 'CardRankingAsset',
   BonusRule: 'BonusRule',
   GameModeConfig: 'GameModeConfig',
+  PageContent: 'PageContentAsset',
+  Image: 'ImageAsset',
+  Layout: 'LayoutAsset',
+  UIComponent: 'UIComponentAsset',
 } as const;
 
 export type AssetType = typeof AssetType[keyof typeof AssetType];
@@ -111,6 +115,26 @@ export class AssetPathResolver {
 
       case AssetType.GameModeConfig: {
         return `${this.BASE_PATH}/GameModeConfig/${assetId}.json`;
+      }
+
+      case AssetType.PageContent: {
+        // PageContent assets can be in Pages/Games/{gameId}/info.asset or Pages/{pageId}.asset
+        if (gameId) {
+          return `${this.BASE_PATH}/Pages/Games/${gameId}/${assetId}.asset`;
+        }
+        return `${this.BASE_PATH}/Pages/${assetId}.asset`;
+      }
+
+      case AssetType.Image: {
+        return `${this.BASE_PATH}/UI/Images/${assetId}.asset`;
+      }
+
+      case AssetType.Layout: {
+        return `${this.BASE_PATH}/Layouts/${assetId}.asset`;
+      }
+
+      case AssetType.UIComponent: {
+        return `${this.BASE_PATH}/UI/${assetId}.asset`;
       }
 
       default:

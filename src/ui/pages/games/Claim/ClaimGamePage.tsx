@@ -4,7 +4,8 @@ import { ShowScreenEvent } from '@/lib/eventing/events/lobby';
 import { GameHeader } from '@/ui/components/Header/GameHeader';
 import { GameFooter } from '@/ui/components/Footer/GameFooter';
 import { GameModeSelector } from './GameModeSelector';
-import { GameInfoTabs } from './GameInfoTabs';
+import { PageRenderer } from '@/ui/components/PageRenderer/PageRenderer';
+import { usePageContent } from '@/hooks/usePageContent';
 import './ClaimGamePage.css';
 
 interface ClaimPageProps {
@@ -15,6 +16,9 @@ interface ClaimPageProps {
 }
 
 export function ClaimPage({ user, onLogout, onLogoutClick, gameName = 'CLAIM' }: ClaimPageProps) {
+  // Load page content from asset
+  const page = usePageContent('Claim', 'Claim');
+
   const handleLogout = () => {
     if (onLogoutClick) {
       onLogoutClick();
@@ -59,7 +63,8 @@ export function ClaimPage({ user, onLogout, onLogoutClick, gameName = 'CLAIM' }:
           onPlayMultiplayer={handlePlayMultiplayer}
         />
         
-        <GameInfoTabs />
+        {/* Render page content from asset */}
+        <PageRenderer pageAsset={page} />
       </div>
 
       <GameFooter />

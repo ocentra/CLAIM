@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './InspectorPanel.css';
+import { AssetPathResolver } from '@/lib/assets/AssetPathResolver';
 
 interface AssetData {
   __schemaVersion?: number;
@@ -16,6 +17,8 @@ interface AssetData {
 interface InspectorPanelProps {
   assetPath: string | null;
   assetData: AssetData | null;
+  isLoading?: boolean;
+  error?: string | null;
   onAssetUpdate: (updatedData: AssetData) => void;
 }
 
@@ -26,6 +29,8 @@ interface InspectorPanelProps {
 export const InspectorPanel: React.FC<InspectorPanelProps> = ({
   assetPath,
   assetData,
+  isLoading = false,
+  error = null,
   onAssetUpdate,
 }) => {
   const [editedData, setEditedData] = useState<AssetData | null>(null);
@@ -41,6 +46,35 @@ export const InspectorPanel: React.FC<InspectorPanelProps> = ({
     }
   }, [assetData]);
 
+  // Show error state
+  if (error) {
+    return (
+      <div className="inspector-panel inspector-panel--empty">
+        <div className="inspector-panel__placeholder">
+          <p className="inspector-panel__error">Error loading asset</p>
+          <p className="inspector-panel__placeholder-subtitle inspector-panel__error-message">
+            {error}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="inspector-panel inspector-panel--empty">
+        <div className="inspector-panel__placeholder">
+          <div className="inspector-panel__loading">
+            <div className="inspector-panel__spinner"></div>
+          </div>
+          <p className="inspector-panel__placeholder-subtitle">Loading asset...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show empty state when no asset selected
   if (!assetPath || !assetData || !editedData) {
     return (
       <div className="inspector-panel inspector-panel--empty">
@@ -216,6 +250,127 @@ const CardInspector: React.FC<{
   data: AssetData;
   onFieldChange: (field: string, value: unknown) => void;
 }> = ({ data, onFieldChange }) => {
+  const [isDragging, setIsDragging] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Calculate default image path from card ID
+  const cardId = typeof data.id === 'string' ? data.id : '';
+  const resolver = AssetPathResolver.getInstance();
+  let defaultImagePath = '';
+  try {
+    if (cardId) {
+      defaultImagePath = resolver.resolveCardImagePath(cardId);
+    }
+  } catch (error) {
+    // Card ID might not be valid format yet
+    console.warn('[CardInspector] Could not calculate default path:', error);
+  }
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const file = files[0];
+      if (file.type.startsWith('image/')) {
+        handleFileSelect(file);
+      }
+    }
+  };
+
+  const handleFileSelect = async (file: File) => {
+    setIsUploading(true);
+    try {
+      // Read file as base64
+      const reader = new FileReader();
+      const fileData = await new Promise<string>((resolve, reject) => {
+        reader.onload = (e) => {
+          if (e.target?.result && typeof e.target.result === 'string') {
+            resolve(e.target.result);
+          } else {
+            reject(new Error('Failed to read file'));
+          }
+        };
+        reader.onerror = () => reject(new Error('Failed to read file'));
+        reader.readAsDataURL(file);
+      });
+      
+      // Determine target filename - try to use default path filename if it exists
+      let fileName = file.name;
+      if (defaultImagePath) {
+        // Extract filename from default path (e.g., "/Resources/Cards/Images/2_of_spades.png" -> "2_of_spades.png")
+        const match = defaultImagePath.match(/\/([^/]+\.(png|jpg|jpeg|gif|webp))$/i);
+        if (match) {
+          fileName = match[1];
+        }
+      }
+      
+      // Upload to server
+      const response = await fetch('/__dev/api/upload-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileName,
+          fileData,
+          targetPath: '/Resources/Cards/Images',
+        }),
+      });
+      
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Unknown error' }));
+        throw new Error(`Failed to upload image: ${error.message || response.statusText}`);
+      }
+      
+      const result = await response.json();
+      if (result.status === 'ok' && result.path) {
+        // Update texturePath with saved path
+        onFieldChange('texturePath', result.path);
+        console.log('[CardInspector] Image uploaded:', result.path);
+      } else {
+        throw new Error('Upload failed: Invalid response');
+      }
+    } catch (error) {
+      console.error('[CardInspector] Failed to upload image:', error);
+      alert(`Failed to upload image: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      // Fall back to object URL for preview (but won't persist)
+      const objectUrl = URL.createObjectURL(file);
+      onFieldChange('texturePath', objectUrl);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleBrowseClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      handleFileSelect(files[0]);
+    }
+  };
+
   return (
     <div className="inspector-panel__section">
       <div className="inspector-panel__section-header">Card Properties</div>
@@ -239,16 +394,63 @@ const CardInspector: React.FC<{
         value={data.suit || ''}
         onChange={(v) => onFieldChange('suit', v)}
       />
-      <Field
-        label="Path (legacy)"
-        value={data.path || ''}
-        onChange={(v) => onFieldChange('path', v)}
-      />
-      <Field
-        label="Texture Path (legacy)"
-        value={data.texturePath || ''}
-        onChange={(v) => onFieldChange('texturePath', v)}
-      />
+      
+      {/* Image Path with Drag & Drop */}
+      <div className="inspector-panel__field">
+        <label htmlFor="texture-path-input" className="inspector-panel__field-label">
+          Image Path
+          {defaultImagePath && (
+            <span className="inspector-panel__field-hint" title="Calculated default path based on card ID">
+              (Default: {defaultImagePath.split('/').pop()})
+            </span>
+          )}
+        </label>
+        <div
+          className={`inspector-panel__file-drop-zone ${isDragging ? 'inspector-panel__file-drop-zone--dragging' : ''} ${isUploading ? 'inspector-panel__file-drop-zone--uploading' : ''}`}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="inspector-panel__file-input-hidden"
+            onChange={handleFileInputChange}
+            aria-label="Select image file"
+            disabled={isUploading}
+          />
+          <input
+            id="texture-path-input"
+            className="inspector-panel__field-input"
+            type="text"
+            value={typeof data.texturePath === 'string' ? data.texturePath : ''}
+            onChange={(e) => onFieldChange('texturePath', e.target.value)}
+            placeholder={defaultImagePath || "Drag image here or click browse..."}
+            disabled={isUploading}
+          />
+          <button
+            type="button"
+            className="inspector-panel__browse-button"
+            onClick={handleBrowseClick}
+            title="Browse for image file"
+            disabled={isUploading}
+          >
+            {isUploading ? '⏳' : '📁'} {isUploading ? 'Uploading...' : 'Browse'}
+          </button>
+        </div>
+        {isDragging && (
+          <div className="inspector-panel__drop-overlay">
+            Drop image here
+          </div>
+        )}
+        {defaultImagePath && (
+          <div className="inspector-panel__field-help">
+            💡 Default path calculated from card ID. Leave empty to use default, or set custom path to override.
+          </div>
+        )}
+      </div>
     </div>
   );
 };
