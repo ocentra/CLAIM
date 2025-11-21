@@ -7,8 +7,8 @@
     "node": ">=22.15.0"
   },
   "scripts": {
-    "dev": "concurrently \"tsx scripts/dev.ts\" \"tsx scripts/GameEditor.ts\"",
-    "dev:clean": "concurrently \"tsx scripts/dev.ts\" \"tsx scripts/GameEditor.ts\"",
+    "dev": "tsx scripts/dev.ts",
+    "dev:clean": "tsx scripts/dev.ts",
     "build": "tsc -b && vite build",
     "lint": "eslint . && npm run type-check",
     "lint:fix": "eslint . --fix",

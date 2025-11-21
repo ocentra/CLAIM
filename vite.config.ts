@@ -4,6 +4,8 @@ import path from 'path'
 import type { Plugin } from 'vite'
 import { WebSocketServer } from 'ws'
 import type { WebSocket } from 'ws'
+import { writeFile, mkdir } from 'fs/promises'
+import { existsSync } from 'fs'
 
 // Logging flag - set to true to enable console logging for MCP Bridge
 const LOG_MCP_BRIDGE = false
@@ -571,6 +573,77 @@ function mcpBridgePlugin(): Plugin {
             },
             tools: [{ name: 'hello', description: 'Say hello' }],
           }))
+        } else {
+          next()
+        }
+      })
+
+      // Dev-only: Game layout save endpoint: POST /__dev/api/save-layout
+      server.middlewares.use('/__dev/api/save-layout', async (req, res, next) => {
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+        
+        if (req.method === 'OPTIONS') {
+          res.writeHead(200)
+          res.end()
+          return
+        }
+        
+        if (req.method === 'POST') {
+          let body = ''
+          req.on('data', (chunk: Buffer) => {
+            body += chunk.toString()
+          })
+          
+          req.on('end', async () => {
+            try {
+              const payload = JSON.parse(body) as { gameId?: string; asset?: Record<string, unknown> }
+              
+              // Extract gameId from payload.gameId or payload.asset.metadata.gameId
+              const assetRecord = payload.asset && typeof payload.asset === 'object' && !Array.isArray(payload.asset) ? payload.asset : null
+              const metadata = assetRecord && typeof assetRecord.metadata === 'object' && assetRecord.metadata && !Array.isArray(assetRecord.metadata) ? assetRecord.metadata as Record<string, unknown> : {}
+              const gameId = payload.gameId ?? (typeof metadata.gameId === 'string' ? metadata.gameId : null)
+              
+              if (!gameId || !assetRecord) {
+                res.writeHead(400, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify({ status: 'error', message: 'Missing gameId or asset in payload' }))
+                return
+              }
+
+              // Ensure gameId is in metadata
+              const serializedAsset = {
+                ...assetRecord,
+                metadata: {
+                  ...metadata,
+                  gameId,
+                },
+              }
+
+              // Ensure directory exists
+              const gameConfigDir = path.join(process.cwd(), 'public', 'GameModeConfig')
+              if (!existsSync(gameConfigDir)) {
+                await mkdir(gameConfigDir, { recursive: true })
+              }
+
+              // Write file
+              const filePath = path.join(gameConfigDir, `${gameId}.json`)
+              await writeFile(filePath, JSON.stringify(serializedAsset, null, 2), 'utf8')
+              
+              const schemaVersion = typeof metadata.schemaVersion === 'number' || typeof metadata.schemaVersion === 'string' ? metadata.schemaVersion : 'n/a'
+              console.log(`[vite-dev] Saved game layout: ${filePath} (schemaVersion=${schemaVersion})`)
+              
+              res.writeHead(200, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ status: 'ok' }))
+            } catch (error) {
+              console.error('[vite-dev] Failed to save layout:', error)
+              res.writeHead(500, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ 
+                status: 'error', 
+                message: error instanceof Error ? error.message : 'Unknown error' 
+              }))
+            }
+          })
         } else {
           next()
         }

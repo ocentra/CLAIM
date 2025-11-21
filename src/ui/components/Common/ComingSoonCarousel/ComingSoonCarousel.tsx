@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import type { GameInfo } from '@/ui/components/Home/games';
+import type { GameInfo } from '@/ui/pages/Home/games';
 import claimImage0 from '@assets/Claim/Claim0.png';
 import threeCardImage0 from '@assets/ThreeCardBrag/Threecards0.png';
 import bridgeImage from '@assets/Bridge/Bridge.png';

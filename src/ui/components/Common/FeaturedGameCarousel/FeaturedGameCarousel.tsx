@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import type { GameInfo } from '@/ui/components/Home/games';
+import type { GameInfo } from '@/ui/pages/Home/games';
 import claimImage0 from '@assets/Claim/Claim0.png';
 import claimImage1 from '@assets/Claim/Claim1.png';
 import claimImage2 from '@assets/Claim/Claim2.png';

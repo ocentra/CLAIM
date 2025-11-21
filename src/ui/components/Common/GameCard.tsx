@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { GameInfo } from '@/ui/components/Home/games';
+import type { GameInfo } from '@/ui/pages/Home/games';
 import './GameCard.css';
 
 interface GameCardProps {

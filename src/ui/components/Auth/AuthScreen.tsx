@@ -3,8 +3,8 @@ import type { UserProfile } from '@services';
 import { EventBus } from '@/lib/eventing/EventBus'
 import { ShowScreenEvent } from '@/lib/eventing/events/lobby'
 import LoginDialog from './LoginDialog';
-import { Home } from '@/ui/components/Home/Home';
-import { ClaimPage, ThreeCardBragPage } from '@/ui/components/GamesPage';
+import { Home } from '@/ui/pages/Home/HomePage';
+import { ClaimPage, ThreeCardBragPage } from '@/ui/pages/games';
 import { SettingsPage } from '@/ui/pages/Settings/SettingsPage'
 
 interface AuthScreenProps {

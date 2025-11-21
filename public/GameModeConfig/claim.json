@@ -1,0 +1,142 @@
+{
+  "metadata": {
+    "gameId": "claim",
+    "schemaVersion": 1,
+    "displayName": "Claim",
+    "createdAt": "2025-11-20T21:40:23.118Z",
+    "updatedAt": "2025-11-20T21:40:23.118Z"
+  },
+  "layout": {
+    "defaultPlayerCount": 4,
+    "presets": {
+      "2": {
+        "table": {
+          "width": 960,
+          "height": 560,
+          "offsetX": 0,
+          "offsetY": -78,
+          "curvature": 0.88,
+          "feltInset": -8
+        },
+        "seats": [
+          {
+            "id": 0,
+            "label": "p1",
+            "position": {
+              "x": 0.5,
+              "y": 0.84
+            },
+            "rotation": 0,
+            "scale": 0.5
+          },
+          {
+            "id": 1,
+            "label": "p2",
+            "position": {
+              "x": 0.5,
+              "y": 0.16
+            },
+            "rotation": 0,
+            "scale": 0.5
+          }
+        ]
+      },
+      "3": {
+        "table": {
+          "width": 960,
+          "height": 560,
+          "offsetX": 0,
+          "offsetY": -78,
+          "curvature": 0.88,
+          "feltInset": -8
+        },
+        "seats": [
+          {
+            "id": 0,
+            "label": "p1",
+            "position": {
+              "x": 0.5,
+              "y": 0.84
+            },
+            "rotation": 0,
+            "scale": 0.5
+          },
+          {
+            "id": 1,
+            "label": "p2",
+            "position": {
+              "x": 0.1709,
+              "y": 0.33
+            },
+            "rotation": 0,
+            "scale": 0.5
+          },
+          {
+            "id": 2,
+            "label": "p3",
+            "position": {
+              "x": 0.8291,
+              "y": 0.33
+            },
+            "rotation": 0,
+            "scale": 0.5
+          }
+        ]
+      },
+      "4": {
+        "table": {
+          "width": 960,
+          "height": 560,
+          "offsetX": 0,
+          "offsetY": -78,
+          "curvature": 0.88,
+          "feltInset": -8
+        },
+        "seats": [
+          {
+            "id": 0,
+            "label": "p1",
+            "position": {
+              "x": 0.5,
+              "y": 0.84
+            },
+            "rotation": 0,
+            "scale": 0.5
+          },
+          {
+            "id": 1,
+            "label": "p2",
+            "position": {
+              "x": 0.12,
+              "y": 0.5
+            },
+            "rotation": 0,
+            "scale": 0.5
+          },
+          {
+            "id": 2,
+            "label": "p3",
+            "position": {
+              "x": 0.5,
+              "y": 0.16
+            },
+            "rotation": 0,
+            "scale": 0.5
+          },
+          {
+            "id": 3,
+            "label": "p4",
+            "position": {
+              "x": 0.88,
+              "y": 0.5
+            },
+            "rotation": 0,
+            "scale": 0.5
+          }
+        ]
+      }
+    }
+  },
+  "gameplay": {},
+  "extensions": {}
+}

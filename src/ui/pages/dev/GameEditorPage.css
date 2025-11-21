@@ -1,0 +1,155 @@
+/* Game Editor Page Styles */
+
+.game-editor-selection-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  padding: 2rem;
+}
+
+.game-editor-title {
+  margin-bottom: 2rem;
+  font-size: 2rem;
+}
+
+.game-editor-subtitle {
+  margin-bottom: 2rem;
+  color: #999;
+}
+
+.game-editor-button-grid {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.game-editor-button {
+  padding: 1rem 2rem;
+  font-size: 1.2rem;
+  text-transform: capitalize;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.game-editor-button:hover,
+.game-editor-button:focus {
+  background-color: #45a049;
+}
+
+.game-editor-button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.game-editor-loading-main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+}
+
+.game-editor-loading-text {
+  text-align: center;
+}
+
+.game-editor-error-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  padding: 2rem;
+}
+
+.game-editor-error-title {
+  color: #f44336;
+  margin-bottom: 1rem;
+}
+
+.game-editor-error-message {
+  color: #999;
+  margin-bottom: 2rem;
+}
+
+.game-editor-error-buttons {
+  display: flex;
+  gap: 1rem;
+}
+
+.game-editor-button-secondary {
+  padding: 0.75rem 1.5rem;
+  background-color: #2196F3;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.game-editor-button-secondary:hover,
+.game-editor-button-secondary:focus {
+  background-color: #1976D2;
+}
+
+.game-editor-button-secondary:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.game-editor-button-success {
+  padding: 0.75rem 1.5rem;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.game-editor-button-success:hover,
+.game-editor-button-success:focus {
+  background-color: #45a049;
+}
+
+.game-editor-button-success:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.game-editor-content-wrapper {
+  position: relative;
+}
+
+.game-editor-back-button-container {
+  position: fixed;
+  top: 80px;
+  left: 20px;
+  z-index: 1000;
+}
+
+.game-editor-back-button {
+  padding: 0.5rem 1rem;
+  background-color: #666;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background-color 0.2s;
+}
+
+.game-editor-back-button:hover,
+.game-editor-back-button:focus {
+  background-color: #555;
+}
+
+.game-editor-back-button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+

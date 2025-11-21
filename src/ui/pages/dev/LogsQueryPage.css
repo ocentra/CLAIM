@@ -1,0 +1,35 @@
+/* Logs Query Page Styles */
+
+.logs-query-container {
+  padding: 20px;
+  font-family: monospace;
+}
+
+.logs-query-title {
+  margin-bottom: 1rem;
+}
+
+.logs-query-pre {
+  background-color: #f5f5f5;
+  padding: 1rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.logs-query-loading {
+  padding: 20px;
+  font-family: monospace;
+}
+
+.logs-query-error {
+  padding: 20px;
+  font-family: monospace;
+}
+
+.logs-query-error-title {
+  color: #f44336;
+  margin-bottom: 1rem;
+}
+

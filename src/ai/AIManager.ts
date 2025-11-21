@@ -2,7 +2,8 @@ import { type GameState, type PlayerAction, AIPersonality } from '@/types'
 import { AIEngine, type AIConfig, type AIDecision } from './AIEngine'
 import { ModelManager } from './ModelManager'
 import { AIHelper } from './AIHelper'
-import { ClaimGameMode } from '@/gameMode/ClaimGameMode'
+import { GameModeFactory } from '@/gameMode/GameModeFactory'
+import type { GameMode } from '@/gameMode/GameMode'
 import { RequestModelGenerateEvent } from '@/lib/eventing/events/model'
 import { EventBus } from '@/lib/eventing/EventBus'
 import { logAI } from '@lib/logging'
@@ -42,12 +43,12 @@ export class AIManager {
   private aiEngines: Map<string, AIEngine> = new Map()
   private modelManager: ModelManager
   private aiHelper: AIHelper
-  private gameMode: ClaimGameMode
+  private gameMode: GameMode
 
-  constructor() {
+  constructor(gameModeId: string = 'claim') {
     this.modelManager = ModelManager.getInstance()
     this.aiHelper = AIHelper.getInstance()
-    this.gameMode = new ClaimGameMode()
+    this.gameMode = GameModeFactory.getGameMode(gameModeId)
   }
 
   /**

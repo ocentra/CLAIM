@@ -12,16 +12,13 @@ export { ErrorScreen } from './Error/ErrorScreen'
 // Footer
 export { GameFooter } from './Footer/GameFooter'
 
-// Game screen core components
-export { default as GameScreen } from './GameScreen/GameScreen'
-export { default as GameHUD } from './GameScreen/GameHUD'
-export { default as GameBackground } from './GameScreen/GameBackground'
-export { default as PlayersOnTable } from './GameScreen/PlayersOnTable'
-export { default as PlayerUI } from './GameScreen/PlayerUI'
-export { default as TableLayoutEditor } from './GameScreen/TableLayoutEditor'
-export { default as CardInHand } from './GameScreen/CardInHand'
-export * from './GameScreen/CardInHand.types'
-export * from './GameScreen/CardInHand.constants'
+// Game screen core components (via clean index exports)
+export * from './GameScreen'
+// Also export individual components for backward compatibility
+export { GameScreen, GameScreenComponent, GameHUD, PlayersOnTable, PlayerUI } from './GameScreen'
+export { GameBackground, CardInHand, CenterTableSvg, TableLayoutEditor } from './GameScreen'
+export type { PlayerUIProps, SerializablePlayerUIKey } from './GameScreen'
+export { PLAYER_UI_SERIALIZABLE_KEYS, PLAYER_UI_SERIALIZABLE_FIELDS } from './GameScreen'
 
 // Header
 export { GameHeader } from './Header/GameHeader'
@@ -31,22 +28,9 @@ export { ProfilePictureModal } from './Header/ProfilePictureModal'
 export { AssetLoadingScreen } from './Loading/AssetLoadingScreen'
 export { AppLoadingScreen } from './Loading/GameLoadingScreen'
 
-// Welcome folder deleted - use Home/Claim instead
-
-// Home (main welcome/store page)
-export { Home } from './Home/Home'
-// GameCard moved to Common - use GameCard from Common instead
-export type { GameInfo } from './Home/Home'
-
-// Games Pages (all game-specific pages)
-export {
-  ClaimPage,
-  ClaimGameModeSelector,
-  ClaimGameInfoTabs,
-  ThreeCardBragPage,
-  ThreeCardBragGameModeSelector,
-  ThreeCardBragGameInfoTabs,
-} from './GamesPage'
+// Pages moved to ui/pages/ - import from there instead
+// Home: @/ui/pages/Home
+// Games: @/ui/pages/games
 
 // Common/Shared components
 export { FeaturedGameCarousel } from './Common/FeaturedGameCarousel'

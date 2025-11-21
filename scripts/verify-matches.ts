@@ -27,9 +27,11 @@ interface VerificationResult {
 
 /**
  * Gets match IDs from example files for testing.
+ * Note: Example files are now in docs/ocentra/Multiplayer and Solana/examples/
+ * This function loads them from the new location for verification purposes.
  */
 function getExampleMatchIds(): string[] {
-  const examplesDir = join(process.cwd(), 'examples');
+  const examplesDir = join(process.cwd(), 'docs/ocentra/Multiplayer and Solana/examples');
   const matchIds: string[] = [];
   
   try {
@@ -90,8 +92,8 @@ async function verifyMatch(
   try {
     let matchRecord: MatchRecord | null = null;
 
-    // Try to load from example files first
-    const examplesDir = join(process.cwd(), 'examples');
+    // Try to load from example files first (now in docs/ocentra/Multiplayer and Solana/examples/)
+    const examplesDir = join(process.cwd(), 'docs/ocentra/Multiplayer and Solana/examples');
     try {
       const humanVsHuman = JSON.parse(
         readFileSync(join(examplesDir, 'human_vs_human_match.json'), 'utf-8')

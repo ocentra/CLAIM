@@ -1,4 +1,4 @@
-import type { PlayerUIConfig, SerializablePlayerUIKey } from '../components/GameScreen/PlayerUI';
+import type { PlayerUIConfig, SerializablePlayerUIKey } from '../components/GameScreen';
 
 type PlayerUIOverrideMap = Partial<Record<SerializablePlayerUIKey, number>>;
 

@@ -2,7 +2,7 @@ import {
   PLAYER_UI_SERIALIZABLE_FIELDS,
   sanitizePlayerUIOverrides,
   type SerializablePlayerUIKey,
-} from '@/ui/components/GameScreen/PlayerUI';
+} from '@/ui/components/GameScreen';
 import type {
   SerializedGameAsset,
   SerializedLayoutPreset,
