@@ -103,9 +103,17 @@ export const configureSerialization = (
   Object.assign(runtimeOptions, options);
 };
 
-export function serializable(options: SerializableOptions = {}) {
-  return function (target: object, propertyKey: string) {
-    const constructor = (target as { constructor: SerializableConstructor }).constructor;
+// Property decorator function type for experimental decorators
+// Using 'any' is necessary for experimental decorators to work with all property types,
+// including properties with definite assignment assertion (!)
+/* eslint-disable @typescript-eslint/no-explicit-any */
+export function serializable(options: SerializableOptions = {}): any {
+  return function (
+    target: any,
+    propertyKey: string | symbol
+  ): any {
+    const key = typeof propertyKey === 'string' ? propertyKey : String(propertyKey);
+    const constructor = target.constructor as SerializableConstructor;
     serializableConstructors.add(constructor);
 
     const existing =
@@ -114,6 +122,8 @@ export function serializable(options: SerializableOptions = {}) {
         constructor
       ) as SerializableField[] | undefined) ?? [];
 
+    // Cast target to record to access property values
+    // Properties may be undefined at decorator evaluation time
     const targetRecord = target as Record<string, unknown>;
     const designType = Reflect.getMetadata('design:type', target, propertyKey) as
       | SerializableConstructor
@@ -121,9 +131,9 @@ export function serializable(options: SerializableOptions = {}) {
       | undefined;
 
     existing.push({
-      key: propertyKey,
+      key,
       options,
-      defaultValue: targetRecord[propertyKey],
+      defaultValue: targetRecord[key],
       designType,
     });
 
@@ -131,6 +141,7 @@ export function serializable(options: SerializableOptions = {}) {
     metadataCache.set(constructor, existing);
   };
 }
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 export function getSerializableFields<T>(
   constructor: SerializableConstructor<T>

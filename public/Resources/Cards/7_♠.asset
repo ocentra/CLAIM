@@ -1,0 +1,17 @@
+{
+  "__schemaVersion": 1,
+  "__assetType": "Card",
+  "__assetId": "7_♠",
+  "metadata": {
+    "assetId": "7_♠",
+    "assetType": "Card",
+    "createdAt": "2025-11-21T03:01:42.566Z",
+    "updatedAt": "2025-11-21T03:01:42.566Z"
+  },
+  "id": "7_♠",
+  "path": "Assets/Images/Cards/7_of_spadess.png",
+  "rank": 7,
+  "rankSymbol": "7♠",
+  "suit": "spades",
+  "texturePath": "/assets/cards/7_of_spadess.png"
+}

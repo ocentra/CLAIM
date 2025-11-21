@@ -1,0 +1,22 @@
+{
+  "__schemaVersion": 1,
+  "__assetType": "BonusRule",
+  "__assetId": "multiplefourofakind",
+  "metadata": {
+    "gameModeId": "claim",
+    "assetId": "multiplefourofakind",
+    "assetType": "BonusRule",
+    "createdAt": "2025-11-21T03:01:42.562Z",
+    "updatedAt": "2025-11-21T03:01:42.562Z"
+  },
+  "minNumberOfCard": 8,
+  "bonusValue": 170,
+  "priority": 97,
+  "ruleName": "MultipleFourOfAKind",
+  "description": "Two or more sets of Four of a Kind.",
+  "gameModeId": "claim",
+  "examples": {
+    "LLM": "MultipleFourOfAKind Two or more sets of Four of a Kind.\nMultipleFourOfAKind Bonus: 170\nExamples:\nAS, AD, AC, AH, KS, KD, KC, KH",
+    "Player": "MultipleFourOfAKind Two or more sets of Four of a Kind.\nMultipleFourOfAKind Bonus: 170\nExamples:\nAS, AD, AC, AH, KS, KD, KC, KH"
+  }
+}

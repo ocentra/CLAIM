@@ -1,0 +1,22 @@
+{
+  "__schemaVersion": 1,
+  "__assetType": "BonusRule",
+  "__assetId": "royalflush",
+  "metadata": {
+    "gameModeId": "claim",
+    "assetId": "royalflush",
+    "assetType": "BonusRule",
+    "createdAt": "2025-11-21T03:01:42.554Z",
+    "updatedAt": "2025-11-21T03:01:42.554Z"
+  },
+  "minNumberOfCard": 3,
+  "bonusValue": 200,
+  "priority": 100,
+  "ruleName": "RoyalFlush",
+  "description": "Ace, King, and Queen of the same suit.",
+  "gameModeId": "claim",
+  "examples": {
+    "LLM": "RoyalFlush Ace, King, and Queen of the same suit.\nRoyalFlush Bonus: 200\nExamples:\nAS, KS, QS",
+    "Player": "RoyalFlush Ace, King, and Queen of the same suit.\nRoyalFlush Bonus: 200\nExamples:\nAS, KS, QS"
+  }
+}

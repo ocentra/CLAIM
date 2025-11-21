@@ -1,0 +1,22 @@
+{
+  "__schemaVersion": 1,
+  "__assetType": "BonusRule",
+  "__assetId": "samecolorssequence",
+  "metadata": {
+    "gameModeId": "claim",
+    "assetId": "samecolorssequence",
+    "assetType": "BonusRule",
+    "createdAt": "2025-11-21T03:01:42.559Z",
+    "updatedAt": "2025-11-21T03:01:42.559Z"
+  },
+  "minNumberOfCard": 3,
+  "bonusValue": 120,
+  "priority": 90,
+  "ruleName": "SameColorsSequence",
+  "description": "Sequence of cards of the same color (Red: Hearts/Diamonds, Black: Spades/Clubs).",
+  "gameModeId": "claim",
+  "examples": {
+    "LLM": "SameColorsSequence Sequence of cards of the same color (Red: Hearts/Diamonds, Black: Spades/Clubs).\nSameColorsSequence Bonus: 120\nExamples:\n5H, 6D, 7H",
+    "Player": "SameColorsSequence Sequence of cards of the same color (Red: Hearts/Diamonds, Black: Spades/Clubs).\nSameColorsSequence Bonus: 120\nExamples:\n5H, 6D, 7H"
+  }
+}

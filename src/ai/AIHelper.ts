@@ -43,31 +43,34 @@ export class AIHelper {
    * @returns System prompt string
    */
   GetSystemMessage(gameMode: GameMode): string {
-    const rules = gameMode.getGameRules()
-    const description = gameMode.getGameDescription()
-    const strategyTips = gameMode.getStrategyTips()
-    const bonusRules = gameMode.getBonusRules()
-    const moveValidity = gameMode.getMoveValidityConditions()
-    const bluffSettings = gameMode.getBluffSettings()
-    const examples = gameMode.getExampleHands()
+    const rules = gameMode.gameRules
+    const description = gameMode.gameDescription
+    const strategyTips = gameMode.strategyTips
+    const bonusRules = gameMode.bonusRules
+    const moveValidity = gameMode.moveValidityConditions
+    const bluffSettings = gameMode.bluffSettings
+    const examples = gameMode.exampleHands
 
-    let systemMessage = `You are an AI assistant playing ${description}\n\n`
+    let systemMessage = `You are an AI assistant playing ${description.Player}\n\n`
     systemMessage += `GAME RULES:\n${rules.LLM}\n\n`
     systemMessage += `BONUS RULES:\n${bonusRules}\n\n`
-    systemMessage += `MOVE VALIDITY:\n${moveValidity}\n\n`
-    systemMessage += `BLUFF SETTINGS:\n${bluffSettings}\n\n`
+    systemMessage += `MOVE VALIDITY:\n${JSON.stringify(moveValidity)}\n\n`
+    systemMessage += `BLUFF SETTINGS:\n${JSON.stringify(bluffSettings)}\n\n`
 
-    if (strategyTips.length > 0) {
-      systemMessage += `STRATEGY TIPS:\n`
-      strategyTips.forEach((tip, index) => {
-        systemMessage += `${index + 1}. ${tip}\n`
-      })
-      systemMessage += `\n`
+    if (strategyTips.Player && strategyTips.Player.length > 0) {
+      const tips = strategyTips.Player.split('\n').filter(t => t.trim())
+      if (tips.length > 0) {
+        systemMessage += `STRATEGY TIPS:\n`
+        tips.forEach((tip: string, index: number) => {
+          systemMessage += `${index + 1}. ${tip}\n`
+        })
+        systemMessage += `\n`
+      }
     }
 
     if (examples.length > 0) {
       systemMessage += `EXAMPLE HANDS:\n`
-      examples.forEach((example, index) => {
+      examples.forEach((example: string, index: number) => {
         systemMessage += `${index + 1}. ${example}\n`
       })
       systemMessage += `\n`

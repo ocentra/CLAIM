@@ -1,0 +1,22 @@
+{
+  "__schemaVersion": 1,
+  "__assetType": "BonusRule",
+  "__assetId": "multipletriplets",
+  "metadata": {
+    "gameModeId": "claim",
+    "assetId": "multipletriplets",
+    "assetType": "BonusRule",
+    "createdAt": "2025-11-21T03:01:42.561Z",
+    "updatedAt": "2025-11-21T03:01:42.561Z"
+  },
+  "minNumberOfCard": 6,
+  "bonusValue": 150,
+  "priority": 96,
+  "ruleName": "MultipleTriplets",
+  "description": "Two or more sets of Three of a Kind.",
+  "gameModeId": "claim",
+  "examples": {
+    "LLM": "MultipleTriplets Two or more sets of Three of a Kind.\nMultipleTriplets Bonus: 150\nExamples:\nAS, AD, AC, KS, KD, KC",
+    "Player": "MultipleTriplets Two or more sets of Three of a Kind.\nMultipleTriplets Bonus: 150\nExamples:\nAS, AD, AC, KS, KD, KC"
+  }
+}

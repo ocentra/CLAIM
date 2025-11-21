@@ -1,0 +1,13 @@
+{
+  "__schemaVersion": 1,
+  "__assetType": "StrategyTipsAsset",
+  "__assetId": "claim-tips",
+  "metadata": {
+    "assetId": "claim-tips",
+    "assetType": "StrategyTipsAsset",
+    "updatedAt": "2025-01-20T00:00:00.000Z"
+  },
+  "LLM": "Evaluate hand strength before picking up the floor card\nConsider opponent actions and declared suits when making decisions\nTrack cards played to estimate remaining high cards in each suit\nUse bluffing strategically but be aware of the risks\nManage risk vs reward when declaring intent to win\nConsider suit priority when cards are tied in value\nWatch for patterns in opponent behavior\nBalance aggressive play with conservative hand management",
+  "Player": "Evaluate hand strength before picking up the floor card\nConsider opponent actions and declared suits when making decisions\nTrack cards played to estimate remaining high cards in each suit\nUse bluffing strategically but be aware of the risks\nManage risk vs reward when declaring intent to win\nConsider suit priority when cards are tied in value\nWatch for patterns in opponent behavior\nBalance aggressive play with conservative hand management"
+}
+

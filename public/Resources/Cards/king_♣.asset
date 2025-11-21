@@ -1,0 +1,17 @@
+{
+  "__schemaVersion": 1,
+  "__assetType": "Card",
+  "__assetId": "king_♣",
+  "metadata": {
+    "assetId": "king_♣",
+    "assetType": "Card",
+    "createdAt": "2025-11-21T03:01:42.588Z",
+    "updatedAt": "2025-11-21T03:01:42.588Z"
+  },
+  "id": "King_♣",
+  "path": "Assets/Images/Cards/King_of_clubss.png",
+  "rank": 13,
+  "rankSymbol": "King♣",
+  "suit": "clubs",
+  "texturePath": "/assets/cards/king_of_clubss.png"
+}

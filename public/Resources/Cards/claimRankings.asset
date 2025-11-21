@@ -1,0 +1,26 @@
+{
+  "__schemaVersion": 1,
+  "__assetType": "CardRankingAsset",
+  "__assetId": "claim-rankings",
+  "metadata": {
+    "assetId": "claim-rankings",
+    "assetType": "CardRankingAsset",
+    "updatedAt": "2025-01-20T00:00:00.000Z"
+  },
+  "rankings": [
+    { "CardName": "Ace", "Value": 14 },
+    { "CardName": "King", "Value": 13 },
+    { "CardName": "Queen", "Value": 12 },
+    { "CardName": "Jack", "Value": 11 },
+    { "CardName": "10", "Value": 10 },
+    { "CardName": "9", "Value": 9 },
+    { "CardName": "8", "Value": 8 },
+    { "CardName": "7", "Value": 7 },
+    { "CardName": "6", "Value": 6 },
+    { "CardName": "5", "Value": 5 },
+    { "CardName": "4", "Value": 4 },
+    { "CardName": "3", "Value": 3 },
+    { "CardName": "2", "Value": 2 }
+  ]
+}
+

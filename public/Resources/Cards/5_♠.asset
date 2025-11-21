@@ -1,0 +1,17 @@
+{
+  "__schemaVersion": 1,
+  "__assetType": "Card",
+  "__assetId": "5_♠",
+  "metadata": {
+    "assetId": "5_♠",
+    "assetType": "Card",
+    "createdAt": "2025-11-21T03:01:42.565Z",
+    "updatedAt": "2025-11-21T03:01:42.565Z"
+  },
+  "id": "5_♠",
+  "path": "Assets/Images/Cards/5_of_spadess.png",
+  "rank": 5,
+  "rankSymbol": "5♠",
+  "suit": "spades",
+  "texturePath": "/assets/cards/5_of_spadess.png"
+}

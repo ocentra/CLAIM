@@ -1,0 +1,17 @@
+{
+  "__schemaVersion": 1,
+  "__assetType": "Card",
+  "__assetId": "queen_♠",
+  "metadata": {
+    "assetId": "queen_♠",
+    "assetType": "Card",
+    "createdAt": "2025-11-21T03:01:42.568Z",
+    "updatedAt": "2025-11-21T03:01:42.568Z"
+  },
+  "id": "Queen_♠",
+  "path": "Assets/Images/Cards/Queen_of_spadess.png",
+  "rank": 12,
+  "rankSymbol": "Queen♠",
+  "suit": "spades",
+  "texturePath": "/assets/cards/queen_of_spadess.png"
+}

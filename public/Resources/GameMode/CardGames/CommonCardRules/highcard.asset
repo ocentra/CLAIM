@@ -1,0 +1,22 @@
+{
+  "__schemaVersion": 1,
+  "__assetType": "BonusRule",
+  "__assetId": "highcard",
+  "metadata": {
+    "gameModeId": "claim",
+    "assetId": "highcard",
+    "assetType": "BonusRule",
+    "createdAt": "2025-11-21T03:01:42.555Z",
+    "updatedAt": "2025-11-21T03:01:42.555Z"
+  },
+  "minNumberOfCard": 3,
+  "bonusValue": 90,
+  "priority": 86,
+  "ruleName": "HighCard",
+  "description": "Highest value card in hand when no other hands are made.",
+  "gameModeId": "claim",
+  "examples": {
+    "LLM": "HighCard Highest value card in hand when no other hands are made.\nHighCard Bonus: 90\nExamples:\nAS, 7D, 4C",
+    "Player": "HighCard Highest value card in hand when no other hands are made.\nHighCard Bonus: 90\nExamples:\nAS, 7D, 4C"
+  }
+}

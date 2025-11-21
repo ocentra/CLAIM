@@ -53,20 +53,30 @@ let hasWebGPU: boolean = false
 
     // Configure execution providers - prefer WebGPU if available (matches TabAgent exactly)
     const transformersEnv = env
-    const onnxBackend: OnnxBackendConfig =
-      (transformersEnv.backends.onnx as OnnxBackendConfig | undefined) ?? {}
-    transformersEnv.backends.onnx = onnxBackend as Partial<typeof env.backends.onnx>
+
+    // Initialize ONNX backend configuration properly
+    if (!transformersEnv.backends) {
+      transformersEnv.backends = {} as typeof env.backends
+    }
+    if (!transformersEnv.backends.onnx) {
+      transformersEnv.backends.onnx = {} as typeof env.backends.onnx
+    }
+
+    const onnxBackend = transformersEnv.backends.onnx as Record<string, unknown>
 
     if (hasWebGPU) {
       onnxBackend.executionProviders = ['webgpu', 'wasm']
-      if (onnxBackend.webgpu) {
-        onnxBackend.webgpu.powerPreference = 'high-performance'
-      }
+      onnxBackend.webgpu = { powerPreference: 'high-performance' }
     } else {
       onnxBackend.executionProviders = ['wasm']
     }
 
     onnxBackend.logLevel = 'warning'
+
+    // Initialize webgpu environment if using WebGPU
+    if (hasWebGPU && !transformersEnv.webgpu) {
+      transformersEnv.webgpu = {} as typeof env.webgpu
+    }
 
     // Initialize PipelineStateManager
     await PipelineStateManager.initialize()

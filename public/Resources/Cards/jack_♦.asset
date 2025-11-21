@@ -1,0 +1,17 @@
+{
+  "__schemaVersion": 1,
+  "__assetType": "Card",
+  "__assetId": "jack_♦",
+  "metadata": {
+    "assetId": "jack_♦",
+    "assetType": "Card",
+    "createdAt": "2025-11-21T03:01:42.581Z",
+    "updatedAt": "2025-11-21T03:01:42.581Z"
+  },
+  "id": "Jack_♦",
+  "path": "Assets/Images/Cards/Jack_of_diamondss.png",
+  "rank": 11,
+  "rankSymbol": "Jack♦",
+  "suit": "diamonds",
+  "texturePath": "/assets/cards/jack_of_diamondss.png"
+}

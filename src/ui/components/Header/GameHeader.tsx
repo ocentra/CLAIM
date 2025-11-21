@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { getProxiedImageUrl, shouldProxyImage } from '@utils/imageProxy';
 import type { UserProfile } from '@services';
 import { ProfilePictureModal } from './ProfilePictureModal';
 import mLogo from '@assets/Mlogo.png';
@@ -19,6 +20,25 @@ interface GameHeaderProps {
 export function GameHeader({ user, onLogout, showProfile = true, variant = 'game', gameName = 'CLAIM', onHomeClick, tagline }: GameHeaderProps) {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showPictureModal, setShowPictureModal] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  
+  // Reset image error when user changes
+  if (imageError && user?.photoURL && !shouldProxyImage(user.photoURL)) {
+    setImageError(false);
+  }
+  
+  // Try original URL first, fallback to proxy only if CORS error occurs
+  // This saves Cloudflare Worker bandwidth - only use proxy when needed
+  const profilePictureUrl = user?.photoURL 
+    ? (imageError ? getProxiedImageUrl(user.photoURL) : user.photoURL)
+    : null;
+  
+  const handleImageError = () => {
+    // Only switch to proxy if we haven't already tried it and it's an external URL
+    if (!imageError && user?.photoURL && shouldProxyImage(user.photoURL)) {
+      setImageError(true);
+    }
+  };
 
   const handleLogout = () => {
     setShowProfileMenu(false);
@@ -54,10 +74,15 @@ export function GameHeader({ user, onLogout, showProfile = true, variant = 'game
                   className="user-profile-compact"
                   onClick={() => setShowProfileMenu(!showProfileMenu)}
                   aria-label="User profile menu"
-                  aria-expanded={showProfileMenu}
+                  {...(showProfileMenu ? { 'aria-expanded': true } : { 'aria-expanded': false })}
                 >
-                  {user.photoURL ? (
-                    <img src={user.photoURL} alt={user.displayName} className="profile-avatar-compact" />
+                  {profilePictureUrl ? (
+                    <img 
+                      src={profilePictureUrl} 
+                      alt={user.displayName} 
+                      className="profile-avatar-compact"
+                      onError={handleImageError}
+                    />
                   ) : (
                     <div className="profile-avatar-placeholder-compact">
                       {user.displayName?.charAt(0).toUpperCase() || 'U'}
@@ -86,8 +111,13 @@ export function GameHeader({ user, onLogout, showProfile = true, variant = 'game
                           }}
                           aria-label="Change profile picture"
                         >
-                          {user.photoURL ? (
-                            <img src={user.photoURL} alt={user.displayName} className="profile-menu-avatar" />
+                          {profilePictureUrl ? (
+                            <img 
+                              src={profilePictureUrl} 
+                              alt={user.displayName} 
+                              className="profile-menu-avatar"
+                              onError={handleImageError}
+                            />
                           ) : (
                             <div className="profile-menu-avatar-placeholder">
                               {user.displayName?.charAt(0).toUpperCase() || 'U'}
@@ -185,10 +215,15 @@ export function GameHeader({ user, onLogout, showProfile = true, variant = 'game
                 className="user-profile-compact"
                 onClick={() => setShowProfileMenu(!showProfileMenu)}
                 aria-label="User profile menu"
-                aria-expanded={showProfileMenu}
+                {...(showProfileMenu ? { 'aria-expanded': true } : { 'aria-expanded': false })}
               >
-                {user.photoURL ? (
-                  <img src={user.photoURL} alt={user.displayName} className="profile-avatar-compact" />
+                {profilePictureUrl ? (
+                  <img 
+                    src={profilePictureUrl} 
+                    alt={user.displayName} 
+                    className="profile-avatar-compact"
+                    onError={handleImageError}
+                  />
                 ) : (
                   <div className="profile-avatar-placeholder-compact">
                     {user.displayName?.charAt(0).toUpperCase() || 'U'}

@@ -85,7 +85,9 @@ export function AuthScreen({
     }
   }, [])
 
-  if (isAuthenticated) {
+  // Only show authenticated pages if both authenticated AND user profile is loaded
+  // If authenticated but user is null, user profile is still loading - show login as fallback
+  if (isAuthenticated && user) {
     if (currentScreen === 'settings') {
       return <SettingsPage />
     }
@@ -131,7 +133,8 @@ export function AuthScreen({
     );
   }
 
-  if (showLoginDialog) {
+  // If not authenticated, always show login dialog
+  // (showLoginDialog controls timing, but we should always show something)
     return (
       <LoginDialog
         onLogin={onLogin}
@@ -144,8 +147,5 @@ export function AuthScreen({
         onTabSwitch={onTabSwitch}
       />
     );
-  }
-
-  return null;
 }
 

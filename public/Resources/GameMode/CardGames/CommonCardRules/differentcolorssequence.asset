@@ -1,0 +1,22 @@
+{
+  "__schemaVersion": 1,
+  "__assetType": "BonusRule",
+  "__assetId": "differentcolorssequence",
+  "metadata": {
+    "gameModeId": "claim",
+    "assetId": "differentcolorssequence",
+    "assetType": "BonusRule",
+    "createdAt": "2025-11-21T03:01:42.559Z",
+    "updatedAt": "2025-11-21T03:01:42.560Z"
+  },
+  "minNumberOfCard": 3,
+  "bonusValue": 115,
+  "priority": 89,
+  "ruleName": "DifferentColorsSequence",
+  "description": "Sequence of cards with different colors.",
+  "gameModeId": "claim",
+  "examples": {
+    "LLM": "DifferentColorsSequence Sequence of cards with different colors.\nDifferentColorsSequence Bonus: 115\nExamples:\n8S, 9H, 10C",
+    "Player": "DifferentColorsSequence Sequence of cards with different colors.\nDifferentColorsSequence Bonus: 115\nExamples:\n8S, 9H, 10C"
+  }
+}

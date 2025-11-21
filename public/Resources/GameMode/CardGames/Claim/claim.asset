@@ -1,0 +1,49 @@
+{
+  "__schemaVersion": 2,
+  "__assetType": "GameMode",
+  "__assetId": "claim",
+  "metadata": {
+    "gameId": "claim",
+    "gameName": "Claim",
+    "displayName": "Claim",
+    "schemaVersion": 2,
+    "createdAt": "2025-01-20T00:00:00.000Z",
+    "updatedAt": "2025-01-21T00:00:00.000Z"
+  },
+  "gameRulesAssetId": "claim-rules",
+  "gameDescriptionAssetId": "claim-description",
+  "strategyTipsAssetId": "claim-tips",
+  "cardRankingAssetId": "claim-rankings",
+  "moveValidityConditions": {
+    "pick_up": "Only valid when floor card is available and player has cards in hand",
+    "decline": "Always valid during player turn",
+    "declare_intent": "Valid when player has at least one card in the declared suit",
+    "call_showdown": "Valid when at least one player has declared intent",
+    "rebuttal": "Valid only in response to a showdown call"
+  },
+  "bluffSettings": {
+    "default": "Players can declare intent even without strong cards in that suit",
+    "frequency": "Bluffing frequency should be moderate (20-30% of intent declarations)",
+    "success": "Successful bluffs reward risk-taking",
+    "failure": "Failed bluffs result in point loss"
+  },
+  "exampleHands": [
+    "Strong hand: Ace of Spades, King of Hearts, Queen of Diamonds - Good for declaring Spades or Hearts",
+    "Medium hand: Jack of Clubs, 10 of Spades, 8 of Hearts - Consider picking up floor card",
+    "Weak hand: 5 of Diamonds, 4 of Clubs, 3 of Spades - May need to decline or bluff",
+    "Balanced hand: King of Clubs, 9 of Hearts, 7 of Diamonds - Flexible strategy options"
+  ],
+  "bonusRules": "BONUS SCORING:\n- Win with declared intent: +2 bonus points\n- Win with highest card in declared suit: +1 bonus point\n- Successfully call showdown and win: +1 bonus point\n- Win multiple rounds consecutively: +1 bonus per consecutive round",
+  "aiStrategyParameters": {
+    "aggressiveness": 0.6,
+    "riskTolerance": 0.5,
+    "bluffFrequency": 0.25
+  },
+  "maxPlayers": 4,
+  "numberOfCards": 3,
+  "maxRounds": 10,
+  "turnDuration": 60,
+  "initialPlayerCoins": 10000,
+  "baseBet": 5,
+  "layoutAssetPath": "/GameModeConfig/claim.json"
+}

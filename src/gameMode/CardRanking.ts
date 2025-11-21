@@ -1,62 +1,36 @@
 // CardRanking.ts
-// Card ranking definitions for Claim game
+// Card ranking data structure for asset system
+// Serializable data structure representing card rank configurations
+// Adapted from Unity's CardRanking.cs
 
-import { Suit } from '@/types';
-import type { Card } from '@/types';
+import 'reflect-metadata';
+import { serializable } from '@/lib/serialization/Serializable';
 
 /**
- * CardRanking - Defines card rankings and comparisons for Claim game
+ * CardRanking - Serializable data structure for card rankings
+ * Represents a single card rank configuration (e.g., "Ace" = 14, "King" = 13)
+ * Used in GameMode assets as an array: CardRanking[]
+ * 
+ * Example:
+ *   [
+ *     { CardName: "Ace", Value: 14 },
+ *     { CardName: "King", Value: 13 },
+ *     { CardName: "Queen", Value: 12 },
+ *     ...
+ *   ]
  */
 export class CardRanking {
   /**
-   * Get card rank value (higher = better)
-   * Ace (14) is highest, 2 is lowest
+   * Card name/rank (e.g., "Ace", "King", "Queen", "Jack", "10", "9", etc.)
    */
-  static getRankValue(card: Card): number {
-    return card.value;
-  }
+  @serializable({ label: 'Card Name' })
+  CardName!: string;
 
   /**
-   * Compare two cards
-   * @returns Positive if card1 > card2, negative if card1 < card2, 0 if equal
+   * Card value (numeric representation, higher = better)
+   * Ace = 14, King = 13, Queen = 12, Jack = 11, 10-2 = face value
    */
-  static compareCards(card1: Card, card2: Card): number {
-    return card1.value - card2.value;
-  }
-
-  /**
-   * Check if card1 beats card2
-   */
-  static beats(card1: Card, card2: Card): boolean {
-    return this.compareCards(card1, card2) > 0;
-  }
-
-  /**
-   * Get suit priority (for tie-breaking or special rules)
-   * Spades > Hearts > Diamonds > Clubs
-   */
-  static getSuitPriority(suit: Suit): number {
-    const priorities: Record<Suit, number> = {
-      [Suit.SPADES]: 4,
-      [Suit.HEARTS]: 3,
-      [Suit.DIAMONDS]: 2,
-      [Suit.CLUBS]: 1,
-    };
-    return priorities[suit];
-  }
-
-  /**
-   * Get card display name
-   */
-  static getCardName(card: Card): string {
-    const valueNames: Record<number, string> = {
-      11: 'Jack',
-      12: 'Queen',
-      13: 'King',
-      14: 'Ace',
-    };
-    const valueName = valueNames[card.value] || card.value.toString();
-    return `${valueName} of ${card.suit}`;
-  }
+  @serializable({ label: 'Card Value' })
+  Value!: number;
 }
 

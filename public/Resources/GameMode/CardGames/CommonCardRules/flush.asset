@@ -1,0 +1,22 @@
+{
+  "__schemaVersion": 1,
+  "__assetType": "BonusRule",
+  "__assetId": "flush",
+  "metadata": {
+    "gameModeId": "claim",
+    "assetId": "flush",
+    "assetType": "BonusRule",
+    "createdAt": "2025-11-21T03:01:42.553Z",
+    "updatedAt": "2025-11-21T03:01:42.553Z"
+  },
+  "minNumberOfCard": 3,
+  "bonusValue": 110,
+  "priority": 88,
+  "ruleName": "Flush",
+  "description": "Three or more cards of the same suit, not forming a sequence.",
+  "gameModeId": "claim",
+  "examples": {
+    "LLM": "Flush Three or more cards of the same suit, not forming a sequence.\nFlush Bonus: 110\nExamples:\n2S, 5S, 9S",
+    "Player": "Flush Three or more cards of the same suit, not forming a sequence.\nFlush Bonus: 110\nExamples:\n2S, 5S, 9S"
+  }
+}

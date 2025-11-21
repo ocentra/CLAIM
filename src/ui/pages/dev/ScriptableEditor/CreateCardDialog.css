@@ -1,0 +1,269 @@
+/* CreateCardDialog Styles */
+
+.create-card-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.create-card-dialog {
+  background: rgba(12, 16, 24, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+.create-card-dialog__header {
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.create-card-dialog__header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #f3f6ff;
+}
+
+.create-card-dialog__close {
+  background: none;
+  border: none;
+  color: #a3b6ff;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+
+.create-card-dialog__close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #c5d0ff;
+}
+
+.create-card-dialog__close:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.create-card-dialog__content {
+  padding: 20px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.create-card-dialog__field {
+  margin-bottom: 20px;
+}
+
+.create-card-dialog__label {
+  display: block;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.create-card-dialog__select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: rgba(15, 29, 62, 0.6);
+  color: #e0e8ff;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.create-card-dialog__select:focus {
+  outline: none;
+  border-color: rgba(163, 182, 255, 0.5);
+  background: rgba(15, 29, 62, 0.8);
+}
+
+.create-card-dialog__select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.create-card-dialog__suit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.create-card-dialog__suit-button {
+  padding: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(15, 29, 62, 0.6);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: #000;
+}
+
+.create-card-dialog__suit-button--red {
+  color: #d32f2f;
+}
+
+.create-card-dialog__suit-button--black {
+  color: #000;
+}
+
+.create-card-dialog__suit-button:hover {
+  border-color: rgba(163, 182, 255, 0.4);
+  background: rgba(15, 29, 62, 0.8);
+}
+
+.create-card-dialog__suit-button--selected {
+  border-color: rgba(163, 182, 255, 0.8);
+  background: rgba(61, 74, 148, 0.4);
+}
+
+.create-card-dialog__suit-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.create-card-dialog__suit-symbol {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.create-card-dialog__suit-name {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: capitalize;
+}
+
+.create-card-dialog__preview {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.create-card-dialog__preview-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.create-card-dialog__preview-card {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.create-card-dialog__preview-rank {
+  font-size: 36px;
+  font-weight: 700;
+  color: #000;
+}
+
+.create-card-dialog__preview-suit {
+  font-size: 48px;
+  line-height: 1;
+  color: #000;
+}
+
+.create-card-dialog__preview-suit--red {
+  color: #d32f2f;
+}
+
+.create-card-dialog__preview-suit--black {
+  color: #000;
+}
+
+.create-card-dialog__preview-id {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  font-family: 'Consolas', 'Monaco', monospace;
+  margin-top: 4px;
+}
+
+.create-card-dialog__footer {
+  padding: 16px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.create-card-dialog__button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.create-card-dialog__button--cancel {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e0e8ff;
+}
+
+.create-card-dialog__button--cancel:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.create-card-dialog__button--cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.create-card-dialog__button--create {
+  background: linear-gradient(135deg, #4CAF50, #45a049);
+  color: white;
+}
+
+.create-card-dialog__button--create:hover {
+  background: linear-gradient(135deg, #45a049, #3d8b40);
+}
+
+.create-card-dialog__button--create:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+

@@ -1,0 +1,17 @@
+{
+  "__schemaVersion": 1,
+  "__assetType": "Card",
+  "__assetId": "9_♣",
+  "metadata": {
+    "assetId": "9_♣",
+    "assetType": "Card",
+    "createdAt": "2025-11-21T03:01:42.586Z",
+    "updatedAt": "2025-11-21T03:01:42.586Z"
+  },
+  "id": "9_♣",
+  "path": "Assets/Images/Cards/9_of_clubss.png",
+  "rank": 9,
+  "rankSymbol": "9♣",
+  "suit": "clubs",
+  "texturePath": "/assets/cards/9_of_clubss.png"
+}

@@ -1,8 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import "./CardInHand.css";
 
-import defaultCardBack from '@assets/Cards/BackCard.png';
 import { CARD_IN_HAND_DEFAULTS } from "./CardInHand.constants";
+
+// No more hardcoded imports! Path resolved at runtime (Unity-like asset system)
+// This prevents eager loading of assets when just showing welcome screen
+const DEFAULT_CARD_BACK_PATH = '/Resources/Cards/Images/BackCard.png';
 
 interface AnchorPoint {
   x: number;
@@ -40,7 +43,7 @@ const CardInHand: React.FC<CardInHandProps> = ({
   radius = CARD_IN_HAND_DEFAULTS.RADIUS,
   cardWidth = CARD_IN_HAND_DEFAULTS.CARD_WIDTH,
   cardHeight = CARD_IN_HAND_DEFAULTS.CARD_HEIGHT,
-  cardImage = CARD_IN_HAND_DEFAULTS.CARD_IMAGE || defaultCardBack,
+  cardImage = CARD_IN_HAND_DEFAULTS.CARD_IMAGE || DEFAULT_CARD_BACK_PATH,
   anchorPoint,
   position = "fixed",
   zIndex = CARD_IN_HAND_DEFAULTS.Z_INDEX_BASE,

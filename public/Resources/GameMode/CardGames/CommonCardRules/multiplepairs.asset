@@ -1,0 +1,22 @@
+{
+  "__schemaVersion": 1,
+  "__assetType": "BonusRule",
+  "__assetId": "multiplepairs",
+  "metadata": {
+    "gameModeId": "claim",
+    "assetId": "multiplepairs",
+    "assetType": "BonusRule",
+    "createdAt": "2025-11-21T03:01:42.560Z",
+    "updatedAt": "2025-11-21T03:01:42.560Z"
+  },
+  "minNumberOfCard": 4,
+  "bonusValue": 105,
+  "priority": 92,
+  "ruleName": "MultiplePairs",
+  "description": "Two or more pairs of cards.",
+  "gameModeId": "claim",
+  "examples": {
+    "LLM": "MultiplePairs Two or more pairs of cards.\nMultiplePairs Bonus: 105\nExamples:\nAS, AD, KC, KH",
+    "Player": "MultiplePairs Two or more pairs of cards.\nMultiplePairs Bonus: 105\nExamples:\nAS, AD, KC, KH"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "__schemaVersion": 1,
+  "__assetType": "Card",
+  "__assetId": "king_♦",
+  "metadata": {
+    "assetId": "king_♦",
+    "assetType": "Card",
+    "createdAt": "2025-11-21T03:01:42.582Z",
+    "updatedAt": "2025-11-21T03:01:42.582Z"
+  },
+  "id": "King_♦",
+  "path": "Assets/Images/Cards/King_of_diamondss.png",
+  "rank": 13,
+  "rankSymbol": "King♦",
+  "suit": "diamonds",
+  "texturePath": "/assets/cards/king_of_diamondss.png"
+}

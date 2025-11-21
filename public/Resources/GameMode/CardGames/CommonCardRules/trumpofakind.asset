@@ -1,0 +1,22 @@
+{
+  "__schemaVersion": 1,
+  "__assetType": "BonusRule",
+  "__assetId": "trumpofakind",
+  "metadata": {
+    "gameModeId": "claim",
+    "assetId": "trumpofakind",
+    "assetType": "BonusRule",
+    "createdAt": "2025-11-21T03:01:42.562Z",
+    "updatedAt": "2025-11-21T03:01:42.562Z"
+  },
+  "minNumberOfCard": 3,
+  "bonusValue": 160,
+  "priority": 99,
+  "ruleName": "TrumpOfAKind",
+  "description": "Sets involving trump cards.",
+  "gameModeId": "claim",
+  "examples": {
+    "LLM": "TrumpOfAKind Sets involving trump cards.\nTrumpOfAKind Bonus: 160\nExamples:\nA♠, A♠, A♠",
+    "Player": "TrumpOfAKind Sets involving trump cards.\nTrumpOfAKind Bonus: 160\nExamples:\nA♠, A♠, A♠"
+  }
+}

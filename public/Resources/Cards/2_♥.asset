@@ -1,0 +1,17 @@
+{
+  "__schemaVersion": 1,
+  "__assetType": "Card",
+  "__assetId": "2_♥",
+  "metadata": {
+    "assetId": "2_♥",
+    "assetType": "Card",
+    "createdAt": "2025-11-21T03:01:42.570Z",
+    "updatedAt": "2025-11-21T03:01:42.570Z"
+  },
+  "id": "2_♥",
+  "path": "Assets/Images/Cards/2_of_heartss.png",
+  "rank": 2,
+  "rankSymbol": "2♥",
+  "suit": "hearts",
+  "texturePath": "/assets/cards/2_of_heartss.png"
+}

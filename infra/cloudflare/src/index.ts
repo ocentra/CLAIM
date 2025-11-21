@@ -421,6 +421,11 @@ export default {
       });
     }
 
+    // Image proxy endpoint - proxy external images (Google, Facebook, etc.) with proper CORS
+    if (path === '/api/image-proxy') {
+      return handleImageProxyRequest(request, env, requestOrigin);
+    }
+
     return new Response('Not Found', {
       status: 404,
       headers: getCorsHeaders(env),
@@ -2439,6 +2444,85 @@ async function handleAnonymizeRequest(
       headers: {
         'Content-Type': 'application/json',
         ...getCorsHeaders(env),
+      },
+    });
+  }
+}
+
+/**
+ * Image proxy handler - proxies external images (Google, Facebook, etc.) with proper CORS headers
+ * Usage: /api/image-proxy?url=https://lh3.googleusercontent.com/...
+ */
+async function handleImageProxyRequest(
+  request: Request,
+  env: Env,
+  requestOrigin?: string | null
+): Promise<Response> {
+  try {
+    const url = new URL(request.url);
+    const imageUrl = url.searchParams.get('url');
+
+    if (!imageUrl) {
+      return new Response(JSON.stringify({ error: 'Missing url parameter' }), {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCorsHeaders(env, requestOrigin || undefined),
+        },
+      });
+    }
+
+    // Validate URL - only allow Google, Facebook, or other trusted sources
+    const allowedDomains = ['googleusercontent.com', 'facebook.com', 'fbcdn.net'];
+    const imageUrlObj = new URL(imageUrl);
+    const isAllowed = allowedDomains.some(domain => imageUrlObj.hostname.includes(domain));
+
+    if (!isAllowed) {
+      return new Response(JSON.stringify({ error: 'Image source not allowed' }), {
+        status: 403,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCorsHeaders(env, requestOrigin || undefined),
+        },
+      });
+    }
+
+    // Fetch the image from the external source
+    const imageResponse = await fetch(imageUrl, {
+      headers: {
+        'User-Agent': 'Cloudflare-Worker/1.0',
+      },
+    });
+
+    if (!imageResponse.ok) {
+      return new Response(JSON.stringify({ error: 'Failed to fetch image' }), {
+        status: imageResponse.status,
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCorsHeaders(env, requestOrigin || undefined),
+        },
+      });
+    }
+
+    // Get the image data
+    const imageData = await imageResponse.arrayBuffer();
+    const contentType = imageResponse.headers.get('Content-Type') || 'image/jpeg';
+
+    // Return the image with proper CORS headers
+    return new Response(imageData, {
+      status: 200,
+      headers: {
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=31536000', // Cache for 1 year
+        ...getCorsHeaders(env, requestOrigin || undefined),
+      },
+    });
+  } catch (error) {
+    return new Response(JSON.stringify({ error: String(error) }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        ...getCorsHeaders(env, requestOrigin || undefined),
       },
     });
   }

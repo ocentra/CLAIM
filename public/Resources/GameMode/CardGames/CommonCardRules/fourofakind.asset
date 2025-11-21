@@ -1,0 +1,22 @@
+{
+  "__schemaVersion": 1,
+  "__assetType": "BonusRule",
+  "__assetId": "fourofakind",
+  "metadata": {
+    "gameModeId": "claim",
+    "assetId": "fourofakind",
+    "assetType": "BonusRule",
+    "createdAt": "2025-11-21T03:01:42.557Z",
+    "updatedAt": "2025-11-21T03:01:42.557Z"
+  },
+  "minNumberOfCard": 4,
+  "bonusValue": 135,
+  "priority": 93,
+  "ruleName": "FourOfAKind",
+  "description": "Four cards of the same rank.",
+  "gameModeId": "claim",
+  "examples": {
+    "LLM": "FourOfAKind Four cards of the same rank.\nFourOfAKind Bonus: 135\nExamples:\nAS, AD, AC, AH",
+    "Player": "FourOfAKind Four cards of the same rank.\nFourOfAKind Bonus: 135\nExamples:\nAS, AD, AC, AH"
+  }
+}

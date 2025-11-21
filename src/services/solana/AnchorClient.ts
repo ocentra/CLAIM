@@ -2,10 +2,17 @@ import { Program, AnchorProvider } from '@coral-xyz/anchor';
 import type { Idl, Wallet } from '@coral-xyz/anchor';
 import { PublicKey, Connection } from '@solana/web3.js'; // Anchor requires web3.js types
 import type { Commitment } from '@solana/web3.js';
-import * as path from 'path';
-import * as fs from 'fs';
 
 const PROGRAM_ID = new PublicKey('7eWx3H8bXMif7SDyPS1j5LZw1yUGDNZY592WzEKNf696');
+
+/**
+ * Check if we're running in Node.js environment (not browser)
+ */
+function isNodeEnvironment(): boolean {
+  return typeof process !== 'undefined' && 
+         typeof process.cwd === 'function' && 
+         typeof window === 'undefined';
+}
 
 /**
  * Attempts to import the generated IDL from anchor build.
@@ -13,12 +20,23 @@ const PROGRAM_ID = new PublicKey('7eWx3H8bXMif7SDyPS1j5LZw1yUGDNZY592WzEKNf696')
  * 
  * IMPORTANT: Run "anchor build" in Rust/SolanaContract before building this project.
  * Expected location: Rust/SolanaContract/target/idl/solana_games_program.json
+ * 
+ * NOTE: Filesystem IDL loading only works in Node.js environment.
+ * In browser, IDL must be loaded from chain or passed as parameter.
  */
 let IDL: Idl | null = null;
 let IDL_LOAD_ERROR: Error | null = null;
 
 // Per critique Issue #7: Don't throw at module load time - load lazily or return error
-try {
+// Only attempt filesystem loading in Node.js environment
+if (isNodeEnvironment()) {
+  try {
+    // Dynamic import of Node.js modules only in Node.js environment
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const path = require('path');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require('fs');
+    
   // Resolve IDL path from project root (no relative paths!)
   const projectRoot = process.cwd();
   const idlPath = path.join(projectRoot, 'Rust', 'ocentra-games', 'target', 'idl', 'ocentra_games.json');
@@ -71,6 +89,12 @@ try {
     : new Error(
         'Failed to load IDL. Please run "anchor build" in Rust/SolanaContract directory first.\n' +
         'Expected location: Rust/SolanaContract/target/idl/solana_games_program.json'
+        );
+  }
+} else {
+  // Browser environment - IDL must be loaded from chain or passed as parameter
+  IDL_LOAD_ERROR = new Error(
+    'IDL not loaded. In browser environment, IDL must be loaded from chain or passed as constructor parameter.'
       );
 }
 
@@ -142,11 +166,14 @@ export async function loadIDLWithRetry(connection?: Connection): Promise<Idl> {
   }
   
   // If we have an error, try to load from alternative locations using path resolution
-  if (IDL_LOAD_ERROR) {
-    // Use path resolution to find IDL from project root
-    // This works regardless of where the code is executed from
-    const path = await import('path');
-    const fs = await import('fs/promises');
+  // Only attempt filesystem loading in Node.js environment
+  if (IDL_LOAD_ERROR && isNodeEnvironment()) {
+    try {
+      // Dynamic import of Node.js modules only in Node.js environment
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const path = require('path');
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const fs = require('fs/promises');
     
     // Try to resolve from common locations relative to project root
     // Start from current working directory and walk up to find project root
@@ -178,9 +205,15 @@ export async function loadIDLWithRetry(connection?: Connection): Promise<Idl> {
       }
       currentDir = parentDir;
       depth++;
+      }
+    } catch {
+      // Filesystem loading failed, will throw original error below
     }
     
     // If all paths fail, throw the original error
+    throw IDL_LOAD_ERROR;
+  } else if (IDL_LOAD_ERROR) {
+    // Browser environment - can't load from filesystem
     throw IDL_LOAD_ERROR;
   }
   

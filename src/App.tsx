@@ -21,6 +21,12 @@ const DevGameEditorPage = import.meta.env.DEV
     )
   : null;
 
+const DevScriptableEditorPage = import.meta.env.DEV
+  ? React.lazy(() => 
+      import('./ui/pages/dev/ScriptableEditorPage').then(m => ({ default: m.ScriptableEditorPage }))
+    )
+  : null;
+
 function App() {
   return <MainApp />;
 }
@@ -74,6 +80,17 @@ export default function AppWrapper() {
                     } 
                   />
                 </>
+              )}
+
+              {import.meta.env.DEV && DevScriptableEditorPage && (
+                <Route 
+                  path="/ScriptableEditor" 
+                  element={
+                    <Suspense fallback={<div>Loading Scriptable Editor...</div>}>
+                      <DevScriptableEditorPage />
+                    </Suspense>
+                  } 
+                />
               )}
               
               {/* Production routes - always available */}

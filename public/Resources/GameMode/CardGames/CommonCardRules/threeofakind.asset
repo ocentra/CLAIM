@@ -1,0 +1,22 @@
+{
+  "__schemaVersion": 1,
+  "__assetType": "BonusRule",
+  "__assetId": "threeofakind",
+  "metadata": {
+    "gameModeId": "claim",
+    "assetId": "threeofakind",
+    "assetType": "BonusRule",
+    "createdAt": "2025-11-21T03:01:42.551Z",
+    "updatedAt": "2025-11-21T03:01:42.551Z"
+  },
+  "minNumberOfCard": 3,
+  "bonusValue": 125,
+  "priority": 91,
+  "ruleName": "ThreeOfAKind",
+  "description": "Three cards of the same rank (2 to K), optionally using one Trump card as a wild card.",
+  "gameModeId": "claim",
+  "examples": {
+    "LLM": "ThreeOfAKind Three cards of the same rank (2 to K), optionally using one Trump card as a wild card.\nThreeOfAKind Bonus: 125\nExamples:\nJS, JD, JC",
+    "Player": "ThreeOfAKind Three cards of the same rank (2 to K), optionally using one Trump card as a wild card.\nThreeOfAKind Bonus: 125\nExamples:\nJS, JD, JC"
+  }
+}

@@ -31,5 +31,5 @@
     "noUncheckedSideEffectImports": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["vite.config.ts", "scripts/**/*.ts", "scripts/**/*.js", "tools/**/*.ts"]
+  "include": ["webpack.*.ts", "scripts/**/*.ts", "scripts/**/*.js", "tools/**/*.ts"]
 }

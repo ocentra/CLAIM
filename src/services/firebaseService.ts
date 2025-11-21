@@ -13,8 +13,9 @@ import {
 } from 'firebase/auth';
 import type { User as FirebaseUser, UserCredential as FirebaseUserCredential } from 'firebase/auth';
 import { doc, setDoc, getDoc, updateDoc, deleteDoc, collection, query, where, getDocs, Timestamp } from 'firebase/firestore';
-import { auth, db } from '@config/firebase';
+import { auth, db, storage } from '@config/firebase';
 import { logAuth } from '@lib/logging';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 const prefix = '[FirebaseService]';
 
@@ -423,6 +424,10 @@ export const loginWithGoogle = async (): Promise<AuthResult> => {
     const userDoc = await getDoc(doc(db!, 'users', result.user.uid));
     let userProfile: UserProfile;
 
+    // Keep original Google profile picture URL - will be proxied through Cloudflare Worker in frontend
+    // No need to upload to Firebase Storage anymore (proxy approach is simpler and free)
+    const photoURL = result.user.photoURL || '';
+
     if (!userDoc.exists()) {
       // Create new user profile for Google user
       logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithGoogle] Creating new user profile in Firestore');
@@ -430,7 +435,7 @@ export const loginWithGoogle = async (): Promise<AuthResult> => {
         uid: result.user.uid,
         displayName: result.user.displayName || result.user.email?.split('@')[0] || 'Google User',
         email: result.user.email || '',
-        photoURL: result.user.photoURL || '',
+        photoURL: photoURL,
         createdAt: new Date(),
         lastLoginAt: new Date(),
         gamesPlayed: 0,
@@ -455,8 +460,8 @@ export const loginWithGoogle = async (): Promise<AuthResult> => {
       
       // Update photoURL if Google has one and current one is empty or different
       if (result.user.photoURL && (!userProfile.photoURL || userProfile.photoURL !== result.user.photoURL)) {
-        updateData.photoURL = result.user.photoURL;
-        logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithGoogle] Updating photoURL from Google');
+        updateData.photoURL = photoURL;
+        logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithGoogle] Updating photoURL from Google (will be proxied through Cloudflare Worker)');
       }
       
       await updateDoc(doc(db!, 'users', result.user.uid), updateData);
@@ -641,6 +646,10 @@ export const loginWithFacebook = async (): Promise<AuthResult> => {
     const userDoc = await getDoc(doc(db!, 'users', result.user.uid));
     let userProfile: UserProfile;
 
+    // Keep original Facebook profile picture URL - will be proxied through Cloudflare Worker in frontend
+    // No need to upload to Firebase Storage anymore (proxy approach is simpler and free)
+    const photoURL = result.user.photoURL || '';
+
     if (!userDoc.exists()) {
       // Create user profile if it doesn't exist
       logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithFacebook] Profile not found, creating new profile');
@@ -648,7 +657,7 @@ export const loginWithFacebook = async (): Promise<AuthResult> => {
         uid: result.user.uid,
         displayName: result.user.displayName || result.user.email?.split('@')[0] || 'User',
         email: result.user.email || '',
-        photoURL: result.user.photoURL || '',
+        photoURL: photoURL,
         createdAt: new Date(),
         lastLoginAt: new Date(),
         gamesPlayed: 0,
@@ -674,8 +683,8 @@ export const loginWithFacebook = async (): Promise<AuthResult> => {
       
       // Update photoURL if Facebook has one and current one is empty or different
       if (result.user.photoURL && (!userProfile.photoURL || userProfile.photoURL !== result.user.photoURL)) {
-        updateData.photoURL = result.user.photoURL;
-        logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithFacebook] Updating photoURL from Facebook');
+        updateData.photoURL = photoURL;
+        logAuth(LOG_AUTH_FLOW, 'log', prefix, '[loginWithFacebook] Updating photoURL from Facebook (will be proxied through Cloudflare Worker)');
       }
       
       await updateDoc(doc(db!, 'users', result.user.uid), updateData);
@@ -1121,6 +1130,84 @@ export const logoutUser = async (): Promise<{ success: boolean; error?: string }
     return { success: false, error: firebaseError.message };
   }
 };
+
+/**
+ * Download profile picture from external URL and upload to Firebase Storage
+ * Returns Firebase Storage URL if successful, or original URL if upload fails
+ */
+export async function uploadProfilePictureToStorage(
+  imageUrl: string,
+  userId: string
+): Promise<string> {
+  // If Firebase Storage isn't available, return original URL
+  if (!storage || !imageUrl) {
+    return imageUrl;
+  }
+
+  // Skip if already a Firebase Storage URL
+  if (imageUrl.includes('firebasestorage.googleapis.com') || imageUrl.includes('firebase')) {
+    logAuth(LOG_AUTH_FLOW, 'log', prefix, '[uploadProfilePictureToStorage] Already a Firebase Storage URL, skipping upload');
+    return imageUrl;
+  }
+
+  try {
+    logAuth(LOG_AUTH_FLOW, 'log', prefix, '[uploadProfilePictureToStorage] Downloading image from:', imageUrl);
+    
+    // Download image from external URL
+    const response = await fetch(imageUrl, {
+      mode: 'cors',
+      credentials: 'omit'
+    });
+    
+    if (!response.ok) {
+      logAuth(LOG_AUTH_ERROR, 'error', prefix, '[uploadProfilePictureToStorage] Failed to download image:', response.status, response.statusText);
+      return imageUrl; // Return original URL if download fails
+    }
+    
+    const blob = await response.blob();
+    
+    if (blob.size === 0) {
+      logAuth(LOG_AUTH_ERROR, 'error', prefix, '[uploadProfilePictureToStorage] Empty blob received');
+      return imageUrl;
+    }
+    
+    logAuth(LOG_AUTH_FLOW, 'log', prefix, '[uploadProfilePictureToStorage] Image downloaded, size:', blob.size);
+    
+    // Determine file extension from content type or URL
+    const contentType = blob.type || 'image/jpeg';
+    const extension = contentType.includes('png') ? 'png' : contentType.includes('gif') ? 'gif' : 'jpg';
+    const fileName = `profile-pictures/${userId}/avatar.${extension}`;
+    
+    // Upload to Firebase Storage
+    const storageRef = ref(storage, fileName);
+    logAuth(LOG_AUTH_FLOW, 'log', prefix, '[uploadProfilePictureToStorage] Uploading to Firebase Storage:', fileName);
+    
+    await uploadBytes(storageRef, blob, {
+      contentType: blob.type || 'image/jpeg',
+      cacheControl: 'public, max-age=31536000', // Cache for 1 year
+    });
+    
+    // Get download URL
+    const downloadURL = await getDownloadURL(storageRef);
+    logAuth(LOG_AUTH_FLOW, 'log', prefix, '[uploadProfilePictureToStorage] ✅ Image uploaded to Firebase Storage:', downloadURL);
+    
+    return downloadURL;
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logAuth(LOG_AUTH_ERROR, 'error', prefix, '[uploadProfilePictureToStorage] ❌ Error uploading to Firebase Storage:', errorMessage);
+    
+    // Check if it's a permission/configuration error
+    if (errorMessage.includes('permission') || errorMessage.includes('403') || errorMessage.includes('404') || errorMessage.includes('CORS')) {
+      logAuth(LOG_AUTH_ERROR, 'error', prefix, '[uploadProfilePictureToStorage] ⚠️ Firebase Storage may not be configured. Check:');
+      logAuth(LOG_AUTH_ERROR, 'error', prefix, '[uploadProfilePictureToStorage] 1. Firebase Storage security rules (storage.rules)');
+      logAuth(LOG_AUTH_ERROR, 'error', prefix, '[uploadProfilePictureToStorage] 2. VITE_FIREBASE_STORAGE_BUCKET environment variable');
+      logAuth(LOG_AUTH_ERROR, 'error', prefix, '[uploadProfilePictureToStorage] 3. CORS configuration in Firebase Console');
+    }
+    
+    // Return original URL if upload fails (graceful degradation)
+    return imageUrl;
+  }
+}
 
 // Update user profile (displayName, photoURL, etc.)
 export const updateUserProfile = async (

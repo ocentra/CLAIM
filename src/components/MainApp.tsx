@@ -1,11 +1,17 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, Suspense } from 'react';
 import { useGameStore } from '@store';
-import { useAssetManager } from '@utils/useAssetManager';
 import { useAuth } from '@providers';
-import { DynamicBackground3D, AssetLoadingScreen, AppLoadingScreen, ErrorScreen, AuthScreen, GameScreen, type RotationControlAPI } from '@ui';
+import { DynamicBackground3D, AssetLoadingScreen, AppLoadingScreen, ErrorScreen, AuthScreen, type RotationControlAPI } from '@ui';
 import { useAuthHandlers, useMainAppLogger, useLoadingState } from '@hooks';
 
 const workOngameScene = false; // toggle while iterating on the dedicated game scene workbench
+
+// Lazy-load GameScreen so it doesn't eagerly import game assets on welcome screen
+// Assets will only load when user actually enters a game
+// Using relative path for reliable dynamic import resolution
+const GameScreen = React.lazy(() =>
+  import('../ui/components/GameScreen/CardGameScreen').then(m => ({ default: m.GameScreen }))
+);
 
 const AuthenticatedApp: React.FC = () => {
   const { isAuthenticated, user, login, signUp, logout, loginWithFacebook, loginWithGoogle, loginAsGuest, sendPasswordReset } = useAuth();
@@ -18,45 +24,29 @@ const AuthenticatedApp: React.FC = () => {
   const authHandlers = useAuthHandlers(login, signUp, loginWithFacebook, loginWithGoogle, loginAsGuest, handleWalletLogin);
   const logger = useMainAppLogger();
   const { error } = useGameStore();
-  const { isInitialized, isLoading, error: assetError } = useAssetManager({ autoInitialize: true });
+  // REMOVED: useAssetManager({ autoInitialize: true })
+  // Assets should ONLY load when user enters actual game, not on welcome/auth screen
+  // This prevents loading card images and game assets when just showing login
   const [isBackgroundReady, setIsBackgroundReady] = useState(false);
   const rotationRef = useRef<RotationControlAPI | null>(null);
-  
+
   const { shouldShowLoading, showLoginDialog } = useLoadingState({
     isBackgroundReady,
     isAuthenticated,
   });
 
-  logger.logRender({ 
-    isAuthenticated, 
+  logger.logRender({
+    isAuthenticated,
     user: user ? { uid: user.uid, displayName: user.displayName } : null,
-    isInitialized, 
-    isLoading, 
-    isBackgroundReady, 
+    isBackgroundReady,
     shouldShowLoading,
     showLoginDialog
   });
-  
+
   // Early returns for error and loading states
   if (error) {
     logger.logError('[render] ❌ Game store error:', error);
     return <ErrorScreen title="Error" message={error} />;
-  }
-  
-  if (isLoading || !isInitialized) {
-    return <AssetLoadingScreen message="Loading..." />;
-  }
-  
-  if (assetError) {
-    logger.logError('[render] ❌ Asset loading error:', assetError);
-    return (
-      <ErrorScreen 
-        title="Asset Loading Error" 
-        message={assetError} 
-        onRetry={() => window.location.reload()}
-        retryLabel="Retry"
-      />
-    );
   }
   
   // Main app render - always show background
@@ -99,7 +89,11 @@ const AuthenticatedApp: React.FC = () => {
 
 const MainApp: React.FC = () => {
   if (workOngameScene) {
-    return <GameScreen />;
+    return (
+      <Suspense fallback={<AssetLoadingScreen message="Loading game..." />}>
+        <GameScreen />
+      </Suspense>
+    );
   }
 
   return <AuthenticatedApp />;

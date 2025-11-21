@@ -142,6 +142,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 ...userData,
                 uid: firebaseUser.uid
               };
+              
+              // Profile pictures are now proxied through Cloudflare Worker in the frontend
+              // No need to migrate to Firebase Storage - just use the original Google/Facebook URL
               setUser(userProfile);
               if (LOG_AUTH_STATE) {
                 console.log(prefix, '[onAuthStateChanged] ✅ User profile loaded from Firestore:', {

@@ -1,0 +1,13 @@
+{
+  "__schemaVersion": 1,
+  "__assetType": "GameDescriptionAsset",
+  "__assetId": "claim-description",
+  "metadata": {
+    "assetId": "claim-description",
+    "assetType": "GameDescriptionAsset",
+    "updatedAt": "2025-01-20T00:00:00.000Z"
+  },
+  "LLM": "Claim is a strategic card game where players compete to win rounds by playing high cards and making tactical decisions about when to pick up cards, declare intents, and challenge opponents. The game requires strategic thinking, risk assessment, and the ability to read opponents.",
+  "Player": "Claim is a strategic card game where players compete to win rounds by playing high cards and making tactical decisions about when to pick up cards, declare intents, and challenge opponents."
+}
+

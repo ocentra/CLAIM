@@ -1,0 +1,22 @@
+{
+  "__schemaVersion": 1,
+  "__assetType": "BonusRule",
+  "__assetId": "straightflush",
+  "metadata": {
+    "gameModeId": "claim",
+    "assetId": "straightflush",
+    "assetType": "BonusRule",
+    "createdAt": "2025-11-21T03:01:42.554Z",
+    "updatedAt": "2025-11-21T03:01:42.554Z"
+  },
+  "minNumberOfCard": 3,
+  "bonusValue": 180,
+  "priority": 98,
+  "ruleName": "StraightFlush",
+  "description": "Three or more cards in sequence of the same suit.",
+  "gameModeId": "claim",
+  "examples": {
+    "LLM": "StraightFlush Three or more cards in sequence of the same suit.\nStraightFlush Bonus: 180\nExamples:\n9S, 10S, JS",
+    "Player": "StraightFlush Three or more cards in sequence of the same suit.\nStraightFlush Bonus: 180\nExamples:\n9S, 10S, JS"
+  }
+}

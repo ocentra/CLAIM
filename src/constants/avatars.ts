@@ -1,18 +1,17 @@
 // Eagerly import all avatar images - they'll be bundled and ready instantly
-const avatarModules = import.meta.glob('../assets/Avatars/*.png', { 
-  eager: true, 
-  query: '?url', 
-  import: 'default' 
-});
+// Using Vite's import.meta.glob to load all avatar images
+const avatarModules = import.meta.glob('../assets/Avatars/*.png', { eager: true });
 
 // Convert to sorted array
 const sortedAvatars = Object.entries(avatarModules)
-  .map(([path, url]) => {
+  .map(([path, module]) => {
     const fileName = path.split('/').pop() || '';
     const id = parseInt(fileName.split('.')[0]);
+    // Vite returns the default export which is the URL string
+    const avatarUrl = (module as { default: string }).default;
     return {
       id,
-      path: url as string,
+      path: avatarUrl,
       name: `Avatar ${id}`
     };
   })

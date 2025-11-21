@@ -43,12 +43,13 @@ export class AIManager {
   private aiEngines: Map<string, AIEngine> = new Map()
   private modelManager: ModelManager
   private aiHelper: AIHelper
-  private gameMode: GameMode
+  private gameMode?: GameMode
+  private gameModeId: string
 
   constructor(gameModeId: string = 'claim') {
     this.modelManager = ModelManager.getInstance()
     this.aiHelper = AIHelper.getInstance()
-    this.gameMode = GameModeFactory.getGameMode(gameModeId)
+    this.gameModeId = gameModeId
   }
 
   /**
@@ -56,6 +57,20 @@ export class AIManager {
    */
   async initializeAIEngines(gameState: GameState, modelId?: string): Promise<void> {
     logAI('Initializing AI engines for game state')
+    
+    // Load GameMode from asset manager if not already loaded
+    if (!this.gameMode) {
+      try {
+        logAI('Loading GameMode asset:', this.gameModeId)
+        this.gameMode = await GameModeFactory.getGameMode(this.gameModeId)
+        logAI('GameMode loaded successfully')
+      } catch (error) {
+        logAI('Failed to load GameMode asset, falling back to sync load:', error)
+        // Fallback for backward compatibility if asset loading fails
+        this.gameMode = GameModeFactory.getGameModeSync(this.gameModeId)
+      }
+    }
+
     const aiPlayers = gameState.players.filter(player => player.isAI)
     logAI('Found AI players:', aiPlayers.length)
     
@@ -121,6 +136,10 @@ export class AIManager {
    */
   private async getAIDecisionWithModel(playerId: string, gameState: GameState): Promise<AIDecision> {
     try {
+      if (!this.gameMode) {
+        throw new Error('GameMode not initialized')
+      }
+
       // Get AI instructions from AIHelper
       const { systemMessage, userPrompt } = await this.aiHelper.GetAIInstructions(
         this.gameMode,
